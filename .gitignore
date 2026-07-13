@@ -1,0 +1,11 @@
+# Configurazione di sicurezza Supabase
+supabase_config.json
+supabase_config.js
+
+# Dipendenze Node
+node_modules/
+package-lock.json
+
+# Cartelle temporanee e di sistema
+scratch/
+.DS_Store

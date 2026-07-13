@@ -1,0 +1,17 @@
+provider  model                               context  max-out  thinking  images
+google    gemini-2.0-flash                    1.0M     8.2K     no        yes   
+google    gemini-2.0-flash-lite               1.0M     8.2K     no        yes   
+google    gemini-2.5-flash                    1.0M     65.5K    yes       yes   
+google    gemini-2.5-flash-lite               1.0M     65.5K    yes       yes   
+google    gemini-2.5-pro                      1.0M     65.5K    yes       yes   
+google    gemini-3-flash-preview              1.0M     65.5K    yes       yes   
+google    gemini-3-pro-preview                1.0M     65.5K    yes       yes   
+google    gemini-3.1-flash-lite               1.0M     65.5K    yes       yes   
+google    gemini-3.1-flash-lite-preview       1.0M     65.5K    yes       yes   
+google    gemini-3.1-pro-preview              1.0M     65.5K    yes       yes   
+google    gemini-3.1-pro-preview-customtools  1.0M     65.5K    yes       yes   
+google    gemini-3.5-flash                    1.0M     65.5K    yes       yes   
+google    gemini-flash-latest                 1.0M     65.5K    yes       yes   
+google    gemini-flash-lite-latest            1.0M     65.5K    yes       yes   
+google    gemma-4-26b-a4b-it                  262.1K   32.8K    yes       yes   
+google    gemma-4-31b-it                      262.1K   32.8K    yes       yes   
