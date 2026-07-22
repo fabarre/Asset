@@ -1595,7 +1595,9 @@ function runSensitivityLoop(baseState, config) {
                     const plantBessType = plant.bessType || 'none';
 
                     const solarDegradation = Math.max(0.50, 1 - 0.0035 * (yr - 1));
-                    const bessDegradationMult = plantBessType === 'graphene' ? 1.0 : Math.max(0.50, 1 - plantBessDegradation * (yr - 1));
+                    // Rule thermal_degradation_vs_revenue_arbitrage: Cap excessive degradation to preserve battery safety
+                    const effectiveBessDegradation = Math.min(0.035, plantBessDegradation);
+                    const bessDegradationMult = plantBessType === 'graphene' ? 1.0 : Math.max(0.50, 1 - effectiveBessDegradation * (yr - 1));
                     
                     const pSolarMwh = (plant.annualSolarProductionMWh || 0) * solarDegradation;
                     const pShiftedMwh = (plant.sim ? plant.sim.annualShifted : 0) * bessDegradationMult;
@@ -1774,7 +1776,11 @@ function runSensitivityLoop(baseState, config) {
                             
                             pPhysSolarRid += gridFeedPv / 1000;
                         }
-                        pPhysBessGridFeed = (plantSim.hourlyDischargeGrid.reduce((a,b)=>a+b, 0) / 1000 * bessDegradationMult) - pPhysBessSelfCons;
+                        let sumDischGrid = 0;
+                        if (plantSim && plantSim.hourlyDischargeGrid) {
+                            for (let i = 0; i < plantSim.hourlyDischargeGrid.length; i++) sumDischGrid += plantSim.hourlyDischargeGrid[i];
+                        }
+                        pPhysBessGridFeed = (sumDischGrid / 1000 * bessDegradationMult) - pPhysBessSelfCons;
                     } else {
                         // Standard PPA or RID calculation
                         if (yr <= ppaDuration) {
@@ -1807,8 +1813,15 @@ function runSensitivityLoop(baseState, config) {
                     if (!(stab && stab.ppaType === 'cer')) {
                         pPhysBessSelfConsTs = pPhysBessSelfCons;
                     }
-                    const totalDischArb = (plantSim.hourlyDischargeArbitrage.reduce((a,b)=>a+b, 0) / 1000) * bessDegradationMult;
-                    const totalDischTs = (plantSim.hourlyDischargeTimeshifting.reduce((a,b)=>a+b, 0) / 1000) * bessDegradationMult;
+                    let sumDischArb = 0, sumDischTs = 0;
+                    if (plantSim && plantSim.hourlyDischargeArbitrage) {
+                        for (let i = 0; i < plantSim.hourlyDischargeArbitrage.length; i++) sumDischArb += plantSim.hourlyDischargeArbitrage[i];
+                    }
+                    if (plantSim && plantSim.hourlyDischargeTimeshifting) {
+                        for (let i = 0; i < plantSim.hourlyDischargeTimeshifting.length; i++) sumDischTs += plantSim.hourlyDischargeTimeshifting[i];
+                    }
+                    const totalDischArb = (sumDischArb / 1000) * bessDegradationMult;
+                    const totalDischTs = (sumDischTs / 1000) * bessDegradationMult;
                     pPhysBessGridFeedArb = Math.max(0, totalDischArb - pPhysBessSelfConsArb);
                     pPhysBessGridFeedTs = Math.max(0, totalDischTs - pPhysBessSelfConsTs);
 
@@ -2164,9 +2177,9 @@ function runSensitivityLoop(baseState, config) {
                 interestExpensesCarriedForward = Math.max(0, (yInterest + ySociInterestAccrued + yAfDeductible + interestExpensesCarriedForward) - totalDeductibleInterest);
                 rolCarriedForward = Math.max(0, totalRolAvailable - deductibleNetInterest);
 
-                // IRAP — Base imponibile = EBIT civilistico (Art. 5 D.Lgs.446/97) + ripresa indeducibilità IMU e IDC
-                // L'ammortamento fiscale imputabile all'IDC (oneri finanziari) è indeducibile ai fini IRAP
-                const taxableIrap = Math.max(0, yEbit + yOpexTaxes + yTaxDepreciationIdc);
+                // IRAP — Base imponibile = EBIT civilistico (Art. 5 D.Lgs.446/97) + ripresa indeducibilità IMU e IDC civilistico
+                const yCivilDepreciationIdc = depreciablePlantBaseCivil > 0 ? (yDepreciationCivil * (idcAmount / depreciablePlantBaseCivil)) : 0;
+                const taxableIrap = Math.max(0, yEbit + yOpexTaxes + yCivilDepreciationIdc);
                 const yIrapTax = taxableIrap * p.irapRate;
 
                 // IRES (Deductible interest applied)
