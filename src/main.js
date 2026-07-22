@@ -4367,6 +4367,8 @@
                 ...(p.afEnabled && p.afType === 'convertible_note' ? [{ key: 'afInterestAccrued', label: `  (-) Interessi Convertibile (Altra Forma) PIK ${(p.afConvertibleRate||0).toFixed(2)}% (€)`, type: 'minus' }] : []),
                 { key: 'ebt', label: 'EBT - Utile ante Imposte SPV (€)', type: 'bold' },
                 { key: 'currentTaxesSpv', label: '  (-) Imposte Correnti SPV (IRES 24% + IRAP 3.9%) (€)', type: 'minus' },
+                { key: 'iresTaxSpv', label: 'di cui: IRES (24% su EBT +/- Variazioni Fiscali) (€)', type: 'detail', parent: 'currentTaxesSpv' },
+                { key: 'irapTaxSpv', label: 'di cui: IRAP (3.9% su EBIT + Costi Indeducibili) (€)', type: 'detail', parent: 'currentTaxesSpv' },
                 { key: 'deferredTaxes', label: '  (-/+) Variazione Imposte Differite (-> Sez. B) (€)', type: 'normal' },
                 { key: 'netProfitSpv', label: 'UTILE NETTO CIVILISTICO SPV (-> Sez. B) (€)', type: 'bold' }
             ];
@@ -4723,6 +4725,8 @@
                 setCell('sociInterestAccrued', m.sociInterestAccrued[i], true, formatMinusEuro);
                 setCell('ebt', m.ebt[i]);
                 setCell('currentTaxesSpv', m.currentTaxesSpv[i], true, formatMinusEuro);
+                setCell('iresTaxSpv', m.iresTaxSpv[i], true, formatMinusEuro);
+                setCell('irapTaxSpv', m.irapTaxSpv[i], true, formatMinusEuro);
                 setCell('deferredTaxes', m.deferredTaxes[i], true, v => (v >= 0 ? '-' : '+') + formatEuro(Math.abs(v)));
                 setCell('netProfitSpv', m.netProfitSpv[i]);
                 setCell('rf_netProfitSpv', m.netProfitSpv[i], true, formatEuro);
@@ -8045,6 +8049,8 @@ function _repContoEconomico(doc) {
         { key: 'afInterestAccrued', label: '(-) Interessi Convertibile (AF)', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'ebt', label: 'EBT - Utile ante Imposte' },
         { key: 'currentTaxesSpv', label: '(-) Imposte Correnti (IRES+IRAP)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'iresTaxSpv', label: '    di cui: IRES (24% su EBT +/- Variazioni)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'irapTaxSpv', label: '    di cui: IRAP (3.9% su EBIT + Costi Indeducibili)', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'deferredTaxes', label: '(-/+) Imposte Differite' },
         { key: 'netProfitSpv', label: 'UTILE NETTO SPV' },
         { key: 'spvLockedDividends', label: '  (+) Cassa SPV Vincolata Accumulata da Anni Precedenti' }

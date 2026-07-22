@@ -702,6 +702,8 @@ async function exportPnlToExcel() {
     sheetCe.addRow([]); currentRowNumCe++;
     
     addRowCe('currentTaxesSpv', '  (-) Imposte Correnti SPV (IRES 24% + IRAP 3.9%) (€)', 'minus', m.currentTaxesSpv, numberFormatEuro);
+    addRowCe('iresTaxSpv', 'di cui: IRES (24% su EBT +/- Variazioni Fiscali) (€)', 'detail', m.iresTaxSpv, numberFormatEuro);
+    addRowCe('irapTaxSpv', 'di cui: IRAP (3.9% su EBIT + Costi Indeducibili) (€)', 'detail', m.irapTaxSpv, numberFormatEuro);
     addRowCe('deferredTaxes', '  (-/+) Variazione Imposte Differite (⇒ Sez. B) (€)', 'detail', m.deferredTaxes, numberFormatEuro);
     
     sheetCe.addRow([]); currentRowNumCe++;

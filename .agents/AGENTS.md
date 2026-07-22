@@ -92,7 +92,7 @@
 
 # Architectural & Financial Engineering Rules (Learned Best Practices)
 - **ID:** worker_syntax_validation_rule
-- **Regola (Worker Silent Failure Prevention):** Prima di finalizzare e testare qualsiasi modifica a simulation.worker.js, è OBBLIGATORIO eseguire 
+- **Regola (Worker Silent Failure Prevention):** Prima di finalizzare e testare qualsiasi modifica a simulation.worker.js, ï¿½ OBBLIGATORIO eseguire 
 ode -c src/worker/simulation.worker.js da terminale.
 - **Motivazione:** Il motore di calcolo gira su un thread separato (Web Worker). Qualsiasi errore di sintassi (es. parentesi mancante) fa fallire il worker silenziosamente, bloccando la Dashboard in stato di elaborazione con valori a 0 (nessun log di errore in UI).
 
@@ -101,7 +101,7 @@ ode -c src/worker/simulation.worker.js da terminale.
 - **Azione:** Ogni nuovo parametro finanziario/M&A DEVE essere parametrizzato con uno slider nella UI, mappato nel database tramite domMap in main.js, estratto nei collectInputs() ed elaborato matematicamente in simulation.worker.js. La UI deve mostrare in real-time l'etichetta associata allo slider.
 
 - **ID:** dashboard_ui_layout_rule
-- **Regola (Integrità del Layout):** La griglia principale dei KPI Dashboard in index.html deve essere mantenuta simmetrica per garantire leggibilità.
+- **Regola (Integritï¿½ del Layout):** La griglia principale dei KPI Dashboard in index.html deve essere mantenuta simmetrica per garantire leggibilitï¿½.
 - **Azione:** La configurazione della grid deve rispettare i raggruppamenti (es. lg:grid-cols-5 per formare righe da 5 card). Evitare di aggiungere colonna su colonna (lg:grid-cols-9, 10, ecc.) per non comprimere i testi. Nuove metriche aggiunte (es. Payback) devono rispettare la gerarchia da EV, a Debito, a IRR.
 
 # Procedura Operativa: Supabase Environment Cloning (Staging -> Prod)

@@ -64,12 +64,13 @@ Il simulatore applica un modello finanziario M&A di stampo istituzionale, gesten
 
 ### Modello Fiscale (IRES/IRAP/TUIR)
 Il Web Worker integra un sofisticato Tax Engine in grado di mappare asimmetrie fiscali e civilistiche:
+* **Dettaglio Imposte Correnti:** Tracciamento separato e analitico di **IRES (24%)** su EBT e variazioni fiscali e **IRAP (3.9%)** su EBIT e costi indeducibili, visibile nelle schede di scenario, nei report PDF e nelle esportazioni Excel multi-tab.
 * **Art. 96 TUIR (Interessi Passivi):** Limitazione della deducibilità degli interessi passivi entro il 30% del ROL (Reddito Operativo Lordo) e riporto a nuovo degli interessi eccedenti.
 * **Art. 84 TUIR (Riporto Perdite - NOL):** Le perdite fiscali maturate nei primi 3 anni della SPV sono utilizzabili per compensare il 100% del reddito futuro. Dallo spegnimento del terzo anno in poi, la compensazione segue il tetto massimo dell'80% del reddito imponibile.
 * **Imposte Differite (Deferred Taxes):** Il disallineamento tra ammortamento civilistico e ammortamento fiscale genera passività differite. È integrato un meccanismo di *reversal* (storno) che riassorbe i fondi accantonati una volta che l'ammortamento civilistico eccede quello fiscale, garantendo quadratura nello Stato Patrimoniale a fine vita dell'asset.
 
 ### Debito, Ammortamento e Indici di Copertura
-* **Leva Finanziaria (LTV):** Il debito erogato (Senior Debt) è calcolato in base alla percentuale massima del CAPEX totale investito.
+* **Leva Finanziaria (LTV):** Il debito erogato (Senior Debt) è configurabile da 0% a 85% del CAPEX totale investito (permettendo anche la valutazione di progetti 100% Equity).
 * **Ammortamento:** Piano a rate costanti (French style) o decrescenti (Italian style) dipendente dai tassi (EURIBOR + Spread).
 * **Pre-Ammortamento:** Possibilità di configurare mesi di "grace period" (quota solo interessi) all'inizio della vita utile.
 * **DSCR & LLCR:** Viene calcolato il *Debt Service Coverage Ratio* annuo per verificare la bancabilità. Un DSCR minimo target viene monitorato per assicurare che la rata non ecceda la cassa disponibile (CFADS).
@@ -96,10 +97,21 @@ L'applicazione dispone di logiche pre-programmate per aderire alle normative GSE
 
 ---
 
-## 6. Flusso di Esecuzione (Workflow)
+## 6. Deployment in Produzione (OVHCloud VPS)
+
+La versione di produzione è ospitata sul server VPS Linux OVHCloud:
+* **Host / IP:** `164.132.103.235` (percorso `ubuntu@vps-b0473dd5:~/Asset$`)
+* **Porta Web:** `3000` (`http://164.132.103.235:3000`)
+* **Process Manager:** **PM2** (`asset-app`, ID `0`).
+* **Autonomia e H24:** Il servizio è configurato con `pm2 save` e `pm2 startup` systemd per garantire la permanenza online h24 automatica senza la necessità di eseguire script `.bat` locali o mantenere sessioni aperte.
+
+---
+
+## 7. Flusso di Esecuzione (Workflow)
 
 1. **Configurazione Scenario:** L'utente accede alla scheda *FINANZA* per impostare Tassi di Interesse, Inflazione, Struttura della Leva (Cash Sweep) e Scenari Energetici Futuri (Floor/Cap dei prezzi zonali).
 2. **Caricamento Asset:** Nella scheda *IMPIANTI*, l'utente carica o importa CSV di PVGIS, configura Inverter e BESS, e imposta tutti gli OPEX dettagliati. Tutte queste informazioni sono sincronizzate istantaneamente nel backend.
 3. **Associazione Off-Taker:** Nella scheda *STABILIMENTI*, si modellano i carichi industriali e le utenze in autoconsumo, CER o PPA off-site.
 4. **Calcolo e Reportistica:** Al clic su "Ricalcola Scenario" (o in automatico dopo una modifica), il Worker Web preleva tutto lo stato serializzato dal Main Thread, applica i 20 anni di formule orarie e annuali e risponde con `simResults`.
 5. **Dashboard UI:** I grafici Chart.js e i cruscotti dei KPI (IRR, LCOE, NPV, Payback) si aggiornano reattivamente, evidenziando criticità tramite indicatori (es. DSCR < 1.3 evidenziato in rosso).
+

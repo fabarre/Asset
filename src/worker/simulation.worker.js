@@ -1482,7 +1482,7 @@ function runSensitivityLoop(baseState, config) {
                 opexMaintReserve: [],
                 ebitda: [], ebit: [], depreciationCivil: [], depreciationCivilSolar: [], depreciationCivilBess: [], depreciationCivilOther: [],
                 interest: [], interestPaid: [], interestActive: [], sociInterestAccrued: [], ebt: [],
-                currentTaxesSpv: [], deferredTaxes: [], civilTaxesSpv: [], netProfitSpv: [], cfads: [],
+                currentTaxesSpv: [], iresTaxSpv: [], irapTaxSpv: [], deferredTaxes: [], civilTaxesSpv: [], netProfitSpv: [], cfads: [],
                 deductibleInterest: [], interestCF: [], rolCF: [], taxLossCF: [],
                 dividendsPaid: [], holdcoFCFE: [], rolCapacity: [], bessAugmentationCost: [], mraRelease: [],
                 maintReserve: [], holdcoOpex: [], holdcoIresTaxPaid: [], holdcoNetProfit: [], holdcoEarnoutPaid: [], holdcoBuyoutPaid: [],
@@ -2528,6 +2528,8 @@ function runSensitivityLoop(baseState, config) {
                 matrix.sociInterestAccrued.push(ySociInterestAccrued);
                 matrix.ebt.push(yEbt);
                 matrix.currentTaxesSpv.push(yCurrentTaxesSpv);
+                matrix.iresTaxSpv.push(yIresTax);
+                matrix.irapTaxSpv.push(yIrapTax);
                 matrix.deferredTaxes.push(yDeferredTaxes);
                 matrix.civilTaxesSpv.push(yCivilTaxes);
                 matrix.netProfitSpv.push(yNetProfitSpv);
