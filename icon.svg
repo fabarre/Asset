@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0b0f19"/>
+  <rect x="16" y="16" width="480" height="480" rx="80" fill="none" stroke="#10b981" stroke-width="8" opacity="0.5"/>
+  <g fill="#eab308">
+    <rect x="96" y="150" width="150" height="110" rx="12" transform="skewX(-12)"/>
+    <line x1="110" y1="187" x2="232" y2="173" stroke="#0b0f19" stroke-width="8"/>
+    <line x1="118" y1="223" x2="240" y2="209" stroke="#0b0f19" stroke-width="8"/>
+    <line x1="158" y1="146" x2="172" y2="262" stroke="#0b0f19" stroke-width="8"/>
+    <line x1="206" y1="140" x2="220" y2="256" stroke="#0b0f19" stroke-width="8"/>
+  </g>
+  <g>
+    <rect x="280" y="150" width="130" height="200" rx="16" fill="none" stroke="#10b981" stroke-width="14"/>
+    <rect x="326" y="132" width="38" height="20" rx="6" fill="#10b981"/>
+    <rect x="296" y="250" width="98" height="84" rx="10" fill="#10b981"/>
+  </g>
+  <circle cx="170" cy="110" r="34" fill="#eab308" opacity="0.9"/>
+  <g stroke="#eab308" stroke-width="10" stroke-linecap="round">
+    <line x1="170" y1="58" x2="170" y2="72"/>
+    <line x1="118" y1="110" x2="132" y2="110"/>
+    <line x1="208" y1="110" x2="222" y2="110"/>
+    <line x1="133" y1="73" x2="143" y2="83"/>
+    <line x1="197" y1="83" x2="207" y2="73"/>
+  </g>
+  <text x="256" y="440" font-family="Arial, sans-serif" font-size="72" font-weight="900" fill="#e2e8f0" text-anchor="middle" letter-spacing="6">ASSET</text>
+</svg>

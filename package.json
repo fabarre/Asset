@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "test": "node tests/test_worker.mjs",
+    "test:e2e": "node tests/e2e_validate.js"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
     "exceljs": "^4.4.0"

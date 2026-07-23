@@ -9,8 +9,15 @@ function getMonthOfHour(t) {
     return 11;
 }
 
-self.onmessage = function(e) {
+// Festività italiane 2025 (indice giorno 0-based dal 1° gennaio) — usate dai generatori di curve di carico
+const IT_HOLIDAYS_2025 = new Set([0, 5, 109, 110, 114, 120, 152, 226, 304, 341, 358, 359]);
+
+self.onmessage = async function(e) {
     const { action, payload } = e.data;
+    // Pre-carica il solver LP HiGHS se richiesto (lazy, una sola volta per sessione worker)
+    if (payload && payload.State && payload.State.inputs && payload.State.inputs.bessOptimizer === 'lp') {
+        await getHighs();
+    }
     if (action === 'EXECUTE_CALCULATION') {
         try {
             console.log("[Worker] Starting executeCalculation...");
@@ -29,8 +36,389 @@ self.onmessage = function(e) {
         } catch (err) {
             self.postMessage({ status: 'sensitivity_error', error: err.message, stack: err.stack });
         }
+    } else if (action === 'EXECUTE_MONTECARLO') {
+        try {
+            const results = runMonteCarloLoop(payload.State, payload.mcConfig);
+            self.postMessage({ status: 'montecarlo_success', results });
+        } catch (err) {
+            self.postMessage({ status: 'montecarlo_error', error: err.message, stack: err.stack });
+        }
+    } else if (action === 'EXECUTE_TORNADO') {
+        try {
+            const results = runTornadoLoop(payload.State);
+            self.postMessage({ status: 'tornado_success', results });
+        } catch (err) {
+            self.postMessage({ status: 'tornado_error', error: err.message, stack: err.stack });
+        }
+    } else if (action === 'COMPARE_SCENARIOS') {
+        try {
+            const results = [];
+            for (const scen of (payload.scenarios || [])) {
+                const stateClone = deepClone(payload.State);
+                // Lo snapshot sostituisce interamente gli inputs finanziari
+                stateClone.inputs = deepClone(scen.inputs);
+                State = stateClone;
+                const res = executeCalculation(stateClone);
+                results.push({
+                    id: scen.id,
+                    name: scen.name,
+                    irr: res.calculatedIrr,
+                    npv: res.holdcoNpv,
+                    moic: res.holdcoMoic,
+                    minDscr: (res.minDscr === 999 || res.minDscr === 0) ? null : res.minDscr,
+                    avgDscr: res.avgDscr,
+                    lcoe: res.calculatedLcoe,
+                    payback: res.paybackPeriod
+                });
+            }
+            self.postMessage({ status: 'compare_success', results });
+        } catch (err) {
+            self.postMessage({ status: 'compare_error', error: err.message, stack: err.stack });
+        }
     }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LP OPTIMIZER (HiGHS WASM) — ottimo globale annuale del dispatch BESS
+// ─────────────────────────────────────────────────────────────────────────────
+let highsSolver = null;
+let highsLoadFailed = false;
+async function getHighs() {
+    if (highsSolver || highsLoadFailed) return highsSolver;
+    try {
+        importScripts('https://cdn.jsdelivr.net/npm/highs/build/highs.js');
+        const factory = self.highs || self.Module || self.HiGHS;
+        if (typeof factory !== 'function') throw new Error('factory HiGHS non trovata dopo importScripts');
+        highsSolver = await factory({ locateFile: (f) => 'https://cdn.jsdelivr.net/npm/highs/build/' + f });
+        console.log('[Worker] HiGHS LP solver caricato da CDN.');
+    } catch (err) {
+        highsLoadFailed = true;
+        console.warn('[Worker] HiGHS non disponibile, fallback su DP:', err.message);
+    }
+    return highsSolver;
+}
+
+// Dispatch BESS via LP globale su 8760h (stesso contratto di output di simulateBessHourly).
+// Variabili/ora: c_pv, c_grid, d_grid, d_ppa, s (autoconsumo FV), soc.
+// Carica/scarica simultanea esclusa dall'ottimo per RTE < 100% (LP puro, niente binarie).
+function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
+    const H = 8760;
+    const bessMw = p.bessMw;
+    const bessMwh = p.bessMwh;
+    const bessEfficiency = p.bessEfficiency;
+    const bessConnection = p.bessConnection || 'ac';
+
+    const lossMult = 1 + (p.gridLosses / 100);
+    const lossWithdrawMult = 1 + ((p.gridLossesWithdraw || 0) / 100);
+    const gseImb = p.gseImbalance;
+    const spread = p.traderSpread;
+    const disp = p.traderDisp;
+    const ppaPrice = p.ppaPrice || 0;
+    const marketType = p.marketType || 'rid';
+    const ferxTariff = p.ferxTariff !== undefined ? p.ferxTariff : 85;
+
+    // Efficienze (stesse convenzioni della DP)
+    let rte = bessEfficiency;
+    const configuredDod = (p.bessDoD && p.bessDoD > 0) ? p.bessDoD / 100 : null;
+    const dod = configuredDod !== null ? configuredDod : 0.90;
+    const socMaxPct = (p.bessSocMax !== undefined && p.bessSocMax > 0 && p.bessSocMax <= 100) ? p.bessSocMax : 100;
+    const socMinPct = (p.bessSocMin !== undefined && p.bessSocMin > 0 && p.bessSocMin < socMaxPct) ? p.bessSocMin : null;
+    const maxSoc = bessMwh * 1000 * (socMaxPct / 100);
+    const minSoc = (socMinPct !== null) ? (bessMwh * 1000 * (socMinPct / 100)) : maxSoc * (1 - dod);
+    const maxPower = bessMw * 1000;
+    const chargeSolarEff = bessConnection === 'dc' ? 0.98 : Math.sqrt(rte);
+    const chargeGridEff = Math.sqrt(rte);
+    const dischargeEff = Math.sqrt(rte);
+
+    // Media mensile PUN per contratto pun_medio
+    const monthlyAveragePun = new Float64Array(12);
+    const monthlyCounts = new Int32Array(12);
+    for (let t = 0; t < H; t++) {
+        const m = getMonthOfHour(t);
+        monthlyAveragePun[m] += punProfile[t];
+        monthlyCounts[m]++;
+    }
+    for (let m = 0; m < 12; m++) if (monthlyCounts[m] > 0) monthlyAveragePun[m] /= monthlyCounts[m];
+
+    // ── Costruzione del modello in formato LP testuale (highs-js accetta stringhe) ──
+    // Variabili/ora: cpv{t}, cgr{t}, dgr{t}, dppa{t}, s{t}, soc{t}
+    const fmt = (v) => {
+        if (!isFinite(v)) return '0';
+        return Math.abs(v) < 1e-12 ? '0' : Number(v.toPrecision(10)).toString();
+    };
+    const objParts = [];
+    const ctrParts = [];
+    const bndParts = [];
+    for (let t = 0; t < H; t++) {
+        const pricePUN = punProfile[t];
+        const month = getMonthOfHour(t);
+        const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
+        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+        const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
+        const pricePPA = ppaPrice / 1000;
+        const lodVal = loadProfile ? Math.max(0, loadProfile[t]) : 0;
+        const solVal = solarProfile[t];
+
+        // Objective coefficients (max): ricavi PPA/RID - costi prelievo
+        objParts.push((-priceRID >= 0 ? '+' : '') + fmt(-priceRID) + ' cpv' + t);
+        objParts.push((-costGrid >= 0 ? '+' : '') + fmt(-costGrid) + ' cgr' + t);
+        objParts.push((priceRID >= 0 ? '+' : '') + fmt(priceRID) + ' dgr' + t);
+        objParts.push((pricePPA >= 0 ? '+' : '') + fmt(pricePPA) + ' dppa' + t);
+        const sCoef = pricePPA - priceRID;
+        objParts.push((sCoef >= 0 ? '+' : '') + fmt(sCoef) + ' s' + t);
+
+        // socdyn: soc{t} - soc{t-1} - effCS*cpv - effCG*cgr + (1/effD)*(dgr+dppa) = (t==0 ? minSoc : 0)
+        ctrParts.push(' socdyn' + t + ': soc' + t
+            + (t > 0 ? ' - soc' + (t - 1) : '')
+            + ' - ' + fmt(chargeSolarEff) + ' cpv' + t
+            + ' - ' + fmt(chargeGridEff) + ' cgr' + t
+            + ' + ' + fmt(1 / dischargeEff) + ' dgr' + t
+            + ' + ' + fmt(1 / dischargeEff) + ' dppa' + t
+            + ' = ' + fmt(t === 0 ? minSoc : 0));
+        // Limiti potenza
+        ctrParts.push(' chcap' + t + ': cpv' + t + ' + cgr' + t + ' <= ' + fmt(maxPower));
+        ctrParts.push(' discap' + t + ': dgr' + t + ' + dppa' + t + ' <= ' + fmt(maxPower));
+        // Ripartizione solare: autoconsumo + carica <= generazione
+        ctrParts.push(' solsplit' + t + ': s' + t + ' + cpv' + t + ' <= ' + fmt(solVal));
+        // Scarica PPA + autoconsumo <= fabbisogno
+        ctrParts.push(' ppalim' + t + ': dppa' + t + ' + s' + t + ' <= ' + fmt(lodVal));
+
+        // Bounds
+        bndParts.push(' 0 <= cpv' + t + ' <= ' + fmt(solVal));
+        bndParts.push(' 0 <= cgr' + t + ' <= ' + fmt(maxPower));
+        bndParts.push(' 0 <= dgr' + t + ' <= ' + fmt(maxPower));
+        bndParts.push(' 0 <= dppa' + t + ' <= ' + fmt(lodVal));
+        bndParts.push(' 0 <= s' + t + ' <= ' + fmt(lodVal));
+        bndParts.push(' ' + fmt(minSoc) + ' <= soc' + t + ' <= ' + fmt(maxSoc));
+    }
+    const lpString = 'Maximize\n obj: ' + objParts.join(' ')
+        + '\nSubject To\n' + ctrParts.join('\n')
+        + '\nBounds\n' + bndParts.join('\n')
+        + '\nEnd\n';
+
+    const sol = highsSolver.solve(lpString);
+
+    const status = sol && (sol.Status || sol.status);
+    if (!sol || (status !== 'Optimal' && status !== 'optimal')) {
+        throw new Error('LP non ottimo: ' + status);
+    }
+    const cols = sol.Columns;
+    const colValByName = (name) => {
+        const c = cols[name];
+        if (!c) return 0;
+        return (c.Primal !== undefined) ? c.Primal : 0;
+    };
+
+    // Ricostruzione output (stesso contratto di simulateBessHourly)
+    const hourlySoC = new Float64Array(H);
+    const hourlyCharge = new Float64Array(H);
+    const hourlyDischarge = new Float64Array(H);
+    const hourlyGridFeed = new Float64Array(H);
+    const hourlySelfCons = new Float64Array(H);
+    const hourlyChargeGrid = new Float64Array(H);
+    const hourlyChargeSolar = new Float64Array(H);
+    const hourlyDischargeGrid = new Float64Array(H);
+    const hourlyDischargePpa = new Float64Array(H);
+    const hourlySelfConsSolar = new Float64Array(H);
+    const hourlySelfConsBess = new Float64Array(H);
+    const hourlyLossesRte = new Float64Array(H);
+    const hourlyGridFeedPv = new Float64Array(H);
+    const hourlyRevenueRidPure = new Float64Array(H);
+    const hourlyRevenueRidActual = new Float64Array(H);
+    const hourlyRevenueArbitrageGrid = new Float64Array(H);
+    const hourlyRevenuePpaPv = new Float64Array(H);
+    const hourlyRevenuePpaBess = new Float64Array(H);
+    const hourlyRevenueTimeshifting = new Float64Array(H);
+    const hourlyCostWithdrawal = new Float64Array(H);
+    const hourlyDischargeArbitrage = new Float64Array(H);
+    const hourlyDischargeTimeshifting = new Float64Array(H);
+
+    let totalUplift = 0;
+    let annualShiftedKwh = 0;
+    let socGridVal = 0; // pool energia caricata da rete (tracciamento proporzionale, come DP)
+
+    for (let t = 0; t < H; t++) {
+        const solValRaw = solarProfile[t];
+        const lodValRaw = loadProfile ? Math.max(0, loadProfile[t]) : 0;
+        // Clamp fisico delle tolleranze numeriche del solver (~1e-3 kW)
+        let c_pv = Math.min(Math.max(0, colValByName('cpv' + t)), solValRaw);
+        const c_grid = Math.max(0, colValByName('cgr' + t));
+        const d_grid = Math.max(0, colValByName('dgr' + t));
+        const s = Math.min(Math.max(0, colValByName('s' + t)), Math.max(0, solValRaw - c_pv));
+        const d_ppa = Math.min(Math.max(0, colValByName('dppa' + t)), Math.max(0, lodValRaw - s));
+        const socEnd = colValByName('soc' + t);
+
+        const solVal = solValRaw;
+        const lodVal = lodValRaw;
+        const pricePUN = punProfile[t];
+        const month = getMonthOfHour(t);
+        const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
+        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+        const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
+        const pricePPA = ppaPrice / 1000;
+
+        const socStart = (t === 0) ? minSoc : colValByName('soc' + (t - 1));
+        const deltaSoC = socEnd - socStart;
+
+        // Split arbitraggio/timeshifting via pool proporzionale (stessa logica DP)
+        let d_grid_from_grid = 0;
+        if (deltaSoC > 0) {
+            socGridVal += c_grid * chargeGridEff;
+        } else if (deltaSoC < 0) {
+            const fraction = socStart > 0 ? (socGridVal / socStart) : 0;
+            const E_dis_grid = Math.min(-deltaSoC, Math.max(0, socGridVal));
+            socGridVal = Math.max(0, socGridVal - E_dis_grid);
+            d_grid_from_grid = Math.min(d_grid, E_dis_grid * dischargeEff * (fraction > 0 ? 1 : 1));
+        }
+
+        const p_fed_pv = Math.max(0, solVal - s - c_pv);
+
+        hourlySoC[t] = socEnd;
+        hourlyCharge[t] = c_pv + c_grid;
+        hourlyDischarge[t] = d_grid + d_ppa;
+        hourlyChargeGrid[t] = c_grid;
+        hourlyChargeSolar[t] = c_pv;
+        hourlyDischargeGrid[t] = d_grid;
+        hourlyDischargePpa[t] = d_ppa;
+        hourlySelfConsSolar[t] = s;
+        hourlySelfConsBess[t] = d_ppa;
+        hourlySelfCons[t] = s + d_ppa;
+        hourlyGridFeed[t] = p_fed_pv + d_grid;
+        hourlyGridFeedPv[t] = p_fed_pv;
+        hourlyLossesRte[t] = c_pv * (1 - chargeSolarEff) + c_grid * (1 - chargeGridEff) + (d_grid + d_ppa) * ((1 / dischargeEff) - 1);
+        hourlyRevenueRidPure[t] = solVal * priceRID;
+        hourlyRevenueRidActual[t] = p_fed_pv * priceRID;
+        hourlyRevenueArbitrageGrid[t] = d_grid_from_grid * priceRID;
+        hourlyRevenueTimeshifting[t] = Math.max(0, d_grid - d_grid_from_grid) * priceRID;
+        hourlyRevenuePpaPv[t] = s * pricePPA;
+        hourlyRevenuePpaBess[t] = d_ppa * pricePPA;
+        hourlyCostWithdrawal[t] = c_grid * costGrid;
+        hourlyDischargeArbitrage[t] = d_grid_from_grid;
+        hourlyDischargeTimeshifting[t] = Math.max(0, d_grid - d_grid_from_grid);
+
+        totalUplift += (s + d_ppa) * pricePPA + (p_fed_pv + d_grid) * priceRID - c_grid * costGrid;
+        annualShiftedKwh += d_grid + d_ppa;
+    }
+
+    return {
+        hourlySoC, hourlyCharge, hourlyDischarge, hourlyGridFeed, hourlySelfCons,
+        hourlyChargeGrid, hourlyChargeSolar, hourlyDischargeGrid, hourlyDischargePpa,
+        hourlySelfConsSolar, hourlySelfConsBess, hourlyLossesRte,
+        hourlyGridFeedPv, hourlyRevenueRidPure, hourlyRevenueRidActual,
+        hourlyRevenueArbitrageGrid, hourlyRevenuePpaPv, hourlyRevenuePpaBess,
+        hourlyRevenueTimeshifting, hourlyCostWithdrawal,
+        hourlyDischargeArbitrage, hourlyDischargeTimeshifting,
+        totalUplift, annualShifted: annualShiftedKwh / 1000
+    };
+}
+
+// Tornado deterministico: IRR al variare ± di ogni driver critico (1 variabile alla volta)
+function runTornadoLoop(baseState) {
+    const vars = [
+        { key: 'capex', label: 'CAPEX', delta: 10 },
+        { key: 'opex', label: 'OPEX', delta: 10 },
+        { key: 'pun', label: 'Prezzo PUN', delta: 10 },
+        { key: 'wacc', label: 'WACC', delta: 1 },
+        { key: 'inflation', label: 'Inflazione', delta: 1 },
+        { key: 'interestRate', label: 'Tasso Debito (Euribor+Spread)', delta: 1 }
+    ];
+
+    // IRR base
+    State = deepClone(baseState);
+    const baseRes = executeCalculation(deepClone(baseState));
+    const baseIrr = baseRes.calculatedIrr;
+
+    const rows = [];
+    for (const v of vars) {
+        const upClone = deepClone(baseState);
+        applySensitivityParam(upClone, v.key, v.delta);
+        State = upClone;
+        const irrUp = executeCalculation(upClone).calculatedIrr;
+
+        const downClone = deepClone(baseState);
+        applySensitivityParam(downClone, v.key, -v.delta);
+        State = downClone;
+        const irrDown = executeCalculation(downClone).calculatedIrr;
+
+        rows.push({ key: v.key, label: v.label, delta: v.delta, irrUp, irrDown });
+    }
+    // Ordina per impatto assoluto decrescente (tornado classico)
+    rows.sort((a, b) => Math.abs(b.irrUp - b.irrDown) - Math.abs(a.irrUp - a.irrDown));
+
+    return { type: 'tornado', baseIrr, rows };
+}
+
+// Box-Muller gaussian generator (N(0,1))
+function gaussianRandom() {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+// Monte Carlo: shock lognormale mean-preserving sul PUN + shock gaussiano sulla produzione FV.
+// Restituisce percentili P10/P50/P90 e media di IRR, NPV, DSCR min/avg.
+function runMonteCarloLoop(baseState, mcConfig) {
+    const nSim = Math.min(500, Math.max(10, parseInt(mcConfig.nSim) || 100));
+    const sigmaPun = Math.max(0, (mcConfig.sigmaPun || 0) / 100);
+    const sigmaGen = Math.max(0, (mcConfig.sigmaGen || 0) / 100);
+
+    const samples = { irr: [], npv: [], dscrMin: [], dscrAvg: [] };
+
+    for (let s = 0; s < nSim; s++) {
+        const stateClone = deepClone(baseState);
+
+        // Shock prezzi: fattore lognormale con media 1 (exp(-sigma^2/2) * exp(sigma*N))
+        if (sigmaPun > 0 && stateClone.zonalPun) {
+            const punFactor = Math.exp(-0.5 * sigmaPun * sigmaPun + sigmaPun * gaussianRandom());
+            for (let zone in stateClone.zonalPun) {
+                const arr = stateClone.zonalPun[zone];
+                if (arr) for (let t = 0; t < arr.length; t++) arr[t] *= punFactor;
+            }
+        }
+        // Shock produzione: gaussiano per impianto (floor 50% per evitare valori non fisici)
+        if (sigmaGen > 0 && stateClone.plants) {
+            stateClone.plants.forEach(pl => {
+                if (!pl.generation) return;
+                const genFactor = Math.max(0.5, 1 + sigmaGen * gaussianRandom());
+                for (let t = 0; t < pl.generation.length; t++) pl.generation[t] *= genFactor;
+            });
+        }
+
+        State = stateClone;
+        const res = executeCalculation(stateClone);
+        samples.irr.push(res.calculatedIrr);
+        samples.npv.push(res.holdcoNpv);
+        samples.dscrMin.push(res.minDscr === 999 ? 0 : res.minDscr);
+        samples.dscrAvg.push(res.avgDscr);
+    }
+
+    const percentile = (arr, pctl) => {
+        const sorted = [...arr].sort((a, b) => a - b);
+        const idx = (sorted.length - 1) * pctl;
+        const lo = Math.floor(idx), hi = Math.ceil(idx);
+        return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+    };
+    const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+    const summarize = (arr) => ({
+        p10: percentile(arr, 0.10),
+        p50: percentile(arr, 0.50),
+        p90: percentile(arr, 0.90),
+        mean: mean(arr)
+    });
+
+    return {
+        type: 'montecarlo',
+        nSim,
+        sigmaPun: mcConfig.sigmaPun,
+        sigmaGen: mcConfig.sigmaGen,
+        irr: summarize(samples.irr),
+        npv: summarize(samples.npv),
+        dscrMin: summarize(samples.dscrMin),
+        dscrAvg: summarize(samples.dscrAvg),
+        irrSamples: [...samples.irr].sort((a, b) => a - b)
+    };
+}
 
 function deepClone(obj) {
     return structuredClone(obj);
@@ -57,7 +445,11 @@ function applySensitivityParam(stateClone, varName, variation) {
             stateClone.inputs.inflation = stateClone.inputs.inflation + (variation / 100);
             break;
         case 'euribor':
-            stateClone.inputs.euribor = stateClone.inputs.euribor + (variation / 100);
+            // Il modello usa interestRate (Euribor + spread): un delta Euribor si trasmette 1:1 sul tasso debito
+            stateClone.inputs.interestRate = (stateClone.inputs.interestRate || 0) + (variation / 100);
+            break;
+        case 'interestRate':
+            stateClone.inputs.interestRate = (stateClone.inputs.interestRate || 0) + (variation / 100);
             break;
         case 'pd_amount':
             stateClone.inputs.pdAmountValue = Math.max(0, (stateClone.inputs.pdAmountValue || 0) * (1 + variation / 100));
@@ -235,8 +627,11 @@ function runSensitivityLoop(baseState, config) {
             const configuredDod = (p.bessDoD && p.bessDoD > 0) ? p.bessDoD / 100 : null;
             let dod = configuredDod !== null ? configuredDod : defaultDod;
             
-            const maxSoc = bessMwh * 1000; // kWh
-            const minSoc = maxSoc * (1 - dod);
+            // Limiti SoC: SoC Min/Max espliciti (se configurati) hanno priorità sulla banda derivata dal DoD
+            const socMaxPct = (p.bessSocMax !== undefined && p.bessSocMax > 0 && p.bessSocMax <= 100) ? p.bessSocMax : 100;
+            const socMinPct = (p.bessSocMin !== undefined && p.bessSocMin > 0 && p.bessSocMin < socMaxPct) ? p.bessSocMin : null;
+            const maxSoc = bessMwh * 1000 * (socMaxPct / 100); // kWh
+            const minSoc = (socMinPct !== null) ? (bessMwh * 1000 * (socMinPct / 100)) : maxSoc * (1 - dod);
             const maxPower = bessMw * 1000; // kW
             
             const chargeSolarEff = bessConnection === 'dc' ? 0.98 : Math.sqrt(rte);
@@ -751,9 +1146,17 @@ function runSensitivityLoop(baseState, config) {
         }
 
         function executeCalculation(State) {
-    let renderZeroState = () => {};
-
             const p = State.inputs;
+
+            // ── Fiscal & financial defaults (sanity fallback se i parametri mancano nel DB) ──
+            // Default applicati SOLO se il parametro manca (DB legacy) o è NaN; uno 0% esplicito è rispettato
+            if (typeof p.iresRate !== 'number' || isNaN(p.iresRate)) p.iresRate = 0.24;   // IRES 24%
+            if (typeof p.irapRate !== 'number' || isNaN(p.irapRate)) p.irapRate = 0.039;  // IRAP 3.9%
+            if (typeof p.wacc !== 'number' || isNaN(p.wacc)) p.wacc = 0.06;
+            if (typeof p.keVal !== 'number' || isNaN(p.keVal)) p.keVal = 0.08;
+            if (typeof p.inflation !== 'number' || isNaN(p.inflation)) p.inflation = 0.02;
+            if (typeof p.interestRate !== 'number' || isNaN(p.interestRate)) p.interestRate = 0;
+            p.leverage = Math.min(0.95, Math.max(0, (typeof p.leverage === 'number' && !isNaN(p.leverage)) ? p.leverage : 0));
 
             // 1. Build Combined Generation Profile & Portafoglio Weighted PUN
             const combinedSolarProfile = new Float64Array(8760);
@@ -806,18 +1209,14 @@ function runSensitivityLoop(baseState, config) {
 
             // ── No plants loaded: zero out all results and return early ──
             if (State.plants.length === 0) {
-                const finalResults = buildZeroResults();
-                renderZeroState();
-                return finalResults;
+                return buildZeroResults();
             }
             // Only process plants that are enabled (default: true if undefined)
             const activePlants = State.plants.filter(p => p.enabled !== false);
 
             // If all plants are disabled, zero out and return
             if (activePlants.length === 0) {
-                const finalResults = buildZeroResults();
-                renderZeroState();
-                return finalResults;
+                return buildZeroResults();
             }
 
             const activeStabilimenti = State.stabilimenti.filter(s => s.enabled !== false);
@@ -895,7 +1294,8 @@ function runSensitivityLoop(baseState, config) {
 
                 // Run BESS simulation for this plant
                 const plantGeneration = plant.generation || new Float64Array(8760);
-                const plantSim = simulateBessHourly(plantGeneration, State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"], loadProfile, {
+                const plantZonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                const bessParams = {
                     bessMw: plantBessMw,
                     bessMwh: plantBessMwh,
                     bessEfficiency: plantBessEfficiency,
@@ -915,7 +1315,18 @@ function runSensitivityLoop(baseState, config) {
                     gridLossesWithdraw: resolveGridLosses(plant.gridVoltage, 'withdraw'),
                     gseImbalance: State.inputs.ridImbalanceCost || 0,
                     ppaPrice: ppaPrice
-                });
+                };
+                // Motore LP globale (HiGHS) se richiesto, con fallback trasparente su DP
+                let plantSim = null;
+                if (State.inputs.bessOptimizer === 'lp' && highsSolver && plantBessMwh > 0 && plantBessMw > 0 && plantBessType !== 'none') {
+                    try {
+                        plantSim = simulateBessLP(plantGeneration, plantZonePrices, loadProfile, bessParams);
+                    } catch (lpErr) {
+                        console.warn('[Worker] LP fallita per impianto ' + plant.name + ', fallback DP:', lpErr.message);
+                        plantSim = null;
+                    }
+                }
+                if (!plantSim) plantSim = simulateBessHourly(plantGeneration, plantZonePrices, loadProfile, bessParams);
 
                 plant.sim = plantSim;
                 
@@ -1301,11 +1712,14 @@ function runSensitivityLoop(baseState, config) {
             });
             const ridMedioneValue = ridDenSum > 0 ? (ridNumSum / ridDenSum) : 0;
             const avgPunZonalInjectedY1 = ridMedioneValue || 95.0;
-            const ppaShare = (State.results && State.results.totalSelfConsMwh && denSum > 0)
-                ? (State.results.totalSelfConsMwh / (denSum / 1000) * 100) : 0;
+            // Quota PPA calcolata direttamente dalle metriche per-impianto anno 1
+            // (State.results non esiste nel worker: prima leggeva sempre 0)
+            let totalSelfConsKwhY1 = 0;
+            activePlants.forEach(pl => { totalSelfConsKwhY1 += (pl._selfConsumptionMwh || 0) * 1000; });
+            const ppaShare = denSum > 0 ? (totalSelfConsKwhY1 / denSum * 100) : 0;
             let scenarioText = "";
             if (p.priceScenarioType === 'bearish_floor') {
-                scenarioText = `  |  Scenario: Ribassista (PUN -%, TS -%, Arb -%).toFixed(1)}%/anno)`;
+                scenarioText = `  |  Scenario: Ribassista (PUN -${((p.punBearishDecayRate || 0) * 100).toFixed(1)}%, TS -${((p.tsBearishDecayRate || 0) * 100).toFixed(1)}%, Arb -${((p.arbBearishDecayRate || 0) * 100).toFixed(1)}%/anno, Floor \u20ac${(p.punZonalFloor || 0).toFixed(0)}/MWh)`;
             } else {
                 scenarioText = `  |  Scenario: Base`;
             }
@@ -1387,6 +1801,7 @@ function runSensitivityLoop(baseState, config) {
             // Subordinated Debt (finanziamento soci) - sized sull'equity di costruzione SPV (senza PD, che è a Holding)
             const constructionEquity = Math.max(0, (totalProjectCost - totalSpvAcquisitionCapex) - debtAmount - peAmount);
             let remainingShareholderLoan = constructionEquity * (p.sociEquityPct / 100);
+            const initialShareholderLoan = remainingShareholderLoan; // quota a inception (per PE ownership %)
             let remainingDebt = debtAmount;
 
             // ── Private Debt running balance & schedule (ora a livello HOLDING) ──
@@ -1404,7 +1819,10 @@ function runSensitivityLoop(baseState, config) {
             const constructionMonths = p.constructionMonths !== undefined ? p.constructionMonths : 6;
             const idcDrawdownFactor = p.idcDrawdownFactor !== undefined ? p.idcDrawdownFactor : 50;
             
-            const gracePeriodYears = Math.min(1, seniorGracePeriodMonths / 12); // Maximum 1 year grace supported directly in Year 1 logic
+            // Grace period generalizzato: supporta anche preammortamenti > 12 mesi (approssimazione annuale)
+            const gracePeriodYears = Math.min(seniorGracePeriodMonths / 12, Math.max(0, (p.loanTerm || 0) - 1));
+            const graceFullYears = Math.floor(gracePeriodYears);
+            const graceFrac = gracePeriodYears - graceFullYears;
             const constructionYears = constructionMonths / 12;
 
             // IDC = Interest During Construction
@@ -1422,6 +1840,16 @@ function runSensitivityLoop(baseState, config) {
                 }
             }
 
+            // ── DSRA (Debt Service Reserve Account): target = N mesi di debt service programmato ──
+            const dsraTargetAmount = ((p.dsraMonths || 0) > 0 && annualDebtService > 0) ? ((p.dsraMonths / 12) * annualDebtService) : 0;
+            let dsraBalance = 0;
+
+            // ── Refinancing / Miniperm: stato del prestito corrente (cambia al refiYear) ──
+            let activeRate = p.interestRate;
+            let activeAnnuity = annualDebtService;
+            let activeMaturity = p.loanTerm;
+            const refiYear = (p.refiEnabled && (parseInt(p.refiYear) || 0) >= 1) ? Math.min(19, parseInt(p.refiYear)) : 0;
+
             // Capitalization of BESS cells at Year 10 (sum of cell replacements for non-graphene)
             let bessAugmentationCost = 0;
             activePlants.forEach(plant => {
@@ -1434,7 +1862,6 @@ function runSensitivityLoop(baseState, config) {
                     bessAugmentationCost += (plantBessMwh * 1000 * plantBessCapexKwh) * 0.50;
                 }
             });
-            let extraDepreciationY11_20 = 0;
 
             // LCOE and LCOS calculations
             let lcoeSumDiscountedCosts = totalProjectCost - bessCAPEX;
@@ -1475,7 +1902,7 @@ function runSensitivityLoop(baseState, config) {
                 priceSolarAvg: [], priceSolarPpa: [], priceSolarRid: [],
                 priceBessAvg: [], priceBessPpa: [], priceBessRid: [],
                 priceBessArbitrage: [], priceBessTimeshifting: [], priceBessChargeGrid: [],
-                revenueTimeshifting: [], revenueArbitrage: [],
+                revenueTimeshifting: [], revenueArbitrage: [], revenueMsd: [],
                 revenueRid: [], revenuePpa: [], revenuePpaPv: [], revenuePpaBessArb: [], revenuePpaBessTs: [],
                 opexTotal: [], opexPlants: [], opexBess: [], opexGridCharging: [], opexLandDds: [], 
                 opexInsurance: [], opexTaxes: [], opexSecurity: [], opexAssetManagement: [], opexServiceContract: [],
@@ -1488,6 +1915,7 @@ function runSensitivityLoop(baseState, config) {
                 maintReserve: [], holdcoOpex: [], holdcoIresTaxPaid: [], holdcoNetProfit: [], holdcoEarnoutPaid: [], holdcoBuyoutPaid: [],
                 holdcoInflowTotal: [], holdcoInterestReceived: [], holdcoLoanRepaymentReceived: [], holdcoDividendReceived: [], partnerDividendReceived: [], spvLockedDividends: [],
                 cfadsCumulated: [], holdcoFCFECumulated: [], principalScheduled: [], principalVoluntary: [],
+                dsraFunding: [], dsraDraw: [], dsraRelease: [],
                 spvFCFE: [], spvCashTrap: [],
                 // ── External financing instruments (Private Debt / Private Equity / Altra Forma) ──
                 pdInterestAccrued: [], pdInterestPaid: [], pdPrincipalPaid: [], pdBulletPayoff: [],
@@ -1502,7 +1930,7 @@ function runSensitivityLoop(baseState, config) {
 
             const debtSchedule = {
                 years: [], beginningBalance: [], interestAccrued: [], principalScheduled: [], principalVoluntary: [], endingBalance: [],
-                totalDebtService: [], dscr: [], beginningBalanceSoci: [], interestAccruedSoci: [], interestPaidSoci: [], principalPaidSoci: [], endingBalanceSoci: [],
+                totalDebtService: [], dscr: [], dsraBalance: [], beginningBalanceSoci: [], interestAccruedSoci: [], interestPaidSoci: [], principalPaidSoci: [], endingBalanceSoci: [],
                 // Private Debt schedule (sezione 3)
                 beginningBalancePd: [], interestAccruedPd: [], interestPaidPd: [], principalPaidPd: [], bulletPayoffPd: [], endingBalancePd: []
             };
@@ -1519,10 +1947,7 @@ function runSensitivityLoop(baseState, config) {
             const depreciablePlantBaseCivil = totalEpcCapex + bessCAPEX + totalConnectionCapex + totalLandDdsAttualizzatoCapex + totalDevelopmentCapex + idcAmount;
             let remainingCapexToDepreciateFiscal = depreciablePlantBaseCivil;
             
-            // Track base components separately for IRAP sterilization (IDC is non-deductible for IRAP)
-            let remainingCapexFiscalPure = totalEpcCapex + bessCAPEX + totalConnectionCapex + totalLandDdsAttualizzatoCapex + totalDevelopmentCapex;
-            let remainingCapexFiscalIdc = idcAmount;
-            
+
             let remainingBessAugmentationFiscal = 0;
             let remainingSolarCivil = totalEpcCapex + totalLandDdsAttualizzatoCapex;
             let remainingBessCivil = bessCAPEX;
@@ -1972,7 +2397,9 @@ function runSensitivityLoop(baseState, config) {
 
                 });
 
-                const yRevenueTotal = yRevenueRid + yRevenuePpa + yRevenueTimeshifting + yRevenueArbitrage;
+                // Ricavi servizi ancillari BESS (MSD / Capacity Market): €/MW/anno × potenza BESS, indicizzati
+                const yRevenueMsd = totalBessMw * (p.msdEurMwYr || 0) * inflationMultiplier;
+                const yRevenueTotal = yRevenueRid + yRevenuePpa + yRevenueTimeshifting + yRevenueArbitrage + yRevenueMsd;
                 
                 // Opex components
                 const yOpexPlants = totalOpexPlants * inflationMultiplier;
@@ -2008,7 +2435,6 @@ function runSensitivityLoop(baseState, config) {
                 if (yr === 10 && bessAugmentationCost > 0) {
                     yBessAugmentationActual = bessAugmentationCost;
                     mraRelease = Math.min(mraBeginning + yMaintReserve, yBessAugmentationActual);
-                    extraDepreciationY11_20 = yBessAugmentationActual / 10; // Amortize cell cost over remaining 10 years
                     remainingBessAugmentationFiscal = yBessAugmentationActual;
                     remainingBessAugCivil = yBessAugmentationActual;
                 }
@@ -2043,20 +2469,35 @@ function runSensitivityLoop(baseState, config) {
                 
                 const yDepreciationCivil = yDeprSolar + yDeprBess + yDeprOther;
 
+                // ── Refinancing / Miniperm: al refiYear il debito residuo è rimborsato con un
+                // nuovo finanziamento (payoff balloon + nuova erogazione, netto cassa zero),
+                // con nuovo tasso e nuovo piano di ammortamento ──
+                if (refiYear > 0 && yr === refiYear && remainingDebt > 0) {
+                    const r2 = (p.refiInterestRate || 0) / 100;
+                    const t2 = Math.max(1, parseInt(p.refiLoanTerm) || 10);
+                    activeRate = r2;
+                    activeMaturity = Math.min(20, yr - 1 + t2);
+                    activeAnnuity = r2 > 0
+                        ? remainingDebt * (r2 * Math.pow(1 + r2, t2)) / (Math.pow(1 + r2, t2) - 1)
+                        : remainingDebt / t2;
+                }
+
                 // Debt Interest & Amortization (Dynamic Grace Period)
                 let yInterest = 0, yPrincipalScheduled = 0, yPrincipalVoluntary = 0, yDebtServiceScheduled = 0;
-                if (p.loanTerm > 0 && yr <= p.loanTerm && remainingDebt > 0) {
-                    yInterest = remainingDebt * p.interestRate;
-                    if (yr === 1) {
-                        // Anno 1: Mesi di grazia (solo interessi) + Mesi di ammortamento (interessi + quota capitale)
-                        const graceInterest = remainingDebt * p.interestRate * gracePeriodYears;
-                        const amortInterest = remainingDebt * p.interestRate * (1 - gracePeriodYears);
+                if (p.loanTerm > 0 && yr <= activeMaturity && remainingDebt > 0) {
+                    yInterest = remainingDebt * activeRate;
+                    if (yr <= graceFullYears) {
+                        // Anni interi di preammortamento: soli interessi, nessuna quota capitale
+                        yPrincipalScheduled = 0;
+                    } else if (yr === graceFullYears + 1 && graceFrac > 0) {
+                        // Anno misto: frazione di grazia (solo interessi) + frazione ammortante
+                        const graceInterest = remainingDebt * activeRate * graceFrac;
+                        const amortInterest = remainingDebt * activeRate * (1 - graceFrac);
                         yInterest = graceInterest + amortInterest;
-                        
-                        const fractionAmortizing = 1 - gracePeriodYears;
-                        yPrincipalScheduled = Math.min(remainingDebt, Math.max(0, (annualDebtService * fractionAmortizing) - amortInterest));
+                        const fractionAmortizing = 1 - graceFrac;
+                        yPrincipalScheduled = Math.min(remainingDebt, Math.max(0, (activeAnnuity * fractionAmortizing) - amortInterest));
                     } else {
-                        yPrincipalScheduled = Math.min(remainingDebt, Math.max(0, annualDebtService - yInterest));
+                        yPrincipalScheduled = Math.min(remainingDebt, Math.max(0, activeAnnuity - yInterest));
                     }
                     yDebtServiceScheduled = yInterest + yPrincipalScheduled;
                 }
@@ -2144,17 +2585,10 @@ function runSensitivityLoop(baseState, config) {
 
                 // Fiscal Depreciation (Corrected year 10 augmentation capitalization and Year 1 50% rule)
                 let yTaxDepreciationPlant = 0;
-                let yTaxDepreciationIdc = 0;
                 if (remainingCapexToDepreciateFiscal > 0) {
                     const deprRateActual = (yr === 1) ? (p.fiscalDeprRate / 2) : p.fiscalDeprRate;
                     yTaxDepreciationPlant = Math.min(depreciablePlantBaseCivil * deprRateActual, remainingCapexToDepreciateFiscal);
                     remainingCapexToDepreciateFiscal -= yTaxDepreciationPlant;
-                    
-                    // Ripartizione proporzionale per IRAP
-                    const deprRatio = depreciablePlantBaseCivil > 0 ? (yTaxDepreciationPlant / depreciablePlantBaseCivil) : 0;
-                    yTaxDepreciationIdc = idcAmount * deprRatio;
-                    remainingCapexFiscalPure -= (yTaxDepreciationPlant - yTaxDepreciationIdc);
-                    remainingCapexFiscalIdc -= yTaxDepreciationIdc;
                 }
                 let totalAnnualDepreciationFiscal = yTaxDepreciationPlant;
                 let yTaxDepreciationBessAug = 0;
@@ -2230,9 +2664,29 @@ function runSensitivityLoop(baseState, config) {
                     - yBessAugmentationActual
                     + mraRelease;
 
+                // ── DSCR Sculpting: quota capitale sagomata sul CFADS per DSCR target ──
+                // principal_y = CFADS_y / targetDSCR - interessi_y (post grace, cappato al residuo).
+                // Le imposte sono già state calcolate (dipendono solo dagli interessi, non dal capitale).
+                if (p.sculptingEnabled && (p.targetDscr || 0) > 0 && p.loanTerm > 0 && yr <= activeMaturity && remainingDebt > 0 && yr > graceFullYears) {
+                    const sculptedPrincipal = Math.max(0, (yCfads / p.targetDscr) - yInterest);
+                    yPrincipalScheduled = Math.min(remainingDebt, sculptedPrincipal);
+                    // Il mutuo deve comunque chiudersi a scadenza: eventuale residuo scultato
+                    // diventa rimborso balloon nell'ultimo anno (DSCR finale < target, realistico)
+                    if (yr === activeMaturity) yPrincipalScheduled = remainingDebt;
+                    yDebtServiceScheduled = yInterest + yPrincipalScheduled;
+                }
+
+                // ── DSRA: utilizzo a copertura di shortfall sul servizio del debito ──
+                let yDsraFunding = 0, yDsraDraw = 0, yDsraRelease = 0;
+                if (dsraTargetAmount > 0 && yDebtServiceScheduled > 0 && yCfads < yDebtServiceScheduled && dsraBalance > 0) {
+                    yDsraDraw = Math.min(dsraBalance, yDebtServiceScheduled - yCfads);
+                    dsraBalance -= yDsraDraw;
+                }
+                const yCfadsEff = yCfads + yDsraDraw;
+
                 let dscr = -1;
                 if (yDebtServiceScheduled > 0) {
-                    dscr = yCfads / yDebtServiceScheduled;
+                    dscr = yCfadsEff / yDebtServiceScheduled;
                     if (dscr < minDscr) minDscr = dscr;
                     sumDscr += dscr;
                     dscrYearsCount++;
@@ -2263,16 +2717,30 @@ function runSensitivityLoop(baseState, config) {
                 let yDebtServiceActual = yInterest + yPrincipalTotal;
                 remainingDebt = Math.max(0, remainingDebt - yPrincipalTotal);
 
-                const ySpvFCF = yCfads - yDebtServiceActual;
+                // ── DSRA: integrazione fino al target (dopo il servizio debito)
+                // e rilascio a estinzione del debito / exit ──
+                if (dsraTargetAmount > 0) {
+                    const cashAfterDs = Math.max(0, yCfadsEff - yDebtServiceActual);
+                    yDsraFunding = Math.min(Math.max(0, dsraTargetAmount - dsraBalance), cashAfterDs);
+                    if (yDsraFunding > 0) dsraBalance += yDsraFunding;
+                    if ((remainingDebt <= 0.001 || (exitOptionYear > 0 && yr === exitOptionYear)) && dsraBalance > 0) {
+                        yDsraRelease = dsraBalance;
+                        dsraBalance = 0;
+                    }
+                }
+
+                const ySpvFCF = yCfadsEff - yDebtServiceActual - yDsraFunding;
 
                 // ── Waterfall SPV: Senior service (già in ySpvFCF) → Soci → Dividendi comuni/PE ──
                 // Il PD non è più nel waterfall SPV (è a livello Holding). yPdInterestPaidActual/yPdPrincipalPaidActual restano 0 a livello SPV.
                 let yPdInterestPaidActual = 0;
                 let yPdPrincipalPaidActual = 0;
-                let cashAvailable = ySpvFCF;
+                let cashAvailable = ySpvFCF + yDsraRelease;
 
                 // PE ownership % (per distribuzioni proporzionali / preferred)
-                const peOwnershipPct = (peAmount > 0 && (peAmount + equityAmount + remainingShareholderLoan) > 0) ? (peAmount / (peAmount + equityAmount + remainingShareholderLoan)) : 0;
+                // PE ownership fissata a inception: NON usare remainingShareholderLoan (si ridurrebbe
+                // col rimborso del finanziamento soci facendo derivare la quota PE anno dopo anno)
+                const peOwnershipPct = (peAmount > 0 && (peAmount + equityAmount + initialShareholderLoan) > 0) ? (peAmount / (peAmount + equityAmount + initialShareholderLoan)) : 0;
 
                 // Shareholder distribution (Finanziamento Soci) — subito dopo senior (PD rimosso dal waterfall SPV)
                 const yTotalInterestPaid = Math.max(0, Math.min(ySociInterestAccrued, cashAvailable));
@@ -2474,6 +2942,7 @@ function runSensitivityLoop(baseState, config) {
                 matrix.revenuePpaBessArb.push(yBessPpaRevArb);
                 matrix.revenuePpaBessTs.push(yBessPpaRevTs);
                 matrix.revenueArbitrage.push(yRevenueArbitrage);
+                matrix.revenueMsd.push(yRevenueMsd);
                 matrix.opexTotal.push(yOpexTotal);
                 // Calculate unit prices
                 const safeDiv = (num, den) => (den > 0.001) ? (num / den) : 0;
@@ -2580,6 +3049,9 @@ function runSensitivityLoop(baseState, config) {
                 matrix.holdcoFCFECumulated.push(cumulativeHoldcoFCFE);
                 matrix.principalScheduled.push(yPrincipalScheduled);
                 matrix.principalVoluntary.push(yPrincipalVoluntary);
+                matrix.dsraFunding.push(yDsraFunding);
+                matrix.dsraDraw.push(yDsraDraw);
+                matrix.dsraRelease.push(yDsraRelease);
 
                 // Debt matrices
                 debtSchedule.years.push(yr);
@@ -2596,6 +3068,7 @@ function runSensitivityLoop(baseState, config) {
                 debtSchedule.interestPaidSoci.push(yTotalInterestPaid);
                 debtSchedule.principalPaidSoci.push(yTotalLoanRepayment);
                 debtSchedule.endingBalanceSoci.push(remainingShareholderLoan);
+                debtSchedule.dsraBalance.push(dsraBalance);
                 // Private Debt schedule (sezione 3)
                 debtSchedule.beginningBalancePd.push(yr === 1 ? pdAmount : debtSchedule.endingBalancePd[yr-2]);
                 debtSchedule.interestAccruedPd.push(yPdInterestAccrued);
@@ -2616,7 +3089,8 @@ function runSensitivityLoop(baseState, config) {
             
             // Build Unlevered Project FCFF cashflows
             const cashFlowsForProjectIRR = [-(totalProjectCost + idcAmount)];
-            for (let i = 0; i < (exitOptionYear > 0 ? exitOptionYear : p.loanTerm || 20); i++) {
+            // Orizzonte Project IRR: vita progetto (20 anni), NON durata del mutuo
+            for (let i = 0; i < (exitOptionYear > 0 ? exitOptionYear : 20); i++) {
                 cashFlowsForProjectIRR.push(matrix.projectFCFF[i]);
             }
             const calculatedProjectIrr = calculateIRR(cashFlowsForProjectIRR);
@@ -2632,7 +3106,9 @@ function runSensitivityLoop(baseState, config) {
                 let prev = cumulativeCash;
                 cumulativeCash += matrix.holdcoFCFE[t-1];
                 if (prev < 0 && cumulativeCash >= 0) {
-                    paybackPeriod = ((t-1) + Math.abs(prev)/matrix.holdcoFCFE[t-1]).toFixed(1) + " Anni";
+                    const fcfeT = matrix.holdcoFCFE[t-1];
+                    // Guard: divisione per zero se l'FCFE dell'anno di crossing è nullo
+                    paybackPeriod = (fcfeT > 0 ? ((t-1) + Math.abs(prev)/fcfeT) : t).toFixed(1) + " Anni";
                     break;
                 }
             }

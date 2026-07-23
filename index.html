@@ -4,11 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solar & BESS M&A Deal Simulator - Enterprise Edition</title>
-    <link rel="icon" href="data:,">
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#0b0f19">
+    <link rel="icon" href="./icon.svg" type="image/svg+xml">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></link>
     <!-- SheetJS for Excel GME Parsing -->
@@ -22,7 +24,7 @@
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase_config.js"></script>
-    <script src="./src/excelExport.js?v=2"></script>
+    <script src="./src/excelExport.js?v=3"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
         body {
@@ -172,6 +174,68 @@
 <body class="bg-[#050811] text-slate-200 min-h-screen selection:bg-emerald-500 selection:text-slate-900">
 
     <!-- ══ Full-screen calculation overlay ══════════════════════════════════ -->
+    <!-- Undo banner -->
+    <div id="undo-banner" style="display: none; position: fixed; bottom: 24px; right: 24px; z-index: 9500; align-items: center; gap: 12px; background: #0b0f19; border: 1px solid rgba(16,185,129,0.35); border-radius: 14px; padding: 12px 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.6);">
+        <i class="fa-solid fa-rotate-left text-emerald-400 text-sm"></i>
+        <span id="undo-banner-text" class="text-slate-200 text-xs font-semibold max-w-xs truncate"></span>
+        <span id="undo-banner-countdown" class="text-slate-500 text-[10px] font-mono">12s</span>
+        <button onclick="UndoManager.execute()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[11px] transition-colors">Annulla</button>
+        <button onclick="UndoManager.dismiss()" class="text-slate-500 hover:text-slate-300 text-xs px-1 transition-colors"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- Audit log modal -->
+    <div id="audit-modal" style="display: none; position: fixed; inset: 0; z-index: 9600; align-items: center; justify-content: center; background: rgba(5, 8, 17, 0.85); backdrop-filter: blur(6px);" onclick="if(event.target===this) closeAuditLog()">
+        <div class="bg-[#0b0f19] border border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-clock-rotate-left text-emerald-400 text-sm"></i>
+                    <h3 class="font-bold text-white text-sm tracking-wide uppercase">Registro Attività (Audit Log)</h3>
+                    <span class="text-[9px] text-slate-500 uppercase tracking-widest font-bold">ultimi 200 eventi</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="clearAuditLog()" class="px-2.5 py-1 bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 font-bold rounded-lg text-[10px] transition-colors">Svuota</button>
+                    <button onclick="closeAuditLog()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div id="audit-list" class="flex-1 overflow-y-auto premium-scrollbar p-2"></div>
+        </div>
+    </div>
+
+    <!-- Auth Overlay (login Supabase) -->
+    <div id="auth-overlay" style="display: none; position: fixed; inset: 0; z-index: 10000; align-items: center; justify-content: center; background: rgba(5, 8, 17, 0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+        <div class="bg-[#0b0f19] border border-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
+            <div class="text-center mb-6">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 mb-3">
+                    <i class="fa-solid fa-lock text-emerald-400 text-lg"></i>
+                </div>
+                <h2 class="text-white font-black text-lg tracking-tight">Accesso Richiesto</h2>
+                <p class="text-slate-500 text-[11px] mt-1">Deal Simulator: Multi-Plant & BESS Enterprise</p>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Email</label>
+                    <input type="email" id="auth-email" placeholder="nome@azienda.it" autocomplete="username" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Password</label>
+                    <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                </div>
+                <div id="auth-error" class="hidden text-rose-400 text-[11px] font-semibold text-center bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2"></div>
+                <button onclick="loginUser()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors">
+                    <i class="fa-solid fa-right-to-bracket mr-1.5"></i> Accedi
+                </button>
+                <button onclick="signupUser()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[11px] transition-colors">
+                    <i class="fa-solid fa-user-plus mr-1.5"></i> Registra nuovo utente
+                </button>
+                <div class="text-center pt-2 border-t border-slate-800/60">
+                    <button onclick="continueAnonymous()" class="text-slate-500 hover:text-slate-300 text-[10px] font-semibold transition-colors" title="Funziona solo se le policy RLS sono ancora permissive">
+                        Continua senza autenticazione (modalità sviluppo)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="calc-overlay" class="visible" style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(5, 8, 17, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); opacity: 1; pointer-events: all;" role="status" aria-live="polite" aria-label="Calcolo in corso">
         <div class="calc-overlay-card">
             <div class="calc-overlay-rings">
@@ -202,6 +266,15 @@
                 </div>
             </div>
             <div class="flex items-center space-x-4">
+                <!-- Audit log -->
+                <button onclick="openAuditLog()" class="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-600/40 transition-colors text-xs" title="Registro attività (audit log)">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                </button>
+                <!-- Language toggle -->
+                <span class="inline-flex items-center rounded-lg bg-slate-900 border border-slate-800 p-0.5" title="Lingua interfaccia / UI language">
+                    <button id="btn-lang-it" onclick="I18n.setLang('it')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500 text-slate-950 transition-colors">IT</button>
+                    <button id="btn-lang-en" onclick="I18n.setLang('en')" class="px-2 py-0.5 rounded text-[10px] font-bold text-slate-400 hover:text-slate-200 transition-colors">EN</button>
+                </span>
                 <span class="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-400/10 text-emerald-400 border border-emerald-500/20">
                     <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                     Simulazione Fisica Oraria 8760 Ore
@@ -500,9 +573,15 @@
                         </div>
                         <div class="flex justify-between items-center pt-1 border-t border-slate-800/40">
                             <span id="sync-status" class="text-[10px] text-slate-400 font-medium">Offline</span>
-                            <button onclick="syncToSupabase()" class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-905 font-bold rounded-lg text-[10px] transition-colors flex items-center shadow-md">
-                                <i class="fa-solid fa-rotate mr-1"></i> Sincronizza
-                            </button>
+                            <div class="flex items-center space-x-2">
+                                <span id="auth-user-badge" class="hidden text-[10px] text-sky-400 font-semibold" title="Utente autenticato"></span>
+                                <button id="btn-logout" onclick="logoutUser()" class="hidden px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition-colors" title="Esci dall'account">
+                                    <i class="fa-solid fa-right-from-bracket"></i>
+                                </button>
+                                <button onclick="syncToSupabase()" class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-905 font-bold rounded-lg text-[10px] transition-colors flex items-center shadow-md">
+                                    <i class="fa-solid fa-rotate mr-1"></i> Sincronizza
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -633,6 +712,43 @@
                     <p class="text-[11px] text-slate-400 mt-0.5">Configurazione dei parametri macroeconomici, della leva finanziaria, del finanziamento soci e della strategia di exit.</p>
                 </div>
             </div>
+
+            <!-- Gestione Scenari Nominati -->
+            <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-layer-group text-violet-400 text-sm"></i>
+                        <h3 class="font-bold text-white text-xs tracking-wide uppercase">Gestione Scenari</h3>
+                    </div>
+                    <span class="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Snapshot configurazione finanziaria (portfolio condiviso)</span>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div class="flex space-x-2">
+                        <input type="text" id="scenario-name-input" placeholder="Nome nuovo scenario (es. Base, Leva Alta...)" class="flex-1 bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none">
+                        <button onclick="saveCurrentScenario()" class="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-lg text-xs transition-colors whitespace-nowrap">
+                            <i class="fa-solid fa-floppy-disk mr-1"></i> Salva
+                        </button>
+                    </div>
+                    <div class="flex space-x-2">
+                        <select id="scenario-select" class="flex-1 bg-slate-950 border border-slate-700/80 text-white px-2.5 py-1.5 rounded text-xs outline-none focus:border-violet-500">
+                            <option value="">- Nessuno scenario salvato -</option>
+                        </select>
+                        <button onclick="applySelectedScenario()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors whitespace-nowrap" title="Carica lo scenario selezionato">
+                            <i class="fa-solid fa-upload mr-1"></i> Applica
+                        </button>
+                        <button onclick="deleteSelectedScenario()" class="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white font-bold rounded-lg text-xs transition-colors whitespace-nowrap" title="Elimina lo scenario selezionato">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="runScenarioCompare()" class="flex-1 px-3 py-1.5 bg-sky-700 hover:bg-sky-600 text-white font-bold rounded-lg text-xs transition-colors" title="Confronta i KPI degli scenari selezionati (max 3)">
+                            <i class="fa-solid fa-table-columns mr-1"></i> Confronta Selezionati
+                        </button>
+                    </div>
+                </div>
+                <div id="scenario-list" class="flex flex-wrap gap-2"></div>
+                <div id="scenario-compare-results" class="hidden overflow-x-auto premium-scrollbar"></div>
+            </div>
             
             <!-- Row 1: High Level Parameters (Ke, WACC, Leverage, Exit) -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
@@ -664,6 +780,16 @@
                                     <span class="font-bold text-white" id="val-fiscal-depreciation">9.0 %</span>
                                 </div>
                                 <input type="range" id="slide-fiscal-depreciation" min="4.0" max="15.0" value="9.0" step="0.5" class="w-full">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">Aliquota IRES (%)</label>
+                                <input type="number" id="input-ires-rate" value="24.0" step="0.1" min="0" max="100" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">Aliquota IRAP (%)</label>
+                                <input type="number" id="input-irap-rate" value="3.9" step="0.1" min="0" max="100" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                             </div>
                         </div>
                     </div>
@@ -717,7 +843,7 @@
                                     <span class="text-slate-400">Preammortamento</span>
                                     <span class="font-bold text-amber-400" id="val-senior-grace-period">6 Mesi</span>
                                 </div>
-                                <input type="range" id="slide-senior-grace-period" min="0" max="12" value="6" step="1" class="w-full">
+                                <input type="range" id="slide-senior-grace-period" min="0" max="24" value="6" step="1" class="w-full">
                             </div>
                             <div>
                                 <div class="flex justify-between text-[11px] mb-1">
@@ -733,6 +859,40 @@
                                 </div>
                                 <input type="range" id="slide-idc-drawdown" min="0" max="100" value="50" step="1" class="w-full">
                             </div>
+                        </div>
+
+                        <!-- DSRA (Debt Service Reserve Account) -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-3 border-t border-slate-800">
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">DSRA (Mesi di Debt Service)</label>
+                                <input type="number" id="input-dsra-months" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-cyan-300 font-bold text-xs focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none">
+                            </div>
+                            <div class="md:col-span-2 flex items-end">
+                                <p class="text-[10px] text-slate-500 leading-relaxed pb-1">Riserva vincolata pari a N mesi di servizio debito: integrata dal CFADS, usata per coprire shortfall sul servizio (protegge il DSCR) e rilasciata a estinzione/exit. 0 = disattivato.</p>
+                            </div>
+                        </div>
+
+                        <!-- Refinancing / Miniperm -->
+                        <div class="mt-4 pt-3 border-t border-slate-800">
+                            <div class="flex items-center space-x-2 mb-3">
+                                <input type="checkbox" id="input-refi-enabled" class="w-4 h-4 rounded border-slate-700 text-violet-500 focus:ring-violet-500 bg-slate-950">
+                                <label for="input-refi-enabled" class="text-[11px] text-slate-300 font-semibold cursor-pointer">Refinancing / Miniperm (nuovo finanziamento a metà vita)</label>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1">Anno Refinancing</label>
+                                    <input type="number" id="input-refi-year" value="7" min="1" max="19" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-violet-300 font-bold text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1">Nuovo Tasso (%)</label>
+                                    <input type="number" id="input-refi-rate" value="5.0" min="0" max="15" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-violet-300 font-bold text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1">Nuova Durata (Anni)</label>
+                                    <input type="number" id="input-refi-term" value="10" min="1" max="20" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-violet-300 font-bold text-xs focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none">
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-slate-500 mt-1.5 leading-relaxed">All'anno indicato il debito residuo è rimborsato con un nuovo finanziamento (netto cassa zero): nuovo tasso e nuovo piano di ammortamento dalla stessa anno (scadenza cappata all'anno 20).</p>
                         </div>
                         
                         <!-- Nuovo: Cash Sweep -->
@@ -817,6 +977,18 @@
                             <div>
                                 <label class="block text-[11px] text-slate-400 mb-1">Durata (Anni, 0=illimitato)</label>
                                 <input type="number" id="input-sweep-years" value="0" min="0" max="20" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-amber-300 font-bold text-xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none" placeholder="0">
+                            </div>
+                        </div>
+                        
+                        <!-- DSCR Sculpting -->
+                        <div class="grid grid-cols-2 gap-4 mt-4 pt-3 border-t border-slate-800">
+                            <div class="flex items-center space-x-2 pt-1">
+                                <input type="checkbox" id="input-sculpting-enabled" class="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
+                                <label for="input-sculpting-enabled" class="text-[11px] text-slate-300 font-semibold cursor-pointer">DSCR Sculpting (rata sagomata)</label>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">Target DSCR (x)</label>
+                                <input type="number" id="input-target-dscr" value="1.30" min="1.0" max="3.0" step="0.05" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-emerald-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                             </div>
                         </div>
                         
@@ -1136,6 +1308,16 @@
                         <div>
                             <label class="block text-[11px] text-slate-400 mb-1">Decadimento Bearish Arbitraggio (%/a)</label>
                             <input type="number" id="input-arb-bearish-decay-rate" value="3" min="0" max="30" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-rose-400 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mt-4 pt-3 border-t border-slate-800">
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Motore Ottimizzazione BESS</label>
+                            <select id="select-bess-optimizer" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2.5 py-1.5 rounded text-xs outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
+                                <option value="dp" selected>DP Giornaliera (Standard)</option>
+                                <option value="lp">LP Globale HiGHS (Sperimentale)</option>
+                            </select>
+                            <p class="text-[10px] text-slate-500 mt-1.5 leading-relaxed">LP: ottimo globale su 8760h via HiGHS (WASM, caricato da CDN). Fallback automatico su DP se non disponibile.</p>
                         </div>
                     </div>
                     <p class="text-[10px] text-slate-400 leading-relaxed bg-slate-950/60 p-3 rounded-lg border border-slate-800/80 mt-2">
@@ -1678,6 +1860,9 @@
                     <div>
                         <label class="block text-[11px] text-slate-400 mb-1">Dati PVGIS (CSV orario)</label>
                         <input type="file" id="pvgis-file" accept=".csv" class="w-full text-xs text-slate-400 bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 cursor-pointer outline-none">
+                        <button type="button" onclick="importPvgisFromApi()" class="w-full mt-2 py-1.5 bg-sky-900/40 hover:bg-sky-800/50 border border-sky-700/40 text-sky-300 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center">
+                            <i class="fa-solid fa-cloud-arrow-down mr-1.5"></i> Scarica da PVGIS API (lat/lon)
+                        </button>
                     </div>
                     <div id="plant-form-actions" class="space-y-2">
                         <button id="btn-add-plant" onclick="submitPlantForm()" disabled class="w-full py-2 bg-slate-800 text-slate-500 font-bold rounded-lg text-xs cursor-not-allowed transition-colors flex items-center justify-center">
@@ -1976,6 +2161,11 @@
                             <div>
                                 <label class="block text-[11px] text-slate-400 mb-1">Costo Sbilanciamento GSE (€/MWh)</label>
                                 <input type="number" id="input-ridImbalanceCost" value="1.5" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                            </div>
+                            <div class="border-t border-slate-800/60 pt-3">
+                                <label class="block text-[11px] text-slate-400 mb-1">Ricavi Servizi Ancillari BESS — MSD / Capacity Market (€/MW/anno)</label>
+                                <input type="number" id="input-msd-eur-mw-yr" value="0" min="0" step="1000" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-emerald-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" placeholder="0">
+                                <p class="text-[10px] text-slate-500 mt-1.5 leading-relaxed">Ricavo annuo per MW di potenza BESS installata (dispacciamento MSD, capacity market, FCR). 0 = disattivato. Indicizzato all'inflazione.</p>
                             </div>
                         </div>
                     </div>
@@ -2715,12 +2905,86 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Monte Carlo -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-8">
+                <div class="lg:col-span-1">
+                    <div class="bg-[#0b0f19] border border-slate-850 p-5 rounded-2xl shadow-xl">
+                        <h3 class="font-bold text-white text-xs tracking-wide uppercase border-b border-slate-800 pb-2.5 mb-4"><i class="fa-solid fa-dice text-violet-400 mr-1.5"></i>Monte Carlo (P50 / P90)</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">N. Simulazioni</label>
+                                <input type="number" id="mc-n-sim" value="100" min="10" max="500" step="10" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">Volatilità Prezzi PUN (σ %)</label>
+                                <input type="number" id="mc-sigma-pun" value="15" min="0" max="100" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">Volatilità Produzione FV (σ %)</label>
+                                <input type="number" id="mc-sigma-gen" value="5" min="0" max="50" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs">
+                            </div>
+                            <div class="pt-3 border-t border-slate-800">
+                                <button id="btn-run-montecarlo" class="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-2 px-4 rounded-xl shadow-lg shadow-violet-900/50 transition-all flex justify-center items-center space-x-2">
+                                    <i class="fa-solid fa-dice"></i>
+                                    <span>Esegui Monte Carlo</span>
+                                </button>
+                                <div id="mc-status" class="text-center mt-2 text-[10px] text-slate-400 font-medium h-4"></div>
+                            </div>
+                            <p class="text-[10px] text-slate-500 leading-relaxed">Shock lognormale mean-preserving sul PUN e shock gaussiano sulla produzione di ogni impianto. Output: percentili P10/P50/P90 di IRR, NPV e DSCR.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="lg:col-span-3">
+                    <div class="bg-[#0b0f19] border border-slate-850 p-5 rounded-2xl shadow-xl h-full flex flex-col">
+                        <h3 class="font-bold text-white text-xs tracking-wide uppercase border-b border-slate-800 pb-2.5 mb-4">Distribuzione Risultati</h3>
+                        <div id="mc-results-container" class="flex-1 flex items-center justify-center bg-slate-900/50 rounded-xl border border-slate-800/50 p-4 overflow-auto">
+                            <span class="text-slate-500 text-sm"><i class="fa-solid fa-dice text-slate-600 mr-2"></i>Esegui la simulazione Monte Carlo per visualizzare i percentili.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tornado deterministico -->
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-8">
+                <div class="lg:col-span-1">
+                    <div class="bg-[#0b0f19] border border-slate-850 p-5 rounded-2xl shadow-xl">
+                        <h3 class="font-bold text-white text-xs tracking-wide uppercase border-b border-slate-800 pb-2.5 mb-4"><i class="fa-solid fa-wind text-sky-400 mr-1.5"></i>Tornado Deterministico</h3>
+                        <div class="space-y-4">
+                            <p class="text-[10px] text-slate-500 leading-relaxed">IRR ricalcolato al variare di ±Δ di ogni driver critico (CAPEX, OPEX, PUN, WACC, Inflazione, Tasso Debito), una variabile alla volta. 13 simulazioni, ordinate per impatto.</p>
+                            <button id="btn-run-tornado" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-2 px-4 rounded-xl shadow-lg shadow-sky-900/50 transition-all flex justify-center items-center space-x-2">
+                                <i class="fa-solid fa-wind"></i>
+                                <span>Tornado (6 variabili)</span>
+                            </button>
+                            <div id="tornado-status" class="text-center mt-2 text-[10px] text-slate-400 font-medium h-4"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lg:col-span-3">
+                    <div class="bg-[#0b0f19] border border-slate-850 p-5 rounded-2xl shadow-xl h-full flex flex-col">
+                        <h3 class="font-bold text-white text-xs tracking-wide uppercase border-b border-slate-800 pb-2.5 mb-4">Grafico Tornado (IRR)</h3>
+                        <div id="tornado-results" class="flex-1 flex items-center justify-center bg-slate-900/50 rounded-xl border border-slate-800/50 p-4 overflow-auto">
+                            <span class="text-slate-500 text-sm"><i class="fa-solid fa-wind text-slate-600 mr-2"></i>Esegui il tornado per visualizzare i driver critici dell'IRR.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 
     <!-- Script Block -->
     <script src="./src/db.js"></script>
+    <script src="./src/i18n.js"></script>
+    <script src="./src/audit.js"></script>
     <script src="./src/main.js"></script>
+    <script>
+        // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
+        if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW registration failed:', err));
+            });
+        }
+    </script>
 </body>
 </html>
 

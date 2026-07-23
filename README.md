@@ -107,6 +107,25 @@ La versione di produzione è ospitata sul server VPS Linux OVHCloud:
 
 ---
 
+## 6.1 Novità della versione corrente
+
+* **Aliquote IRES/IRAP configurabili** dalla scheda FINANZA (default 24% / 3,9%), con fallback sicuro nel worker.
+* **DSCR Sculpting**: opzione in FINANZA → Cash Sweep che sagoma la quota capitale sul CFADS per un target DSCR (eventuale residuo rimborsato balloon a scadenza).
+* **Ricavi Servizi Ancillari BESS (MSD / Capacity Market)**: parametro €/MW/anno nella scheda RID, indicizzato all'inflazione, con riga dedicata in P&L ed export Excel.
+* **Monte Carlo P50/P90**: nuova sezione nella scheda Sensibilità (shock lognormale mean-preserving sul PUN + gaussiano sulla produzione) con percentili P10/P50/P90 di IRR, NPV e DSCR.
+* **Import PVGIS da API**: nella scheda Impianti è possibile scaricare la curva oraria direttamente dalle API JRC PVGIS 5.2 (lat/lon/picco/perdite) senza file CSV.
+* **PWA offline shell**: manifest + service worker (cache app shell e CDN; API Supabase/PVGIS mai cachate).
+* **Grace period senior oltre 12 mesi** (slider fino a 24 mesi), **SoC Min/Max BESS effettivi** nel dispatch, perdite di rete configurabili coerenti tra dashboard e simulazione.
+* **Undo & Audit Log**: registro attività (icona orologio nella header) con ultimi 200 eventi (CRUD impianti/stabilimenti, import GME, scenari, config, PDF) persistito su `simulation_config` (chiavi `audit::*`). **Banner di annullamento** (12s) per le azioni distruttive (eliminazione impianto/stabilimento/scenario, import GME) con ripristino completo anche delle curve 8760h. **Ctrl+Z** per annullare l'ultima modifica di configurazione (storico 10 stati).
+* **i18n IT/EN**: toggle lingua in navbar (persistente su localStorage + config Supabase). Motore a dizionario (`src/i18n.js`, ~350 voci) applicato via TreeWalker al DOM statico e via MutationObserver al contenuto dinamico (tabelle P&L, liste, dropdown) senza modifiche ai template. Fallback trasparente in italiano per le stringhe non coperte. Limite noto: grafici canvas, alert e report PDF restano in italiano.
+* **Tornado deterministico reale**: nuova sezione nella scheda Sensibilità (pulsante "Tornado") — IRR ricalcolato a ±Δ di 6 driver (CAPEX, OPEX, PUN, WACC, Inflazione, Tasso Debito) con grafico a barre divergenti ordinato per impatto. Il **report PDF Sensibilità** ora include i dati reali: tabella tornado (calcolata al volo se mai eseguita), percentili Monte Carlo (se eseguito) e ultima matrice 1D/2D. Fix incluso: la variabile "euribor" della sensitivity prima era un no-op (ora mappa correttamente sul tasso debito).
+* **DSRA (Debt Service Reserve Account)**: parametro "Mesi di Debt Service" in FINANZA. La riserva è integrata dal CFADS fino al target (N mesi di servizio debito), utilizzata automaticamente per coprire shortfall sul servizio (protegge il DSCR) e rilasciata a estinzione/exit. Righe dedicate in P&L (draw/funding/release), saldo nel piano di ammortamento e export Excel.
+* **Refinancing / Miniperm**: all'anno configurato il debito residuo viene rifinanziato (payoff balloon + nuova erogazione, netto cassa zero) con nuovo tasso e nuovo piano di ammortamento. Compatibile con sculpting, cash sweep e DSRA.
+* **Autenticazione Supabase (email/password)**: schermata di login all'avvio se non c'è sessione attiva (badge utente + logout nel pannello Sincronizzazione). La modalità anonima resta disponibile finché le policy RLS sono permissive. Per attivare l'accesso riservato: creare gli utenti in Supabase Dashboard (o dal pulsante "Registra nuovo utente", poi disabilitare i signup pubblici) ed eseguire `migration_auth_rls.sql` (policy solo-`authenticated` su tutte le tabelle, con rollback incluso). Nota: il progetto ha la conferma email attiva — gli utenti registrati dall'app vanno confermati via email prima del primo login.
+* **Gestione Scenari Nominati**: nella scheda FINANZA è possibile salvare snapshot della configurazione finanziaria (salva/applica/elimina) e **confrontare fino a 3 scenari** su KPI (IRR, NPV, MOIC, DSCR, LCOE, payback) calcolati dal worker. Persistenza su `simulation_config` con chiavi `scenario::<id>::*` (chunking a 200 char per compatibilità varchar(255), nessuna migrazione DB richiesta).
+* **Ottimizzatore BESS LP globale (HiGHS WASM)**: in FINANZA è possibile selezionare il motore "LP Globale HiGHS" al posto della DP giornaliera. Il solver (caricato lazy da CDN, fallback automatico su DP) ottimizza il dispatch sull'intero orizzonte 8760h senza discretizzazione del SoC: nei test con carico PPA on-site l'uplift annuo migliora fino al +35% rispetto alla DP 2D (~1,7 s/impianto). Test dedicati: `node scratch/test_lp.mjs`.
+* **Test automatici**: `node scratch/test_worker.mjs` (34 assertion sul motore: fisco, SoC, grace, sculpting, MSD, Monte Carlo, edge case).
+
 ## 7. Flusso di Esecuzione (Workflow)
 
 1. **Configurazione Scenario:** L'utente accede alla scheda *FINANZA* per impostare Tassi di Interesse, Inflazione, Struttura della Leva (Cash Sweep) e Scenari Energetici Futuri (Floor/Cap dei prezzi zonali).

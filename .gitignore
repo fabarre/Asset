@@ -8,4 +8,5 @@ package-lock.json
 
 # Cartelle temporanee e di sistema
 scratch/
+test-results/
 .DS_Store

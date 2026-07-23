@@ -32,7 +32,6 @@
         }
         window.escapeHtml = escapeHtml;
 
-        const CAPACITY_MW = 8;
         const PROJECT_LIFE = 20;
 
         // Initialize default profiles
@@ -47,21 +46,18 @@
         }
 
         
+        // Perdite di rete da configurazione utente (allineato al worker: prima erano hardcoded
+        // BT 5.2 / MT 2.3 / AT 0 e ignoravano gli input ridLossInject*/ridLossWithdraw*/cerLossCpr*)
         function resolveGridLosses(voltage, type) {
-            if (voltage === 'bt') {
-                if (type === 'inject') return 5.2;
-                if (type === 'withdraw') return 5.2;
-                if (type === 'cpr') return 5.2;
-            } else if (voltage === 'mt') {
-                if (type === 'inject') return 2.3;
-                if (type === 'withdraw') return 2.3;
-                if (type === 'cpr') return 2.3;
-            } else if (voltage === 'at') {
-                if (type === 'inject') return 0;
-                if (type === 'withdraw') return 0;
-                if (type === 'cpr') return 0;
-            }
-            return 0;
+            const v = String(voltage || 'none').toLowerCase().trim();
+            if (v !== 'bt' && v !== 'mt' && v !== 'at') return 0;
+            const suffix = v === 'bt' ? 'Bt' : (v === 'mt' ? 'Mt' : 'At');
+            let key = '';
+            if (type === 'inject') key = 'ridLossInject' + suffix;
+            else if (type === 'withdraw') key = 'ridLossWithdraw' + suffix;
+            else if (type === 'cpr') key = 'cerLossCpr' + suffix;
+            else return 0;
+            return (State.inputs && State.inputs[key] !== undefined) ? State.inputs[key] : 0;
         }
 
         function getMonthOfHour(t) {
@@ -110,54 +106,180 @@
             // L'array State.zonalPun è già inizializzato a 0.
         }
 
-        // Load Supabase credentials from external file or localStorage
+        // Load Supabase credentials from external file, then auth gate.
+        // Ritorna: 'authenticated' | 'auth_required' | 'no_config'
         async function loadSupabaseConfig() {
             const urlInput = document.getElementById('supabase-url');
             const keyInput = document.getElementById('supabase-key');
             const statusEl = document.getElementById('sync-status');
             
+            let config = null;
             // First check window.SUPABASE_CONFIG (loaded from supabase_config.js via script tag, bypassing CORS)
             if (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.SUPABASE_URL && window.SUPABASE_CONFIG.SUPABASE_ANON_KEY) {
-                const config = window.SUPABASE_CONFIG;
-                urlInput.value = config.SUPABASE_URL;
-                keyInput.value = config.SUPABASE_ANON_KEY;
-                urlInput.disabled = true;
-                keyInput.disabled = true;
-                urlInput.classList.add('opacity-60', 'cursor-not-allowed');
-                keyInput.classList.add('opacity-60', 'cursor-not-allowed');
-                
-                supabaseClient = supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
-                statusEl.textContent = "Stato Connessione: Collegato (JS)";
-                statusEl.className = "text-xs text-emerald-400 font-medium";
-                
-                await loadDataFromSupabase();
-                return;
+                config = window.SUPABASE_CONFIG;
+            } else {
+                try {
+                    const response = await fetch('./supabase_config.json');
+                    if (response.ok) {
+                        const json = await response.json();
+                        if (json.SUPABASE_URL && json.SUPABASE_ANON_KEY) config = json;
+                    }
+                } catch (e) {
+                    console.warn("Impossibile caricare supabase_config.json:", e);
+                }
+            }
+            if (!config) return 'no_config';
+            
+            urlInput.value = config.SUPABASE_URL;
+            keyInput.value = config.SUPABASE_ANON_KEY;
+            urlInput.disabled = true;
+            keyInput.disabled = true;
+            urlInput.classList.add('opacity-60', 'cursor-not-allowed');
+            keyInput.classList.add('opacity-60', 'cursor-not-allowed');
+            
+            supabaseClient = supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
+            registerAuthListener();
+            
+            // Auth gate: sessione attiva?
+            let session = null;
+            try {
+                const { data } = await supabaseClient.auth.getSession();
+                session = data && data.session;
+            } catch (e) {
+                console.warn('Auth session check fallito:', e);
             }
             
-            try {
-                const response = await fetch('./supabase_config.json');
-                if (response.ok) {
-                    const config = await response.json();
-                    if (config.SUPABASE_URL && config.SUPABASE_ANON_KEY) {
-                        urlInput.value = config.SUPABASE_URL;
-                        keyInput.value = config.SUPABASE_ANON_KEY;
-                        urlInput.disabled = true;
-                        keyInput.disabled = true;
-                        urlInput.classList.add('opacity-60', 'cursor-not-allowed');
-                        keyInput.classList.add('opacity-60', 'cursor-not-allowed');
-                        
-                        supabaseClient = supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
-                        statusEl.textContent = "Stato Connessione: Collegato (Esterno)";
-                        statusEl.className = "text-xs text-emerald-400 font-medium";
-                        
-                        await loadDataFromSupabase();
-                        return;
-                    }
+            if (session) {
+                onUserAuthenticated(session.user);
+                statusEl.textContent = "Stato Connessione: Collegato (autenticato)";
+                statusEl.className = "text-xs text-emerald-400 font-medium";
+                await loadDataFromSupabase();
+                return 'authenticated';
+            }
+            
+            // Nessuna sessione: mostra login (l'utente può anche proseguire in anonimo se le RLS lo consentono)
+            statusEl.textContent = "Stato Connessione: Login richiesto";
+            statusEl.className = "text-xs text-amber-400 font-medium";
+            showAuthOverlay();
+            return 'auth_required';
+        }
+
+        // ── AUTH MODULE (Supabase Auth, email/password) ──
+        function showAuthOverlay() {
+            const ov = document.getElementById('auth-overlay');
+            if (ov) ov.style.display = 'flex';
+            const emailEl = document.getElementById('auth-email');
+            if (emailEl) setTimeout(() => emailEl.focus(), 150);
+        }
+        function hideAuthOverlay() {
+            const ov = document.getElementById('auth-overlay');
+            if (ov) ov.style.display = 'none';
+            const errEl = document.getElementById('auth-error');
+            if (errEl) errEl.classList.add('hidden');
+        }
+        function showAuthError(msg, isInfo = false) {
+            const errEl = document.getElementById('auth-error');
+            if (!errEl) return;
+            errEl.textContent = msg;
+            errEl.className = isInfo
+                ? 'text-emerald-400 text-[11px] font-semibold text-center bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2'
+                : 'text-rose-400 text-[11px] font-semibold text-center bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2';
+        }
+        function onUserAuthenticated(user) {
+            const badge = document.getElementById('auth-user-badge');
+            const logoutBtn = document.getElementById('btn-logout');
+            if (badge && user && user.email) {
+                badge.textContent = user.email;
+                badge.classList.remove('hidden');
+            }
+            if (logoutBtn) logoutBtn.classList.remove('hidden');
+        }
+        function registerAuthListener() {
+            if (!supabaseClient || State._authListenerRegistered) return;
+            State._authListenerRegistered = true;
+            supabaseClient.auth.onAuthStateChange((event) => {
+                if (event === 'SIGNED_OUT') {
+                    window.location.reload();
                 }
-            } catch (e) {
-                console.warn("Impossibile caricare supabase_config.json:", e);
+            });
+        }
+        // Boot dell'app dopo autenticazione (o scelta anonima): carica dati e avvia simulazione
+        async function bootAfterAuth() {
+            showCalcIndicator(true);
+            try {
+                await withTimeout(loadDataFromSupabase(), 60000, 'loadDataFromSupabase');
+                initDOMFromState();
+                renderPlantsList();
+                renderZonalAverages();
+                triggerRecalculate();
+            } catch (err) {
+                console.error('Boot dopo autenticazione fallito:', err);
+                alert('Errore nel caricamento dei dati:\n' + err.message + '\n\nSe le policy RLS sono restrittive, è necessario autenticarsi.');
+            } finally {
+                State.isLoading = false;
+                showCalcIndicator(false);
+                // i18n: applica lingua salvata anche dopo boot post-login
+                if (window.I18n && !window.I18n._observer) window.I18n.init();
             }
         }
+
+        window.loginUser = async function() {
+            if (!supabaseClient) { showAuthError('Database non configurato.'); return; }
+            const email = (document.getElementById('auth-email').value || '').trim();
+            const password = document.getElementById('auth-password').value || '';
+            if (!email || !password) { showAuthError('Inserisci email e password.'); return; }
+            try {
+                const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+                hideAuthOverlay();
+                onUserAuthenticated(data.user);
+                const statusEl = document.getElementById('sync-status');
+                if (statusEl) {
+                    statusEl.textContent = "Stato Connessione: Collegato (autenticato)";
+                    statusEl.className = "text-xs text-emerald-400 font-medium";
+                }
+                await bootAfterAuth();
+            } catch (err) {
+                showAuthError(err.message === 'Invalid login credentials' ? 'Credenziali non valide. Riprova.' : err.message);
+            }
+        };
+
+        window.signupUser = async function() {
+            if (!supabaseClient) { showAuthError('Database non configurato.'); return; }
+            const email = (document.getElementById('auth-email').value || '').trim();
+            const password = document.getElementById('auth-password').value || '';
+            if (!email || !password) { showAuthError('Inserisci email e password per la registrazione.'); return; }
+            if (password.length < 6) { showAuthError('La password deve contenere almeno 6 caratteri.'); return; }
+            try {
+                const { data, error } = await supabaseClient.auth.signUp({ email, password });
+                if (error) throw error;
+                if (data.session) {
+                    // Conferma email disabilitata: accesso immediato
+                    hideAuthOverlay();
+                    onUserAuthenticated(data.user);
+                    await bootAfterAuth();
+                } else {
+                    showAuthError('Registrazione completata. Se richiesta dal progetto, conferma la email e poi accedi.', true);
+                }
+            } catch (err) {
+                showAuthError(err.message);
+            }
+        };
+
+        window.continueAnonymous = async function() {
+            hideAuthOverlay();
+            const statusEl = document.getElementById('sync-status');
+            if (statusEl) {
+                statusEl.textContent = "Stato Connessione: Collegato (anonimo)";
+                statusEl.className = "text-xs text-emerald-400 font-medium";
+            }
+            await bootAfterAuth();
+        };
+
+        window.logoutUser = async function() {
+            if (!supabaseClient) return;
+            await supabaseClient.auth.signOut(); // il listener SIGNED_OUT ricarica la pagina
+        };
 
         // Initialize App
         // Utility: wrap a promise with a timeout
@@ -185,8 +307,9 @@
                 initScrollSync();
                 
                 // Wrap Supabase loading con timeout a 60s, errore critico se fallisce (no fallback)
+                let bootMode;
                 try {
-                    await withTimeout(loadSupabaseConfig(), 60000, 'loadSupabaseConfig');
+                    bootMode = await withTimeout(loadSupabaseConfig(), 60000, 'loadSupabaseConfig');
                 } catch (sbErr) {
                     console.error("Caricamento Supabase fallito o timeout:", sbErr.message);
                     const statusEl = document.getElementById('sync-status');
@@ -210,18 +333,24 @@
                     throw new Error("Fatal: Supabase init failed"); // Blocca esecuzione onload
                 }
                 
-                // Inizializza il DOM con i valori REALI caricati da Supabase, nessun default.
-                initDOMFromState();
-                
-                renderPlantsList();
-                renderZonalAverages();
-                triggerRecalculate();
+                if (bootMode === 'authenticated') {
+                    // Inizializza il DOM con i valori REALI caricati da Supabase, nessun default.
+                    initDOMFromState();
+                    renderPlantsList();
+                    renderZonalAverages();
+                    triggerRecalculate();
+                } else if (bootMode === 'no_config') {
+                    throw new Error('Configurazione Supabase non trovata (supabase_config.js/json).');
+                }
+                // 'auth_required': il boot continua dopo login o scelta anonima (bootAfterAuth)
             } catch (err) {
                 console.error("Errore durante l'inizializzazione dell'app:", err);
             } finally {
                 State.isLoading = false;
                 // Rilasciamo il blocco dell'indicatore iniziale
                 showCalcIndicator(false);
+                // i18n: applica lingua salvata (localStorage / config Supabase)
+                if (window.I18n) window.I18n.init();
             }
         };
 
@@ -253,13 +382,15 @@
                 'tab-cer': 'btn-tab-cer',
                 'tab-hourly': 'btn-tab-hourly',
                 'tab-financials': 'btn-tab-financials',
-                'tab-stabilimenti': 'btn-tab-stabilimenti'
+                'tab-stabilimenti': 'btn-tab-stabilimenti',
+                'tab-sensitivity': 'btn-tab-sensitivity'
             };
             
             document.querySelectorAll('nav button').forEach(btn => {
                 btn.className = "border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2";
             });
-            document.getElementById(navMap[tabId]).className = "border-b-2 border-emerald-500 text-emerald-400 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2";
+            const activeNavBtn = document.getElementById(navMap[tabId]);
+            if (activeNavBtn) activeNavBtn.className = "border-b-2 border-emerald-500 text-emerald-400 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2";
             
             // Re-render chart on tab switches to ensure proper layout sizing
             if (tabId === 'tab-dashboard') {
@@ -364,7 +495,7 @@
             const warningText = document.getElementById('grid-power-warning-text');
             if (warningEl && warningText) {
                 if (minRequired > 0 && gridKw > 0 && gridKw < minRequired) {
-                    warningText.textContent = `âš  Potenza immissione (${gridKw.toLocaleString('it-IT')} kW) inferiore alla somma Inverter + BESS (${minRequired.toLocaleString('it-IT')} kW). Verificare il contratto di connessione.`;
+                    warningText.textContent = `\u26A0 Potenza immissione (${gridKw.toLocaleString('it-IT')} kW) inferiore alla somma Inverter + BESS (${minRequired.toLocaleString('it-IT')} kW). Verificare il contratto di connessione.`;
                     warningEl.classList.remove('hidden');
                 } else {
                     warningEl.classList.add('hidden');
@@ -615,7 +746,7 @@
                 }
             } else {
                 const fileInput = document.getElementById('pvgis-file');
-                const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+                const hasFile = (fileInput && fileInput.files && fileInput.files.length > 0) || !!window._pvgisApiText;
                 if (hasFile) {
                     btn.disabled = false;
                     btn.className = "w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-lg text-xs cursor-pointer transition-colors flex items-center justify-center";
@@ -989,6 +1120,7 @@
                 renderPlantsList();
                 triggerRecalculate();
                 exitEditMode();
+                Audit.log('plant.edit', updatedPlant.name);
             }
         }
 
@@ -996,7 +1128,7 @@
         
         function initWorker() {
             if (!simWorker) {
-                simWorker = new Worker('./src/worker/simulation.worker.js?t=' + Date.now());
+                simWorker = new Worker('./src/worker/simulation.worker.js?v=3');
                 simWorker.onmessage = function(e) {
                     const data = e.data;
                     try {
@@ -1010,8 +1142,55 @@
                             console.error("Worker error during sensitivity:", data.error);
                             document.getElementById('sens-status').textContent = "Errore: " + data.error;
                             return;
+                        } else if (data.status === 'tornado_success') {
+                            State.lastTornado = data.results;
+                            if (tornadoResolver) {
+                                tornadoResolver.resolve(data.results);
+                                tornadoResolver = null;
+                            } else {
+                                renderTornadoResults(data.results);
+                            }
+                            return;
+                        } else if (data.status === 'tornado_error') {
+                            console.error("Worker error during tornado:", data.error);
+                            if (tornadoResolver) {
+                                tornadoResolver.reject(new Error(data.error || 'tornado fallito'));
+                                tornadoResolver = null;
+                            } else {
+                                const stT = document.getElementById('tornado-status');
+                                if (stT) stT.textContent = 'Errore: ' + data.error;
+                                const btnT = document.getElementById('btn-run-tornado');
+                                if (btnT) { btnT.disabled = false; btnT.innerHTML = '<i class="fa-solid fa-wind"></i><span>Tornado (6 variabili)</span>'; }
+                            }
+                            return;
+                        } else if (data.status === 'compare_success') {
+                            renderScenarioCompareResults(data.results);
+                            return;
+                        } else if (data.status === 'compare_error') {
+                            console.error("Worker error during scenario compare:", data.error);
+                            const cmpEl = document.getElementById('scenario-compare-results');
+                            if (cmpEl) {
+                                cmpEl.classList.remove('hidden');
+                                cmpEl.innerHTML = '<div class="text-rose-400 text-xs p-3">Errore confronto scenari: ' + escapeHtml(data.error || 'sconosciuto') + '</div>';
+                            }
+                            return;
+                        } else if (data.status === 'montecarlo_success') {
+                            renderMonteCarloResults(data.results);
+                            return;
+                        } else if (data.status === 'montecarlo_error') {
+                            console.error("Worker error during Monte Carlo:", data.error);
+                            const mcStatusErr = document.getElementById('mc-status');
+                            if (mcStatusErr) mcStatusErr.textContent = "Errore: " + data.error;
+                            const btnMcErr = document.getElementById('btn-run-montecarlo');
+                            if (btnMcErr) { btnMcErr.disabled = false; btnMcErr.innerHTML = '<i class="fa-solid fa-dice"></i><span>Esegui Monte Carlo</span>'; }
+                            return;
                         } else {
                             console.error("Worker error:", data.error, data.stack);
+                            const syncErrEl = document.getElementById('sync-status');
+                            if (syncErrEl) {
+                                syncErrEl.textContent = "Errore calcolo: " + (data.error || "sconosciuto");
+                                syncErrEl.className = "text-xs text-red-400 font-bold";
+                            }
                         }
                     } catch (err) {
                         console.error("Errore irreversibile nell'interfaccia durante renderUI:", err);
@@ -1399,10 +1578,10 @@
                     const parsed = parseStabilimentoCsv(e.target.result);
                     stabLoadedCurve = parsed;
                     const total = parsed.reduce((a, b) => a + b, 0) / 1000;
-                    statusEl.textContent = 'âœ“ CSV caricato: ' + parsed.length + ' ore, consumo totale ' + total.toFixed(1) + ' MWh/a';
+                    statusEl.textContent = '\u2713 CSV caricato: ' + parsed.length + ' ore, consumo totale ' + total.toFixed(1) + ' MWh/a';
                     statusEl.className = 'text-xs text-emerald-400';
                 } catch (err) {
-                    statusEl.textContent = 'âœ- Errore: ' + err.message;
+                    statusEl.textContent = '\u2717 Errore: ' + err.message;
                     statusEl.className = 'text-xs text-rose-400';
                     stabLoadedCurve = null;
                 }
@@ -1431,9 +1610,11 @@
             for (let i = 0; i < 8760; i++) csv += i + ',0\n';
             const blob = new Blob([csv], { type: 'text/csv' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
+            const tplUrl = URL.createObjectURL(blob);
+            a.href = tplUrl;
             a.download = 'modello_curva_prelievo_8760h.csv';
             a.click();
+            URL.revokeObjectURL(tplUrl);
         }
 
         function populatePlantSelectForStabilimento(currentStabId) {
@@ -1449,7 +1630,7 @@
                 const alreadyAssigned = assignedPlants.has(p.id);
                 const opt = document.createElement('option');
                 opt.value = p.id;
-                opt.textContent = (alreadyAssigned ? 'ðŸ”’ ' : '') + p.name + ' (' + ((p.capacity || 0) / 1000).toFixed(2) + ' MWp)';
+                opt.textContent = (alreadyAssigned ? '\uD83D\uDD12 ' : '') + p.name + ' (' + ((p.capacity || 0) / 1000).toFixed(2) + ' MWp)';
                 opt.disabled = alreadyAssigned;
                 if (p.id === currentVal) opt.selected = true;
                 sel.appendChild(opt);
@@ -1543,12 +1724,12 @@
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center space-x-2 mb-1">
-                                <span class="font-semibold text-slate-100 text-sm truncate">${s.name}</span>
+                                <span class="font-semibold text-slate-100 text-sm truncate">${escapeHtml(s.name)}</span>
                                 <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${typeColor}">${typeLabel}</span>
                                 ${!stabEnabled ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-500 border border-slate-700">ESCLUSO</span>' : ''}
                             </div>
                             <div class="text-[10px] text-slate-500">
-                                <i class="fa-solid fa-solar-panel mr-1"></i>${plantName} &nbsp;|&nbsp;
+                                <i class="fa-solid fa-solar-panel mr-1"></i>${escapeHtml(plantName)} &nbsp;|&nbsp;
                                 <i class="fa-solid fa-tag mr-1 text-sky-500"></i>\u20ac${(s.ppaPrice || 0).toFixed(1)}/MWh &nbsp;|&nbsp;
                                 <i class="fa-solid fa-calendar mr-1 text-violet-400"></i>${s.ppaDuration || 0} anni
                             </div>
@@ -1795,12 +1976,24 @@
             }
             if (!confirm('Eliminare questo profilo consumo e il relativo contratto PPA?')) return;
             
+            const stabFound = State.stabilimenti.find(s => s.id === id);
+            const stabBackupClone = stabFound ? structuredClone(stabFound) : null;
             const success = await deleteStabilimentoFromSupabase(id);
             if (success) {
                 State.stabilimenti = State.stabilimenti.filter(s => s.id !== id);
                 renderStabilimentiList();
                 resetStabilimentoForm();
                 triggerRecalculate();
+                Audit.log('stab.delete', stabBackupClone ? stabBackupClone.name : id);
+                if (stabBackupClone) {
+                    UndoManager.show(`Profilo "${stabBackupClone.name}" eliminato`, async () => {
+                        await saveStabilimentoToSupabase(stabBackupClone);
+                        State.stabilimenti.push(stabBackupClone);
+                        renderStabilimentiList();
+                        triggerRecalculate();
+                        Audit.log('stab.undo_delete', stabBackupClone.name);
+                    });
+                }
             }
         }
 
@@ -2059,12 +2252,14 @@
 
         function syncStateFromDOM() {
             const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
-            const getNum = (id, def) => { const v = parseFloat(getVal(id)); return !isNaN(v) ? v : 0; };
+            const getNum = (id, def) => { const v = parseFloat(getVal(id)); return !isNaN(v) ? v : (def !== undefined ? def : 0); };
             const p = State.inputs;
             p.keVal = getNum('input-ke-val', 8) / 100;
             p.wacc = getNum('input-wacc', 6) / 100;
             p.inflation = getNum('input-inflation', 2) / 100;
             p.fiscalDeprRate = getNum('slide-fiscal-depreciation', 9) / 100;
+            p.iresRate = getNum('input-ires-rate', 24) / 100;
+            p.irapRate = getNum('input-irap-rate', 3.9) / 100;
             p.leverage = getNum('slide-leverage', 75) / 100;
             p.interestRate = getNum('slide-interest', 4.5) / 100;
             p.loanTerm = getNum('slide-loan-term', 11);
@@ -2073,6 +2268,13 @@
             p.sweepType  = getVal('select-sweep-type') || 'none';
             p.sweepValue = getNum('input-sweep-value', 0);
             p.sweepYears = getNum('input-sweep-years', 0);
+            p.sculptingEnabled = document.getElementById('input-sculpting-enabled') ? document.getElementById('input-sculpting-enabled').checked : false;
+            p.targetDscr = getNum('input-target-dscr', 1.30);
+            p.dsraMonths = getNum('input-dsra-months', 0);
+            p.refiEnabled = document.getElementById('input-refi-enabled') ? document.getElementById('input-refi-enabled').checked : false;
+            p.refiYear = getNum('input-refi-year', 7);
+            p.refiInterestRate = getNum('input-refi-rate', 5.0);
+            p.refiLoanTerm = getNum('input-refi-term', 10);
             p.seniorGracePeriodMonths = getNum('slide-senior-grace-period', 6);
             p.constructionMonths = getNum('slide-construction-months', 6);
             p.idcDrawdownFactor = getNum('slide-idc-drawdown', 50);
@@ -2121,6 +2323,7 @@
             p.exitEnterpriseValue = getNum('input-exit-ev', 0);
 
             p.priceScenarioType = getVal('select-price-scenario-type') || 'base';
+            p.bessOptimizer = getVal('select-bess-optimizer') || 'dp';
             p.punZonalFloor = getNum('input-pun-zonal-floor', 60.0);
             p.punBearishDecayRate = getNum('input-pun-bearish-decay-rate', 5) / 100;
             p.tsBearishDecayRate = getNum('input-ts-bearish-decay-rate', 2) / 100;
@@ -2137,6 +2340,7 @@
             p.cerLossCprMt = getNum('input-cerLossCprMt', 0);
             p.cerLossCprAt = getNum('input-cerLossCprAt', 0);
             p.ridImbalanceCost = getNum('input-ridImbalanceCost', 0);
+            p.msdEurMwYr = getNum('input-msd-eur-mw-yr', 0);
             
             p.cerTras = getNum('input-cerTras', 0);
             p.cerFissaSmall = getNum('input-cerFissaSmall', 0);
@@ -2171,6 +2375,8 @@
             setVal('input-wacc', p.wacc * 100);
             setVal('input-inflation', p.inflation * 100);
             setVal('slide-fiscal-depreciation', p.fiscalDeprRate * 100);
+            setVal('input-ires-rate', (p.iresRate !== undefined ? p.iresRate : 0.24) * 100);
+            setVal('input-irap-rate', (p.irapRate !== undefined ? p.irapRate : 0.039) * 100);
             setVal('slide-leverage', p.leverage * 100);
             setVal('slide-interest', p.interestRate * 100);
             setVal('slide-loan-term', p.loanTerm);
@@ -2178,6 +2384,15 @@
             setVal('select-sweep-type', p.sweepType);
             setVal('input-sweep-value', p.sweepValue);
             setVal('input-sweep-years', p.sweepYears);
+            const _sculptChk = document.getElementById('input-sculpting-enabled');
+            if (_sculptChk) _sculptChk.checked = !!p.sculptingEnabled;
+            setVal('input-target-dscr', p.targetDscr !== undefined ? p.targetDscr : 1.30);
+            setVal('input-dsra-months', p.dsraMonths !== undefined ? p.dsraMonths : 0);
+            const _refiChk = document.getElementById('input-refi-enabled');
+            if (_refiChk) _refiChk.checked = !!p.refiEnabled;
+            setVal('input-refi-year', p.refiYear !== undefined ? p.refiYear : 7);
+            setVal('input-refi-rate', p.refiInterestRate !== undefined ? p.refiInterestRate : 5.0);
+            setVal('input-refi-term', p.refiLoanTerm !== undefined ? p.refiLoanTerm : 10);
             setVal('slide-senior-grace-period', p.seniorGracePeriodMonths !== undefined ? p.seniorGracePeriodMonths : 6);
             setVal('slide-construction-months', p.constructionMonths !== undefined ? p.constructionMonths : 6);
             setVal('slide-idc-drawdown', p.idcDrawdownFactor !== undefined ? p.idcDrawdownFactor : 50);
@@ -2230,6 +2445,7 @@
             setVal('input-exit-value-mwp', p.exitValuePerMwp);
             setVal('input-exit-ev', p.exitEnterpriseValue);
             setVal('select-price-scenario-type', p.priceScenarioType || 'base');
+            setVal('select-bess-optimizer', p.bessOptimizer || 'dp');
             setVal('input-pun-zonal-floor', p.punZonalFloor !== undefined ? p.punZonalFloor : 60);
             setVal('input-pun-bearish-decay-rate', p.punBearishDecayRate !== undefined ? p.punBearishDecayRate * 100 : 5);
             setVal('input-ts-bearish-decay-rate', p.tsBearishDecayRate !== undefined ? p.tsBearishDecayRate * 100 : 2);
@@ -2248,6 +2464,7 @@
             setVal('input-cerLossCprMt', p.cerLossCprMt);
             setVal('input-cerLossCprAt', p.cerLossCprAt);
             setVal('input-ridImbalanceCost', p.ridImbalanceCost);
+            setVal('input-msd-eur-mw-yr', p.msdEurMwYr !== undefined ? p.msdEurMwYr : 0);
             
             setVal('input-cerTras', p.cerTras);
             setVal('input-cerFissaSmall', p.cerFissaSmall);
@@ -2287,6 +2504,7 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+                URL.revokeObjectURL(url);
             } catch (err) {
                 console.error("Errore durante l'esportazione del CSV:", err);
                 alert("Errore durante l'esportazione della configurazione.");
@@ -2323,6 +2541,9 @@
                         if (State.inputs[key] !== undefined) {
                             if (typeof State.inputs[key] === 'number') {
                                 parsedInputs[key] = parseFloat(val);
+                            } else if (typeof State.inputs[key] === 'boolean') {
+                                // 'false' stringa sarebbe truthy: parsare esplicitamente i booleani
+                                parsedInputs[key] = (val === 'true' || val === '1');
                             } else {
                                 parsedInputs[key] = val;
                             }
@@ -2345,6 +2566,8 @@
                         'wacc': { id: 'input-wacc', mult: 100 },
                         'inflation': { id: 'input-inflation', mult: 100 },
                         'fiscalDeprRate': { id: 'slide-fiscal-depreciation', mult: 100 },
+                        'iresRate': { id: 'input-ires-rate', mult: 100 },
+                        'irapRate': { id: 'input-irap-rate', mult: 100 },
                         'leverage': { id: 'slide-leverage', mult: 100 },
                         'interestRate': { id: 'slide-interest', mult: 100 },
                         'loanTerm': { id: 'slide-loan-term', mult: 1 },
@@ -2352,6 +2575,13 @@
                         'sweepType': { id: 'select-sweep-type', mult: 1 },
                         'sweepValue': { id: 'input-sweep-value', mult: 1 },
                         'sweepYears': { id: 'input-sweep-years', mult: 1 },
+                        'sculptingEnabled': { id: 'input-sculpting-enabled', mult: 1 },
+                        'targetDscr': { id: 'input-target-dscr', mult: 1 },
+                        'dsraMonths': { id: 'input-dsra-months', mult: 1 },
+                        'refiEnabled': { id: 'input-refi-enabled', mult: 1 },
+                        'refiYear': { id: 'input-refi-year', mult: 1 },
+                        'refiInterestRate': { id: 'input-refi-rate', mult: 1 },
+                        'refiLoanTerm': { id: 'input-refi-term', mult: 1 },
                         'seniorGracePeriodMonths': { id: 'slide-senior-grace-period', mult: 1 },
                         'constructionMonths': { id: 'slide-construction-months', mult: 1 },
                         'idcDrawdownFactor': { id: 'slide-idc-drawdown', mult: 1 },
@@ -2375,6 +2605,7 @@
                         'cerLossCprMt': { id: 'input-cerLossCprMt', mult: 1 },
                         'cerLossCprAt': { id: 'input-cerLossCprAt', mult: 1 },
                         'ridImbalanceCost': { id: 'input-ridImbalanceCost', mult: 1 },
+                        'msdEurMwYr': { id: 'input-msd-eur-mw-yr', mult: 1 },
                         'cerTras': { id: 'input-cerTras', mult: 1 },
                         'cerFissaSmall': { id: 'input-cerFissaSmall', mult: 1 },
                         'cerFissaMedium': { id: 'input-cerFissaMedium', mult: 1 },
@@ -2422,7 +2653,8 @@
                         'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                         'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
                         'arbBearishDecayRate': { id: 'input-arb-bearish-decay-rate', mult: 100 },
-                        'dividendLock': { id: 'input-dividend-lock', mult: 1 }
+                        'dividendLock': { id: 'input-dividend-lock', mult: 1 },
+                        'bessOptimizer': { id: 'select-bess-optimizer', mult: 1 }
                     };
                     
                     Object.keys(parsedInputs).forEach(key => {
@@ -2447,6 +2679,7 @@
                     // Total application recalculation & update
                     triggerRecalculate();
                     
+                    Audit.log('config.csv_import', keysFound + ' parametri importati da CSV');
                     alert("Configurazione importata con successo e sincronizzata con il database!");
                 } catch (err) {
                     console.error("Errore durante l'importazione del CSV:", err);
@@ -2511,6 +2744,7 @@
                     .upsert(rows, { onConflict: 'parameter_key' });
                 
                 if (error) throw error;
+                ConfigHistory.record(JSON.stringify(State.inputs));
                 console.log("Configurazione salvata su Supabase.");
             } catch (err) {
                 console.error("Errore nel salvataggio della configurazione:", err);
@@ -2575,6 +2809,7 @@
                         State.zonalPun.SICI[h] = row.sici;
                         State.zonalPun.SARD[h] = row.sard;
                     });
+                    State._punVersion = (State._punVersion || 0) + 1;
                     console.log("Prezzi PUN zonali caricati da Supabase.");
                     renderZonalAverages();
                 }
@@ -2592,7 +2827,10 @@
                         // Fetch generation profiles (paginated)
                         const genData = await fetchAllRows('plant_generation', 'hour_index, generation_kw', 'hour_index', 'plant_id', p.id);
                         
-                        if (genData && genData.length === 8760) {
+                        if (genData && genData.length > 0) {
+                            if (genData.length !== 8760) {
+                                console.warn(`Impianto "${p.name}": serie di generazione incompleta (${genData.length}/8760 ore). Le ore mancanti sono impostate a 0.`);
+                            }
                             const generation = new Float64Array(8760);
                             genData.forEach(g => {
                                 generation[g.hour_index] = g.generation_kw;
@@ -2689,10 +2927,12 @@
 
                 const dbKeys = configData.map(r => r.parameter_key);
                 
-                let hasUpdates = false;
                 configData.forEach(row => {
                     const key = row.parameter_key;
                     const val = row.parameter_value;
+                    
+                    // Le chiavi scenario:: e audit:: NON sono parametri attivi
+                    if (key.startsWith('scenario::') || key.startsWith('audit::')) return;
                     
                     // Ripristino Selezioni speciali
                     if (key === 'selectedBessPlantIds') {
@@ -2704,7 +2944,6 @@
                         return;
                     }
 
-                    hasUpdates = true;
                     if (val === 'true') {
                         State.inputs[key] = true;
                     } else if (val === 'false') {
@@ -2721,6 +2960,8 @@
                                 'wacc': { id: 'input-wacc', mult: 100 },
                                 'inflation': { id: 'input-inflation', mult: 100 },
                                 'fiscalDeprRate': { id: 'slide-fiscal-depreciation', mult: 100 },
+                                'iresRate': { id: 'input-ires-rate', mult: 100 },
+                                'irapRate': { id: 'input-irap-rate', mult: 100 },
                                 'leverage': { id: 'slide-leverage', mult: 100 },
                                 'interestRate': { id: 'slide-interest', mult: 100 },
                                 'loanTerm': { id: 'slide-loan-term', mult: 1 },
@@ -2728,6 +2969,13 @@
                                 'sweepType': { id: 'select-sweep-type', mult: 1 },
                                 'sweepValue': { id: 'input-sweep-value', mult: 1 },
                                 'sweepYears': { id: 'input-sweep-years', mult: 1 },
+                                'sculptingEnabled': { id: 'input-sculpting-enabled', mult: 1 },
+                                'targetDscr': { id: 'input-target-dscr', mult: 1 },
+                                'dsraMonths': { id: 'input-dsra-months', mult: 1 },
+                                'refiEnabled': { id: 'input-refi-enabled', mult: 1 },
+                                'refiYear': { id: 'input-refi-year', mult: 1 },
+                                'refiInterestRate': { id: 'input-refi-rate', mult: 1 },
+                                'refiLoanTerm': { id: 'input-refi-term', mult: 1 },
                                 'seniorGracePeriodMonths': { id: 'slide-senior-grace-period', mult: 1 },
                                 'constructionMonths': { id: 'slide-construction-months', mult: 1 },
                                 'idcDrawdownFactor': { id: 'slide-idc-drawdown', mult: 1 },
@@ -2751,6 +2999,7 @@
                                 'cerLossCprMt': { id: 'input-cerLossCprMt', mult: 1 },
                                 'cerLossCprAt': { id: 'input-cerLossCprAt', mult: 1 },
                                 'ridImbalanceCost': { id: 'input-ridImbalanceCost', mult: 1 },
+                                'msdEurMwYr': { id: 'input-msd-eur-mw-yr', mult: 1 },
                                 'cerTras': { id: 'input-cerTras', mult: 1 },
                                 'cerFissaSmall': { id: 'input-cerFissaSmall', mult: 1 },
                                 'cerFissaMedium': { id: 'input-cerFissaMedium', mult: 1 },
@@ -2798,7 +3047,8 @@
                                 'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                                 'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
                                 'arbBearishDecayRate': { id: 'input-arb-bearish-decay-rate', mult: 100 },
-                                'dividendLock': { id: 'input-dividend-lock', mult: 1 }
+                                'dividendLock': { id: 'input-dividend-lock', mult: 1 },
+                                'bessOptimizer': { id: 'select-bess-optimizer', mult: 1 }
                             };
                             
                             const mapping = domMap[key];
@@ -2838,6 +3088,11 @@
                             console.error("Errore nel parsing di disabledStabilimenti:", err);
                         }
                     }
+                
+                // Carica gli scenari nominati salvati
+                await loadScenariosFromSupabase();
+                // Carica il registro audit
+                await Audit.init();
                 
 
             } catch (err) {
@@ -2888,6 +3143,225 @@
                 statusEl.textContent = "Errore salvataggio PUN.";
                 statusEl.className = "text-xs text-red-400 font-medium";
             }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // GESTIONE SCENARI NOMINATI (snapshot di State.inputs su simulation_config)
+        // Chiavi: scenario::<id>::name e scenario::<id>::data (JSON) — nessuna migrazione DB richiesta
+        // ═══════════════════════════════════════════════════════════════════
+        const SCENARIO_PREFIX = 'scenario::';
+        State.scenarios = [];
+        State.selectedCompareIds = new Set();
+
+        async function loadScenariosFromSupabase() {
+            if (!supabaseClient) return;
+            try {
+                const { data, error } = await supabaseClient
+                    .from('simulation_config')
+                    .select('parameter_key, parameter_value')
+                    .like('parameter_key', SCENARIO_PREFIX + '%');
+                if (error) throw error;
+                const list = [];
+                (data || []).forEach(row => {
+                    const rest = row.parameter_key.substring(SCENARIO_PREFIX.length);
+                    const sep = rest.indexOf('::');
+                    if (sep < 0) return;
+                    const id = rest.substring(0, sep);
+                    const field = rest.substring(sep + 2);
+                    let scen = list.find(s => s.id === id);
+                    if (!scen) { scen = { id, name: id, payload: null, chunks: [] }; list.push(scen); }
+                    if (field === 'name') scen.name = row.parameter_value;
+                    else if (field.startsWith('data::')) {
+                        const idx = parseInt(field.substring(6)) || 0;
+                        scen.chunks.push({ idx, text: row.parameter_value });
+                    } else if (field === 'data') { // retro-compatibilità payload non chunkato
+                        scen.chunks.push({ idx: 0, text: row.parameter_value });
+                    }
+                });
+                list.forEach(s => {
+                    if (s.chunks.length > 0) {
+                        try {
+                            s.payload = JSON.parse(s.chunks.sort((a, b) => a.idx - b.idx).map(c => c.text).join(''));
+                        } catch (e) { s.payload = null; }
+                    }
+                    delete s.chunks;
+                });
+                State.scenarios = list.filter(s => s.payload);
+            } catch (err) {
+                console.error('Errore caricamento scenari:', err);
+            }
+            renderScenarioList();
+        }
+
+        function renderScenarioList() {
+            const sel = document.getElementById('scenario-select');
+            const listEl = document.getElementById('scenario-list');
+            if (!sel || !listEl) return;
+
+            const currentVal = sel.value;
+            sel.innerHTML = State.scenarios.length === 0
+                ? '<option value="">- Nessuno scenario salvato -</option>'
+                : '<option value="">- Seleziona scenario -</option>';
+            State.scenarios.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.name;
+                sel.appendChild(opt);
+            });
+            if (State.scenarios.some(s => s.id === currentVal)) sel.value = currentVal;
+
+            // Chip con checkbox per il confronto
+            let html = '';
+            State.scenarios.forEach(s => {
+                const checked = State.selectedCompareIds.has(s.id) ? 'checked' : '';
+                html += `
+                    <label class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-violet-600/50 cursor-pointer transition-colors">
+                        <input type="checkbox" ${checked} onchange="toggleScenarioCompare('${s.id}')" class="w-3 h-3 rounded border-slate-700 text-violet-500 focus:ring-violet-500 bg-slate-900">
+                        <span class="text-[10px] text-slate-300 font-semibold">${escapeHtml(s.name)}</span>
+                    </label>`;
+            });
+            listEl.innerHTML = html;
+        }
+
+        window.toggleScenarioCompare = function(id) {
+            if (State.selectedCompareIds.has(id)) State.selectedCompareIds.delete(id);
+            else State.selectedCompareIds.add(id);
+        };
+
+        // Scrittura chunkata di uno scenario (parameter_value varchar(255) -> righe da 200 char)
+        async function writeScenarioRows(id, name, payload) {
+            const json = JSON.stringify(payload);
+            const rows = [{ parameter_key: SCENARIO_PREFIX + id + '::name', parameter_value: String(name).substring(0, 250) }];
+            for (let i = 0; i * 200 < json.length; i++) {
+                rows.push({ parameter_key: SCENARIO_PREFIX + id + '::data::' + i, parameter_value: json.substring(i * 200, (i + 1) * 200) });
+            }
+            const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key' });
+            if (error) throw error;
+        }
+
+        window.saveCurrentScenario = async function() {
+            if (!supabaseClient) { alert('Database non connesso.'); return; }
+            const nameEl = document.getElementById('scenario-name-input');
+            const name = (nameEl.value || '').trim();
+            if (!name) { alert('Inserisci un nome per lo scenario.'); return; }
+            syncStateFromDOM();
+            const id = 'sc_' + Date.now();
+            const payload = JSON.parse(JSON.stringify(State.inputs));
+            try {
+                await writeScenarioRows(id, name, payload);
+                nameEl.value = '';
+                await loadScenariosFromSupabase();
+                document.getElementById('scenario-select').value = id;
+                Audit.log('scenario.save', name);
+            } catch (err) {
+                console.error('Errore salvataggio scenario:', err);
+                alert('Errore nel salvataggio dello scenario: ' + err.message);
+            }
+        };
+
+        window.applySelectedScenario = async function() {
+            const id = document.getElementById('scenario-select').value;
+            if (!id) { alert('Seleziona uno scenario da applicare.'); return; }
+            const scen = State.scenarios.find(s => s.id === id);
+            if (!scen) { alert('Scenario non trovato.'); return; }
+            State.inputs = JSON.parse(JSON.stringify(scen.payload));
+            initDOMFromState();
+            await saveConfigToSupabase();
+            triggerRecalculate();
+            Audit.log('scenario.apply', scen.name);
+        };
+
+        window.deleteSelectedScenario = async function() {
+            if (!supabaseClient) { alert('Database non connesso.'); return; }
+            const id = document.getElementById('scenario-select').value;
+            if (!id) { alert('Seleziona uno scenario da eliminare.'); return; }
+            const scen = State.scenarios.find(s => s.id === id);
+            if (!confirm(`Eliminare lo scenario "${scen ? scen.name : id}"?`)) return;
+            const scenBackup = scen ? { id: scen.id, name: scen.name, payload: JSON.parse(JSON.stringify(scen.payload)) } : null;
+            try {
+                const { error } = await supabaseClient.from('simulation_config').delete()
+                    .like('parameter_key', SCENARIO_PREFIX + id + '::%');
+                if (error) throw error;
+                State.selectedCompareIds.delete(id);
+                await loadScenariosFromSupabase();
+                Audit.log('scenario.delete', scenBackup ? scenBackup.name : id);
+                if (scenBackup) {
+                    UndoManager.show(`Scenario "${scenBackup.name}" eliminato`, async () => {
+                        await writeScenarioRows(scenBackup.id, scenBackup.name, scenBackup.payload);
+                        await loadScenariosFromSupabase();
+                        Audit.log('scenario.undo_delete', scenBackup.name);
+                    });
+                }
+            } catch (err) {
+                console.error('Errore eliminazione scenario:', err);
+                alert('Errore nell\'eliminazione dello scenario: ' + err.message);
+            }
+        };
+
+        window.runScenarioCompare = function() {
+            const ids = Array.from(State.selectedCompareIds);
+            if (ids.length === 0) { alert('Seleziona almeno uno scenario dai checkbox.'); return; }
+            if (ids.length > 3) { alert('Confronto limitato a 3 scenari alla volta.'); return; }
+            const selected = ids.map(id => State.scenarios.find(s => s.id === id)).filter(Boolean);
+            if (selected.length === 0) return;
+
+            const resultsEl = document.getElementById('scenario-compare-results');
+            resultsEl.classList.remove('hidden');
+            resultsEl.innerHTML = '<div class="text-center text-violet-400 text-xs p-4"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Calcolo confronto scenari in corso...</div>';
+
+            initWorker();
+            simWorker.postMessage({
+                action: 'COMPARE_SCENARIOS',
+                payload: {
+                    State: {
+                        inputs: State.inputs,
+                        plants: State.plants,
+                        stabilimenti: State.stabilimenti,
+                        zonalPun: State.zonalPun,
+                        selectedBessPlantIds: State.selectedBessPlantIds,
+                        previouslySeenPlantIds: State.previouslySeenPlantIds
+                    },
+                    scenarios: selected.map(s => ({ id: s.id, name: s.name, inputs: s.payload }))
+                }
+            });
+        };
+
+        function renderScenarioCompareResults(results) {
+            const resultsEl = document.getElementById('scenario-compare-results');
+            if (!resultsEl) return;
+            resultsEl.classList.remove('hidden');
+
+            const kpis = [
+                { key: 'irr', label: 'Equity IRR', fmt: v => v.toFixed(2) + '%', best: 'max' },
+                { key: 'npv', label: 'NPV @ Ke', fmt: v => formatEuro(v), best: 'max' },
+                { key: 'moic', label: 'MOIC', fmt: v => v.toFixed(2) + 'x', best: 'max' },
+                { key: 'minDscr', label: 'DSCR Minimo', fmt: v => v === null ? 'N/A' : v.toFixed(2) + 'x', best: 'max' },
+                { key: 'avgDscr', label: 'DSCR Medio', fmt: v => v.toFixed(2) + 'x', best: 'max' },
+                { key: 'lcoe', label: 'LCOE', fmt: v => '\u20ac ' + v.toFixed(2) + '/MWh', best: 'min' },
+                { key: 'payback', label: 'Payback', fmt: v => v, best: null }
+            ];
+
+            let html = '<table class="w-full text-xs text-left border border-slate-800 rounded-lg overflow-hidden"><thead><tr>';
+            html += '<th class="p-2.5 bg-slate-900 text-slate-400 font-semibold border-b border-slate-800">KPI</th>';
+            results.forEach(r => {
+                html += `<th class="p-2.5 bg-slate-900 text-violet-300 font-bold text-right border-b border-slate-800">${escapeHtml(r.name)}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            kpis.forEach(k => {
+                const vals = results.map(r => r[k.key]);
+                let bestIdx = -1;
+                if (k.best && vals.every(v => typeof v === 'number' && isFinite(v))) {
+                    bestIdx = vals.indexOf(k.best === 'max' ? Math.max(...vals) : Math.min(...vals));
+                }
+                html += `<tr class="border-b border-slate-800/50"><td class="p-2.5 text-slate-400">${k.label}</td>`;
+                vals.forEach((v, i) => {
+                    const cls = i === bestIdx ? 'text-emerald-400 font-bold' : 'text-slate-300';
+                    html += `<td class="p-2.5 text-right font-mono ${cls}">${v === null || v === undefined ? 'N/A' : k.fmt(v)}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            resultsEl.innerHTML = html;
         }
 
         // Save single plant to Supabase
@@ -3045,7 +3519,7 @@
                 pvgisLongitude:   lonMatch   ? parseFloat(lonMatch[1])   : null,
                 pvgisElevation:   eleMatch   ? parseFloat(eleMatch[1])   : null,
                 pvgisSlope:       slopeMatch ? parseFloat(slopeMatch[1]) : null,
-                pvgisAzimuth:     azimMatch  ? azimMatch[1].trim().replace(/deg.?/i,'Â°').replace(/^-\s*Â°?$/,'Ottimale (0Â° Sud)') : null,
+                pvgisAzimuth:     azimMatch  ? azimMatch[1].trim().replace(/deg.?/i,'\u00B0').replace(/^-\s*\u00B0?$/,'Ottimale (0\u00B0 Sud)') : null,
                 pvgisSystemLosses: lossMatch ? parseFloat(lossMatch[1]) : null,
                 pvgisTracking:    trackMatch ? trackMatch[1].trim() : 'Fixed',
                 pvgisDatabase:    dbMatch    ? dbMatch[1].trim()   : null
@@ -3097,7 +3571,7 @@
             });
             
             if (count < 100) {
-                alert("Formato PVGIS CSV non standard. Verrà  generata una curva di produzione di default basata sulla capacità  nominale.");
+                alert("Formato PVGIS CSV non standard. Verr\u00E0 generata una curva di produzione di default basata sulla capacit\u00E0 nominale.");
                 const defaultGen = generateDefaultSolarProfile(plantCapacityKwp / 1000, 1690);
                 for(let i=0; i<8760; i++) generation[i] = defaultGen[i];
             }
@@ -3175,6 +3649,7 @@
             const success = await savePlantToSupabase(newPlant);
             if (success) {
                 State.plants.push(newPlant);
+                Audit.log('plant.add', newPlant.name);
                 renderPlantsList();
                 renderZonalAverages();
                 triggerRecalculate();
@@ -3213,6 +3688,10 @@
                         "SARD": ["Sardegna", "SARD", "sard", "sardegna"]
                     };
 
+                    // Backup PUN per undo (6 zone x 8760h)
+                    const punBackup = {};
+                    Object.keys(State.zonalPun).forEach(z => { punBackup[z] = Float64Array.from(State.zonalPun[z]); });
+                    
                     jsonData.forEach(row => {
                         let dateVal = row["Data"] || row["Date"] || row["data"] || row["date"];
                         let hourVal = row["Ora"] || row["Hour"] || row["ora"] || row["hour"];
@@ -3272,9 +3751,19 @@
                         });
                     });
                     
+                    State._punVersion = (State._punVersion || 0) + 1;
                     alert(`Importazione GME completata! Aggiornati ${count} valori di prezzo zonale.`);
                     renderZonalAverages();
                     triggerRecalculate();
+                    
+                    Audit.log('gme.import', count + ' prezzi zonali aggiornati');
+                    UndoManager.show(`Listino GME importato (${count} prezzi)`, async () => {
+                        Object.keys(punBackup).forEach(z => { State.zonalPun[z].set(punBackup[z]); });
+                        renderZonalAverages();
+                        triggerRecalculate();
+                        if (supabaseClient) await saveZonalPunToSupabase();
+                        Audit.log('gme.undo_import', 'Ripristino PUN pre-import');
+                    });
 
                     // Save to Supabase in background if connected
                     if (supabaseClient) {
@@ -3290,8 +3779,8 @@
 
         function addPlantFromUI() {
             const fileInput = document.getElementById('pvgis-file');
-            if (fileInput.files.length === 0) {
-                alert("Seleziona un file PVGIS prima di aggiungere l'impianto.");
+            if (fileInput.files.length === 0 && !window._pvgisApiText) {
+                alert("Seleziona un file PVGIS (o scarica i dati da PVGIS API) prima di aggiungere l'impianto.");
                 return;
             }
             
@@ -3364,12 +3853,20 @@
             const marketType = document.getElementById('plant-market-type').value;
             const ferxTariff = parseFloat(document.getElementById('plant-ferx-tariff').value) || 0;
 
-            const file = fileInput.files[0];
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                importPvgisCsv(e.target.result, name, cap, zone, capex, opex, connectionCost, landType, landCost, developmentCost, spvAcquisitionCost, bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax, bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears, bessType, bessConnection, gridConnectionKw, gridVoltage, inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV, opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement, earnoutType, earnoutVal, earnoutYears, serviceType, serviceVal, serviceYears, traderContractType, traderSpread, traderDisp, pnrrContributionPct, degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct, marketType, ferxTariff);
-            };
-            reader.readAsText(file);
+            const importArgs = [name, cap, zone, capex, opex, connectionCost, landType, landCost, developmentCost, spvAcquisitionCost, bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax, bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears, bessType, bessConnection, gridConnectionKw, gridVoltage, inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV, opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement, earnoutType, earnoutVal, earnoutYears, serviceType, serviceVal, serviceYears, traderContractType, traderSpread, traderDisp, pnrrContributionPct, degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct, marketType, ferxTariff];
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    importPvgisCsv(e.target.result, ...importArgs);
+                };
+                reader.readAsText(file);
+            } else {
+                // Dati già scaricati da PVGIS API
+                const apiText = window._pvgisApiText;
+                window._pvgisApiText = null;
+                importPvgisCsv(apiText, ...importArgs);
+            }
         }
 
         window.deletePlant = async function(plantId) {
@@ -3378,6 +3875,11 @@
                 return;
             }
             if (!confirm('Eliminare questo impianto e tutti i relativi dati (inclusi stabilimenti e contratti PPA)?')) return;
+            
+            // Backup per undo (incluse curve 8760h)
+            const plantFound = State.plants.find(p => p.id === plantId);
+            const plantBackupClone = plantFound ? structuredClone(plantFound) : null;
+            const stabsBackup = State.stabilimenti.filter(s => s.plantId === plantId).map(s => structuredClone(s));
             
             const statusEl = document.getElementById('sync-status');
             statusEl.textContent = "Eliminazione impianto su DB...";
@@ -3410,6 +3912,23 @@
                 State.plants = State.plants.filter(p => p.id !== plantId);
                 State.stabilimenti = State.stabilimenti.filter(s => s.plantId !== plantId);
                 
+                Audit.log('plant.delete', plantBackupClone ? plantBackupClone.name : plantId);
+                if (plantBackupClone) {
+                    UndoManager.show(`Impianto "${plantBackupClone.name}" eliminato`, async () => {
+                        await savePlantToSupabase(plantBackupClone);
+                        State.plants.push(plantBackupClone);
+                        for (const s of stabsBackup) {
+                            await saveStabilimentoToSupabase(s);
+                            State.stabilimenti.push(s);
+                        }
+                        renderPlantsList();
+                        renderStabilimentiList();
+                        renderZonalAverages();
+                        triggerRecalculate();
+                        Audit.log('plant.undo_delete', plantBackupClone.name);
+                    });
+                }
+                
                 statusEl.textContent = "Impianto e dati associati eliminati!";
                 statusEl.className = "text-xs text-emerald-400 font-medium";
                 setTimeout(() => {
@@ -3428,6 +3947,31 @@
             }
         };
 
+        // Cache produzione annua e PUN ponderato per impianto (evita cicli 8760 ad ogni render)
+        function getPlantAnnualMwh(p) {
+            if (p._cachedGenMwh === undefined) {
+                p._cachedGenMwh = p.generation ? (p.generation.reduce((a, b) => a + b, 0) / 1000) : 0;
+            }
+            return p._cachedGenMwh;
+        }
+
+        function getPlantWeightedPun(p) {
+            const punVer = State._punVersion || 0;
+            if (p._cachedWeightedPun === undefined || p._cachedWeightedPunVer !== punVer) {
+                let num = 0, den = 0;
+                const zonePrices = State.zonalPun[String(p.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                if (p.generation) {
+                    for (let t = 0; t < 8760; t++) {
+                        num += p.generation[t] * zonePrices[t];
+                        den += p.generation[t];
+                    }
+                }
+                p._cachedWeightedPun = den > 0 ? (num / den) : 0;
+                p._cachedWeightedPunVer = punVer;
+            }
+            return p._cachedWeightedPun;
+        }
+
         function renderPlantsList() {
             const body = document.getElementById('plants-table-body');
             if (!body) return;
@@ -3441,7 +3985,7 @@
 
             enabledPlants.forEach(p => {
                 totalKw += p.capacity || 0;
-                const plantMwh = p.generation ? (p.generation.reduce((a, b) => a + b, 0) / 1000) : 0;
+                const plantMwh = getPlantAnnualMwh(p);
                 totalMwh += plantMwh;
 
                 // Capex elements:
@@ -3473,14 +4017,8 @@
             }
             let html = '';
             State.plants.forEach(p => {
-                // Calculate individual plant weighted PUN
-                let num = 0, den = 0;
-                const zonePrices = State.zonalPun[String(p.zone).toUpperCase()] || State.zonalPun["CNOR"];
-                for (let t = 0; t < 8760; t++) {
-                    num += p.generation[t] * zonePrices[t];
-                    den += p.generation[t];
-                }
-                const weightedPun = den > 0 ? (num / den) : 0;
+                // Calculate individual plant weighted PUN (cached, invalidata ad ogni import PUN)
+                const weightedPun = getPlantWeightedPun(p);
                 
                 const connectionCost = p.connectionCost || 0;
                 const landTypeStr = p.landType === 'acquisto' ? 'Acquisto' : (p.landType === 'dds_attualizzato' ? 'DDS Attual.' : 'DDS Annuo');
@@ -3516,7 +4054,7 @@
                                 <span style="display:block;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.4);transition:transform 0.2s;${toggleThumb}"></span>
                             </button>
                         </td>
-                        <td class="py-2.5 font-semibold ${isEnabled ? 'text-white' : 'text-slate-500'}">${p.name}</td>
+                        <td class="py-2.5 font-semibold ${isEnabled ? 'text-white' : 'text-slate-500'}">${escapeHtml(p.name)}</td>
                         <td>${p.capacity.toLocaleString('it-IT')} kWp</td>
                         <td><span class="px-2 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px] font-bold">${p.zone}</span></td>
                         <td>${formatEuro(p.capacity * p.capex)} (${formatEuro(p.capex)}/kWp)</td>
@@ -3552,7 +4090,7 @@
             // 1. Render Header
             let headerHtml = `<th class="frozen-column px-4 py-3 border-r border-slate-800 text-left min-w-[200px] z-30 uppercase tracking-wider text-[10px] text-slate-400" style="background-color: inherit;">Voce di Costo</th>`;
             activePlants.forEach(p => {
-                headerHtml += `<th class="px-3 py-3 text-right font-bold text-slate-200 border-b border-slate-800 min-w-[120px] bg-[#020617]">${p.name}</th>`;
+                headerHtml += `<th class="px-3 py-3 text-right font-bold text-slate-200 border-b border-slate-800 min-w-[120px] bg-[#020617]">${escapeHtml(p.name)}</th>`;
             });
             headerHtml += `<th class="px-3 py-3 text-right font-bold text-emerald-400 border-b border-slate-800 min-w-[130px] bg-[#020617]">Totale Portafoglio</th>`;
             headerHtml += `<th class="px-3 py-3 text-right font-bold text-slate-400 border-b border-slate-800 min-w-[110px] bg-[#020617]">% Ammortamento</th>`;
@@ -3756,9 +4294,10 @@
             return { start: start, end: start + days * 24 };
         }
 
-        function calculateGmeMetrics(selectedPlantIds, monthIndexOrAll) {
+        // ── Suite GME ottimizzata: calcola le metriche di tutti i 12 mesi + anno in un solo passaggio ──
+        // (prima renderGmeDashboard + chart invocavano calculateGmeMetrics 25 volte, 25 × 8760 × N impianti)
+        function calculateGmeMetricsSuite(selectedPlantIds) {
             const activePlants = State.plants.filter(p => p.enabled !== false && selectedPlantIds.has(p.id));
-            const range = getMonthHourRange(monthIndexOrAll);
             const monthStartHours = [0, 744, 1416, 2160, 2880, 3624, 4344, 5088, 5832, 6552, 7296, 8016, 8760];
             const getMonthOfHour = (t) => {
                 for (let m = 0; m < 12; m++) {
@@ -3767,22 +4306,16 @@
                 return 11;
             };
 
-            let solarEnergySum = 0;
-            let solarPunValueSum = 0;
-            let gridFeedPvEnergySum = 0;
-            let gridFeedPvRIDValueSum = 0;
-            let selfConsSolarEnergySum = 0;
-            let selfConsSolarRIDValueSum = 0;
-            
-            let dischargeTsEnergySum = 0;
-            let dischargeTsRIDValueSum = 0;
-            let chargeSolarEnergySum = 0;
-            let chargeSolarRIDValueSum = 0;
-            
-            let dischargeArbEnergySum = 0;
-            let dischargeArbRIDValueSum = 0;
-            let chargeGridEnergySum = 0;
-            let chargeGridCostValueSum = 0;
+            const newAcc = () => ({
+                solarEnergySum: 0, solarPunValueSum: 0,
+                gridFeedPvEnergySum: 0, gridFeedPvRIDValueSum: 0,
+                selfConsSolarEnergySum: 0, selfConsSolarRIDValueSum: 0,
+                dischargeTsEnergySum: 0, dischargeTsRIDValueSum: 0,
+                chargeSolarEnergySum: 0, chargeSolarRIDValueSum: 0,
+                dischargeArbEnergySum: 0, dischargeArbRIDValueSum: 0,
+                chargeGridEnergySum: 0, chargeGridCostValueSum: 0
+            });
+            const months = Array.from({ length: 12 }, newAcc);
 
             activePlants.forEach(p => {
                 const zonePrices = State.zonalPun[String(p.zone).toUpperCase()] || State.zonalPun["CNOR"];
@@ -3801,21 +4334,11 @@
                     monthlyCounts[m]++;
                 }
                 for (let m = 0; m < 12; m++) {
-                    if (monthlyCounts[m] > 0) {
-                        monthlyAveragePun[m] /= monthlyCounts[m];
-                    }
+                    if (monthlyCounts[m] > 0) monthlyAveragePun[m] /= monthlyCounts[m];
                 }
 
-                const sim = p.sim || {
-                    hourlyGridFeedPv: new Float64Array(8760),
-                    hourlySelfConsSolar: new Float64Array(8760),
-                    hourlyChargeSolar: new Float64Array(8760),
-                    hourlyChargeGrid: new Float64Array(8760),
-                    hourlyDischargeGrid: new Float64Array(8760),
-                    hourlyDischargeArbitrage: new Float64Array(8760),
-                    hourlyDischargeTimeshifting: new Float64Array(8760)
-                };
-
+                const _pmGme = State.results && State.results.plantsMetrics ? State.results.plantsMetrics.find(m2 => m2.id === p.id) : null;
+                const sim = (_pmGme && _pmGme.sim) || p.sim || {};
                 const gridFeedPv = sim.hourlyGridFeedPv || new Float64Array(8760);
                 const selfConsSolar = sim.hourlySelfConsSolar || new Float64Array(8760);
                 const chargeSolar = sim.hourlyChargeSolar || new Float64Array(8760);
@@ -3823,57 +4346,62 @@
                 const dischargeArb = sim.hourlyDischargeArbitrage || new Float64Array(8760);
                 const dischargeTs = sim.hourlyDischargeTimeshifting || new Float64Array(8760);
 
-                for (let t = range.start; t < range.end; t++) {
+                for (let t = 0; t < 8760; t++) {
+                    const acc = months[getMonthOfHour(t)];
                     const solar = p.generation[t];
                     const pun = zonePrices[t];
                     const month = getMonthOfHour(t);
                     const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pun;
-                    
+
                     const priceRID = pun * lossMult - gseImb; // €/MWh
                     const costGrid = traderPrice * (1 + lossWithdraw / 100) + spread + disp; // €/MWh
 
-                    solarEnergySum += solar;
-                    solarPunValueSum += solar * pun;
-
-                    gridFeedPvEnergySum += gridFeedPv[t];
-                    gridFeedPvRIDValueSum += gridFeedPv[t] * priceRID;
-
-                    selfConsSolarEnergySum += selfConsSolar[t];
-                    selfConsSolarRIDValueSum += selfConsSolar[t] * priceRID;
-
-                    dischargeTsEnergySum += dischargeTs[t];
-                    dischargeTsRIDValueSum += dischargeTs[t] * priceRID;
-
-                    chargeSolarEnergySum += chargeSolar[t];
-                    chargeSolarRIDValueSum += chargeSolar[t] * priceRID;
-
-                    dischargeArbEnergySum += dischargeArb[t];
-                    dischargeArbRIDValueSum += dischargeArb[t] * priceRID;
-
-                    chargeGridEnergySum += chargeGrid[t];
-                    chargeGridCostValueSum += chargeGrid[t] * costGrid;
+                    acc.solarEnergySum += solar;
+                    acc.solarPunValueSum += solar * pun;
+                    acc.gridFeedPvEnergySum += gridFeedPv[t];
+                    acc.gridFeedPvRIDValueSum += gridFeedPv[t] * priceRID;
+                    acc.selfConsSolarEnergySum += selfConsSolar[t];
+                    acc.selfConsSolarRIDValueSum += selfConsSolar[t] * priceRID;
+                    acc.dischargeTsEnergySum += dischargeTs[t];
+                    acc.dischargeTsRIDValueSum += dischargeTs[t] * priceRID;
+                    acc.chargeSolarEnergySum += chargeSolar[t];
+                    acc.chargeSolarRIDValueSum += chargeSolar[t] * priceRID;
+                    acc.dischargeArbEnergySum += dischargeArb[t];
+                    acc.dischargeArbRIDValueSum += dischargeArb[t] * priceRID;
+                    acc.chargeGridEnergySum += chargeGrid[t];
+                    acc.chargeGridCostValueSum += chargeGrid[t] * costGrid;
                 }
             });
 
-            const medioneFv = solarEnergySum > 0 ? (solarPunValueSum / solarEnergySum) : 0;
-            const ponderatoImmissioneDiretta = gridFeedPvEnergySum > 0 ? (gridFeedPvRIDValueSum / gridFeedPvEnergySum) : 0;
-            const ponderatoCessioneStab = selfConsSolarEnergySum > 0 ? (selfConsSolarRIDValueSum / selfConsSolarEnergySum) : 0;
-
-            const weightedDischargeTs = dischargeTsEnergySum > 0 ? (dischargeTsRIDValueSum / dischargeTsEnergySum) : 0;
-            const weightedChargeTs = chargeSolarEnergySum > 0 ? (chargeSolarRIDValueSum / chargeSolarEnergySum) : 0;
-            const upliftTimeShifting = dischargeTsEnergySum > 0 && chargeSolarEnergySum > 0 ? (weightedDischargeTs - weightedChargeTs) : 0;
-
-            const weightedDischargeArb = dischargeArbEnergySum > 0 ? (dischargeArbRIDValueSum / dischargeArbEnergySum) : 0;
-            const weightedCostChargeArb = chargeGridEnergySum > 0 ? (chargeGridCostValueSum / chargeGridEnergySum) : 0;
-            const margineArbitraggio = dischargeArbEnergySum > 0 && chargeGridEnergySum > 0 ? (weightedDischargeArb - weightedCostChargeArb) : 0;
-
-            return {
-                medioneFv,
-                ponderatoImmissioneDiretta,
-                ponderatoCessioneStab,
-                upliftTimeShifting,
-                margineArbitraggio
+            const finalize = (a) => {
+                const medioneFv = a.solarEnergySum > 0 ? (a.solarPunValueSum / a.solarEnergySum) : 0;
+                const ponderatoImmissioneDiretta = a.gridFeedPvEnergySum > 0 ? (a.gridFeedPvRIDValueSum / a.gridFeedPvEnergySum) : 0;
+                const ponderatoCessioneStab = a.selfConsSolarEnergySum > 0 ? (a.selfConsSolarRIDValueSum / a.selfConsSolarEnergySum) : 0;
+                const weightedDischargeTs = a.dischargeTsEnergySum > 0 ? (a.dischargeTsRIDValueSum / a.dischargeTsEnergySum) : 0;
+                const weightedChargeTs = a.chargeSolarEnergySum > 0 ? (a.chargeSolarRIDValueSum / a.chargeSolarEnergySum) : 0;
+                const upliftTimeShifting = a.dischargeTsEnergySum > 0 && a.chargeSolarEnergySum > 0 ? (weightedDischargeTs - weightedChargeTs) : 0;
+                const weightedDischargeArb = a.dischargeArbEnergySum > 0 ? (a.dischargeArbRIDValueSum / a.dischargeArbEnergySum) : 0;
+                const weightedCostChargeArb = a.chargeGridEnergySum > 0 ? (a.chargeGridCostValueSum / a.chargeGridEnergySum) : 0;
+                const margineArbitraggio = a.dischargeArbEnergySum > 0 && a.chargeGridEnergySum > 0 ? (weightedDischargeArb - weightedCostChargeArb) : 0;
+                return { medioneFv, ponderatoImmissioneDiretta, ponderatoCessioneStab, upliftTimeShifting, margineArbitraggio };
             };
+
+            const annualAcc = newAcc();
+            months.forEach(ma => { Object.keys(ma).forEach(k => { annualAcc[k] += ma[k]; }); });
+            return { monthly: months.map(finalize), annual: finalize(annualAcc) };
+        }
+
+        // Cache della suite invalidata ad ogni nuovo risultato worker / cambio selezione impianti
+        function getGmeSuite() {
+            const sel = State.selectedGmePlantIds || new Set();
+            const selKey = Array.from(sel).sort().join('|');
+            const cache = State._gmeSuiteCache;
+            if (cache && cache.results === State.results && cache.selKey === selKey && cache.punVer === (State._punVersion || 0)) {
+                return cache.suite;
+            }
+            const suite = calculateGmeMetricsSuite(sel);
+            State._gmeSuiteCache = { results: State.results, selKey, punVer: (State._punVersion || 0), suite };
+            return suite;
         }
 
         function toggleGmePlantsDropdown() {
@@ -3928,7 +4456,7 @@
                 plantDiv.className = "flex items-center space-x-2 px-2 py-1 hover:bg-slate-900 rounded cursor-pointer transition-colors";
                 plantDiv.innerHTML = `
                     <input type="checkbox" id="chk-gme-plant-${plant.id}" ${isSelected ? 'checked' : ''} class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
-                    <label for="chk-gme-plant-${plant.id}" class="text-xs text-slate-300 truncate cursor-pointer select-none w-full">${plant.name}</label>
+                    <label for="chk-gme-plant-${plant.id}" class="text-xs text-slate-300 truncate cursor-pointer select-none w-full">${escapeHtml(plant.name)}</label>
                 `;
                 plantDiv.querySelector('input').addEventListener('change', function(e) {
                     const checked = e.target.checked;
@@ -3983,7 +4511,10 @@
 
             renderGmePlantsDropdown();
 
-            const metrics = calculateGmeMetrics(State.selectedGmePlantIds, State.selectedGmeMonth);
+            const gmeSuite = getGmeSuite();
+            const metrics = (State.selectedGmeMonth === 'all' || State.selectedGmeMonth === undefined)
+                ? gmeSuite.annual
+                : gmeSuite.monthly[parseInt(State.selectedGmeMonth)];
 
             // Dynamic CER label update
             const activeStabsGme = State.stabilimenti.filter(s => s.enabled !== false);
@@ -3994,7 +4525,7 @@
             }
             const cessioneCardSubLabel = document.querySelector('#gme-kpi-cessione-stab')?.nextElementSibling;
             if (cessioneCardSubLabel) {
-                cessioneCardSubLabel.textContent = isCerGme ? 'PUN opportunità  energia condivisa' : 'Costo opp. se immessa in rete';
+                cessioneCardSubLabel.textContent = isCerGme ? 'PUN opportunit\u00E0 energia condivisa' : 'Costo opp. se immessa in rete';
             }
             // Update table header
             const gmeTableHeaders = document.querySelectorAll('#tab-gme thead th');
@@ -4022,7 +4553,7 @@
                 let tableHtml = '';
                 
                 for (let m = 0; m < 12; m++) {
-                    const mMetrics = calculateGmeMetrics(State.selectedGmePlantIds, String(m));
+                    const mMetrics = gmeSuite.monthly[m];
                     const isSelected = State.selectedGmeMonth === String(m);
                     const rowBg = isSelected ? 'bg-slate-900/60 font-bold border-l-2 border-emerald-500' : 'hover:bg-slate-900/40';
                     tableHtml += `
@@ -4037,7 +4568,7 @@
                     `;
                 }
 
-                const yMetrics = calculateGmeMetrics(State.selectedGmePlantIds, 'all');
+                const yMetrics = gmeSuite.annual;
                 const isAllSelected = State.selectedGmeMonth === 'all';
                 const yRowBg = isAllSelected ? 'bg-emerald-950/20 font-bold border-l-2 border-emerald-500' : 'bg-slate-950 font-bold';
                 tableHtml += `
@@ -4076,8 +4607,9 @@
             const dataUpliftTs = [];
             const dataMargineArb = [];
 
+            const gmeSuiteChart = getGmeSuite();
             for (let m = 0; m < 12; m++) {
-                const mMetrics = calculateGmeMetrics(State.selectedGmePlantIds, String(m));
+                const mMetrics = gmeSuiteChart.monthly[m];
                 dataMedioneFv.push(mMetrics.medioneFv);
                 dataImmDiretta.push(mMetrics.ponderatoImmissioneDiretta);
                 dataCessioneStab.push(mMetrics.ponderatoCessioneStab);
@@ -4245,7 +4777,7 @@
                 'priceSolarAvg', 'priceSolarPpa', 'priceSolarRid', 'priceBessAvg',
                 'priceBessPpa', 'priceBessRid', 'priceBessArbitrage', 'priceBessTimeshifting', 'priceBessChargeGrid',
                 'revenueTotal',
-                'revenueTimeshifting','revenueRid','revenuePpa', 'revenuePpaPv', 'revenuePpaBessArb', 'revenuePpaBessTs', 'revenueArbitrage',
+                'revenueTimeshifting','revenueRid','revenuePpa', 'revenuePpaPv', 'revenuePpaBessArb', 'revenuePpaBessTs', 'revenueArbitrage', 'revenueMsd',
                 'opexPlants','opexBess','opexGridCharging','opexLandDds',
                 'opexInsurance','opexTaxes','opexSecurity','opexAssetManagement','opexServiceContract',
                 'ebitda','depreciationCivil','depreciationCivilSolar','depreciationCivilBess','depreciationCivilOther','ebit','interestActive','interest',
@@ -4253,6 +4785,7 @@
                 'afInterestAccrued','peRoyalty','afFee',
                 'pdInterestPaid','pdPrincipalPaid','peDividendPaid',
                 'opexMaintReserve','interestPaid','principalScheduled','principalVoluntary',
+                'dsraDraw','dsraFunding','dsraRelease',
                 'holdcoInterestReceived','holdcoLoanRepaymentReceived','spvLockedDividends','holdcoDividendReceived',
                 'dividendsPaid',
                 'holdcoInflowTotal','holdcoOpex','holdcoEarnoutPaid','holdcoIresTaxPaid','holdcoNetProfit',
@@ -4264,7 +4797,7 @@
                 'principalVoluntary','endingBalance','totalDebtService','dscr',
                 'beginningBalanceSoci','interestAccruedSoci','interestPaidSoci',
                 'principalPaidSoci','endingBalanceSoci',
-                'beginningBalancePd','interestAccruedPd','interestPaidPd','principalPaidPd','endingBalancePd'];
+                'beginningBalancePd','interestAccruedPd','interestPaidPd','principalPaidPd','endingBalancePd','dsraBalance'];
             for (let yr = 1; yr <= 20; yr++) {
                 pnlKeys.forEach(k => { const el = document.getElementById(`cell-pnl-${k}-y${yr}`); if (el) el.textContent = '\u2014'; });
                 debtKeys.forEach(k => { const el = document.getElementById(`cell-debt-${k}-y${yr}`); if (el) el.textContent = '\u2014'; });
@@ -4294,7 +4827,9 @@
             const debtBody = document.getElementById('debt-body');
             if (!debtBody) return;
             const p = State.inputs;
-            const yearsLimit = (p.exitOption && p.exitOption !== 'none') ? parseInt(p.exitOption) : 20;
+            // exitOption '0' = Nessun Exit -> mostra comunque tutti i 20 anni
+            const _exitOptIntSkel = parseInt(p.exitOption);
+            const yearsLimit = (p.exitOption && p.exitOption !== 'none' && !isNaN(_exitOptIntSkel) && _exitOptIntSkel > 0) ? _exitOptIntSkel : 20;
 
             const activeStabs = State.stabilimenti.filter(s => s.enabled !== false);
             const isCER = activeStabs.some(s => s.ppaType === 'cer');
@@ -4346,6 +4881,7 @@
                 ] : []),
                 { key: 'revenueTimeshifting', label: 'di cui: Ricavi da Time Shifting (€)', type: 'detail', parent: 'revenueTotal' },
                 { key: 'revenueArbitrage', label: 'di cui: Ricavi da Arbitraggio (€)', type: 'detail', parent: 'revenueTotal' },
+                { key: 'revenueMsd', label: 'di cui: Ricavi Servizi Ancillari BESS - MSD / Capacity (€)', type: 'detail', parent: 'revenueTotal' },
                 
                 { key: 'opexTotal', label: '(-) COSTI OPERATIVI (OPEX) TOTALE SPV (€)', type: 'group-header' },
                 { key: 'opexPlants', label: 'di cui: O&M Impianti Fotovoltaici (€)', type: 'detail', parent: 'opexTotal' },
@@ -4390,6 +4926,7 @@
                 { key: 'bessAugmentationCost', label: '  (-) CAPEX Sostituzione Celle NMC/LFP BESS (€)', type: 'minus' },
                 { key: 'mraRelease', label: '  (+) Rilascio Riserva di Manutenzione (MRA) per CAPEX BESS (€)', type: 'plus' },
                 { key: 'cfads', label: 'CFADS SPV (Cassa Disponibile ante Servizio Debito) (€)', type: 'bold-teal' },
+                ...((p.dsraMonths || 0) > 0 ? [{ key: 'dsraDraw', label: '  (+) Utilizzo DSRA a copertura servizio debito (€)', type: 'plus' }] : []),
 
                 // ── SERVIZIO DEL DEBITO SENIOR E CASSA ECCEDENTE SPV ───────────────────
                 { section: 'SERVIZIO DEL DEBITO SENIOR MUTUO BANCARIO SPV', type: 'section-title' },
@@ -4405,7 +4942,9 @@
                     const durStr = sy > 0 ? `per ${sy} anni` : 'fino a estinzione mutuo';
                     return { key: '_sweepDetailLabel', label: `Sweep: ${typeStr} - ${durStr}`, type: 'detail' };
                 })(),
+                ...((p.dsraMonths || 0) > 0 ? [{ key: 'dsraFunding', label: '  (-) Accantonamento/Integrazione DSRA (€)', type: 'minus' }] : []),
                 { key: 'spvFCFE', label: 'CASSA DISPONIBILE POST-DEBITO SENIOR (FCFE SPV) (€)', type: 'bold-teal' },
+                ...((p.dsraMonths || 0) > 0 ? [{ key: 'dsraRelease', label: '  (+) Rilascio DSRA a estinzione debito/exit (€)', type: 'plus' }] : []),
 
                 // ── CASCATA DI DISTRIBUZIONE SPV -> HOLDCO ───────────────────────────────
                 { section: 'CASCATA DISTRIBUZIONE SPV -> HOLDCO (Waterfall)', type: 'section-title' },
@@ -4569,6 +5108,7 @@
                 { key: 'principalScheduled', label: '(-) Quota Capitale Programmata (€)', type: 'minus' },
                 { key: 'principalVoluntary', label: '(-) Quota Capitale Prepagata - Cash Sweep (€)', type: 'minus' },
                 { key: 'endingBalance', label: 'Debito Residuo Fine Anno (€)', type: 'bold' },
+                ...((p.dsraMonths || 0) > 0 ? [{ key: 'dsraBalance', label: 'Saldo DSRA - Riserva Servizio Debito (€)', type: 'normal' }] : []),
                 { key: 'totalDebtService', label: 'SERVIZIO DEL DEBITO EFFETTIVO (€)', type: 'total-purple' },
                 { key: 'dscr', label: 'DSCR (Debt Service Coverage Ratio)', type: 'bold' },
 
@@ -4710,6 +5250,7 @@
                 if (m.revenuePpaBessTs) setCell('revenuePpaBessTs', m.revenuePpaBessTs[i], true, v => v > 0 ? '+' + formatEuro(v) : '-');
                 if (m.revenueTimeshifting) setCell('revenueTimeshifting', m.revenueTimeshifting[i], true, v => v > 0 ? '+' + formatEuro(v) : '-');
                 if (m.revenueArbitrage) setCell('revenueArbitrage', m.revenueArbitrage[i], true, v => v > 0 ? '+' + formatEuro(v) : '-');
+                if (m.revenueMsd) setCell('revenueMsd', m.revenueMsd[i], true, v => v > 0 ? '+' + formatEuro(v) : '-');
                 setCell('opexTotal', m.opexTotal[i], true, formatMinusEuro);
                 setCell('opexPlants', m.opexPlants[i], true, formatMinusEuro);
                 setCell('opexBess', m.opexBess[i], true, formatMinusEuro);
@@ -4748,6 +5289,9 @@
                 setCell('interestPaid', m.interest[i], true, formatMinusEuro);
                 setCell('principalScheduled', m.principalScheduled[i], true, formatMinusEuro);
                 setCell('principalVoluntary', Math.abs(m.principalVoluntary[i]), true, v => v > 0 ? '-' + formatEuro(v) : '-');
+                if (m.dsraDraw) setCell('dsraDraw', m.dsraDraw[i], true, formatPlusEuro);
+                if (m.dsraFunding) setCell('dsraFunding', m.dsraFunding[i], true, formatMinusEuro);
+                if (m.dsraRelease) setCell('dsraRelease', m.dsraRelease[i], true, formatPlusEuro);
                 if (m.pdInterestPaid) setCell('pdInterestPaid', m.pdInterestPaid[i], true, formatMinusEuro);
                 if (m.pdPrincipalPaid) setCell('pdPrincipalPaid', m.pdPrincipalPaid[i], true, formatMinusEuro);
                 if (m.peDividendPaid) setCell('peDividendPaid', m.peDividendPaid[i], true, formatMinusEuro);
@@ -4810,6 +5354,7 @@
                     setCell('principalPaidSoci', d.principalPaidSoci[i], false, formatMinusEuro);
                     setCell('endingBalanceSoci', d.endingBalanceSoci[i], false);
                 }
+                if (d.dsraBalance) setCell('dsraBalance', d.dsraBalance[i], false);
                 // Private Debt schedule (sezione 3)
                 if (d.beginningBalancePd) {
                     setCell('beginningBalancePd', d.beginningBalancePd[i], false);
@@ -4823,7 +5368,6 @@
 
         // Render dashboard values
         function renderUI() {
-            window.syncExitFields('render');
             window.syncExitFields('render');
             if (State.results && State.results.medioneKpiText) {
                 const kpiEl = document.getElementById('consolidated-medione-kpi');
@@ -5343,10 +5887,12 @@
             selectedPlants.forEach(plant => {
                 const stab = activeStabilimenti.find(s2 => s2.plantId === plant.id);
                 if (stab && (stab.ppaType === 'on-site' || stab.ppaType === 'cer') && stab.load) {
+                    const pmStab = State.results && State.results.plantsMetrics ? State.results.plantsMetrics.find(mm => mm.id === plant.id) : null;
+                    const simStab = (pmStab && pmStab.sim) || plant.sim || null;
                     for (let i = 0; i < 8760; i++) {
                         stabLoadHourly[i] += stab.load[i] || 0;
-                        if (plant.sim && plant.sim.hourlySelfCons) {
-                            stabSelfConsHourly[i] += plant.sim.hourlySelfCons[i] || 0;
+                        if (simStab && simStab.hourlySelfCons) {
+                            stabSelfConsHourly[i] += simStab.hourlySelfCons[i] || 0;
                         } else {
                             stabSelfConsHourly[i] += Math.min(plant.generation[i] || 0, stab.load[i] || 0);
                         }
@@ -5774,9 +6320,9 @@
                 else if (resolution === 'settimana') maxPoints = 168;
                 else if (resolution === 'mese') maxPoints = 744;
                 else if (resolution === 'trimestre') maxPoints = 2208;
-                else if (resolution === 'semestre') maxPoints = 4416;
-                else if (resolution === 'anno') maxPoints = 8760;
-                else maxPoints = 8760;
+                else if (resolution === 'semestre') maxPoints = 2208;
+                else if (resolution === 'anno') maxPoints = 1460; // downsample a step 6h: Chart.js con 8760×40 serie è troppo lento
+                else maxPoints = 1460;
             }
             
             const dsSolGen = downsampleData(data.solGen, maxPoints);
@@ -6494,7 +7040,7 @@
                             <td class="px-4 py-2.5 text-right font-mono text-cyan-400 bg-emerald-950/5">€${revTshift.toLocaleString('it-IT')}</td>
                             <td class="px-4 py-2.5 text-right font-mono text-rose-400 bg-emerald-950/5">€${costWithd.toLocaleString('it-IT')}</td>
                             <td class="px-4 py-2.5 text-right font-mono text-violet-400 bg-emerald-950/5">€${revPpaPvVal.toLocaleString('it-IT')}</td>
-                            <td class="px-4 py-2.5 text-right font-mono text-pink-505 bg-emerald-950/5">€${revPpaBessArbVal.toLocaleString('it-IT')}</td>
+                            <td class="px-4 py-2.5 text-right font-mono text-pink-500 bg-emerald-950/5">€${revPpaBessArbVal.toLocaleString('it-IT')}</td>
                             <td class="px-4 py-2.5 text-right font-mono text-pink-400 bg-emerald-950/5">€${revPpaBessTsVal.toLocaleString('it-IT')}</td>
                             <td class="px-4 py-2.5 text-right font-mono text-indigo-300 bg-emerald-950/5">€${cerGsePvVal.toLocaleString('it-IT')}</td>
                             <td class="px-4 py-2.5 text-right font-mono text-purple-300 bg-emerald-950/5">€${cerGseArbVal.toLocaleString('it-IT')}</td>
@@ -6629,12 +7175,14 @@
             const link = document.createElement("a");
             const filename = `profilo_bess_${resolution}_${aggregation}.csv`;
             
-            link.href = URL.createObjectURL(blob);
+            const profileBlobUrl = URL.createObjectURL(blob);
+            link.href = profileBlobUrl;
             link.setAttribute("download", filename);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            URL.revokeObjectURL(profileBlobUrl);
         }
 
         // Export active BESS profile data as Excel (using SheetJS)
@@ -6925,7 +7473,7 @@
                 plantDiv.className = "flex items-center space-x-2 px-2 py-1 hover:bg-slate-900 rounded cursor-pointer transition-colors";
                 plantDiv.innerHTML = `
                     <input type="checkbox" id="chk-bess-plant-${plant.id}" ${isSelected ? 'checked' : ''} class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
-                    <label for="chk-bess-plant-${plant.id}" class="text-xs text-slate-300 truncate cursor-pointer select-none w-full">${plant.name}</label>
+                    <label for="chk-bess-plant-${plant.id}" class="text-xs text-slate-300 truncate cursor-pointer select-none w-full">${escapeHtml(plant.name)}</label>
                 `;
                 
                 plantDiv.querySelector('input').addEventListener('change', function(e) {
@@ -7054,6 +7602,13 @@
             }
         }
 
+        // Debounce per i ricalcoli da digitazione: evita una simulazione completa ad ogni keystroke
+        let recalcDebounceTimer = null;
+        function triggerRecalculateDebounced(ms = 350) {
+            clearTimeout(recalcDebounceTimer);
+            recalcDebounceTimer = setTimeout(triggerRecalculate, ms);
+        }
+
         // Attach event listeners to all sliders
         function attachEventListeners() {
             const sliders = [
@@ -7066,9 +7621,9 @@
             ];
             sliders.forEach(id => {
                 const el = document.getElementById(id);
-                if (el) el.addEventListener('input', triggerRecalculate);
+                if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
             });
-            const selects = ['select-debt-basis', 'select-sweep-type', 'select-price-scenario-type',
+            const selects = ['select-debt-basis', 'select-sweep-type', 'select-price-scenario-type', 'select-bess-optimizer',
                 'select-pd-amount-type', 'select-pd-mode', 'select-pd-waterfall-rank',
                 'select-pe-amount-type', 'select-pe-mode', 'select-af-type'
             ];
@@ -7077,7 +7632,8 @@
                 if (el) el.addEventListener('change', triggerRecalculate);
             });
             const sweepInputs = [
-                'input-sweep-value', 'input-sweep-years',
+                'input-sweep-value', 'input-sweep-years', 'input-sculpting-enabled', 'input-target-dscr',
+                'input-dsra-months', 'input-refi-enabled', 'input-refi-year', 'input-refi-rate', 'input-refi-term',
                 'input-soci-interest-grace', 'input-soci-principal-grace',
                 'input-holdco-capital',
                 'input-pd-amount-value', 'input-pd-interest-grace', 'input-pd-principal-grace', 'input-pd-loan-term',
@@ -7090,18 +7646,18 @@
             const exitChangeInputs = ['input-exit-multiple', 'input-exit-value-mwp', 'input-exit-ev'];
             sweepInputs.forEach(id => {
                 const el = document.getElementById(id);
-                if (el) el.addEventListener('input', triggerRecalculate);
+                if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
             });
             exitChangeInputs.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', triggerRecalculate);
             });
             const inputs = [
-                'input-ke-val', 'input-wacc', 'input-inflation', 'input-pun-zonal-floor', 'input-pun-bearish-decay-rate', 'input-ts-bearish-decay-rate', 'input-arb-bearish-decay-rate', 'input-dividend-lock',
+                'input-ke-val', 'input-wacc', 'input-inflation', 'input-ires-rate', 'input-irap-rate', 'input-pun-zonal-floor', 'input-pun-bearish-decay-rate', 'input-ts-bearish-decay-rate', 'input-arb-bearish-decay-rate', 'input-dividend-lock',
                 'input-ridLossInjectBt', 'input-ridLossInjectMt', 'input-ridLossInjectAt',
                 'input-ridLossWithdrawBt', 'input-ridLossWithdrawMt', 'input-ridLossWithdrawAt',
                 'input-cerLossCprBt', 'input-cerLossCprMt', 'input-cerLossCprAt',
-                'input-ridImbalanceCost',
+                'input-ridImbalanceCost', 'input-msd-eur-mw-yr',
                 'input-cerTras',
                 'input-cerFissaSmall', 'input-cerFissaMedium', 'input-cerFissaLarge',
                 'input-cerCapSmall', 'input-cerCapMedium', 'input-cerCapLarge',
@@ -7110,7 +7666,7 @@
             ];
             inputs.forEach(id => {
                 const el = document.getElementById(id);
-                if (el) el.addEventListener('input', triggerRecalculate);
+                if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
             });
 
             // Event delegation for plant form changes
@@ -7121,6 +7677,12 @@
             }
 
             // PVGIS File: full header + generation parse on file selection
+            // Enter key nel form di login
+            ['auth-email', 'auth-password'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') loginUser(); });
+            });
+
             const pvgisFileEl = document.getElementById('pvgis-file');
             if (pvgisFileEl) {
                 pvgisFileEl.addEventListener('change', function(event) {
@@ -7129,11 +7691,22 @@
                         updateFormSubmitButtonState();
                         return;
                     }
+                    window._pvgisApiText = null; // un file manuale invalida il download API
                     updateFormSubmitButtonState();
 
                     const reader = new FileReader();
                     reader.onload = function(e) {
-                        const content = e.target.result;
+                        processPvgisContent(e.target.result);
+                    };
+                    reader.readAsText(file);
+                });
+            }
+        }
+
+        // Parsing condiviso di un contenuto PVGIS (da file CSV o scaricato da API):
+        // header metadati, curva oraria 8760, KPI impianto
+        function processPvgisContent(content) {
+                        const pvgisFileEl = document.getElementById('pvgis-file');
                         const setRo = (id, val) => {
                             const el = document.getElementById(id);
                             if (el && val !== null && val !== undefined) el.value = val;
@@ -7216,11 +7789,55 @@
                         // Expand the Dati PVGIS section so the user sees the values
                         const pvgisSection = document.querySelector('details:has(#pvgis-latitude)');
                         if (pvgisSection && !pvgisSection.open) pvgisSection.open = true;
-                    };
-                    reader.readAsText(file);
-                });
-            }
         }
+
+        // Scarica la curva oraria direttamente dalle API PVGIS 5.2 (JRC) dato lat/lon/picco/perdite
+        window.importPvgisFromApi = async function() {
+            if (editingPlantId) {
+                alert("Termina prima la modifica dell'impianto in corso.");
+                return;
+            }
+            const readNum = (msg, def, min, max) => {
+                const raw = prompt(msg, def);
+                if (raw === null) return null;
+                const v = parseFloat(String(raw).replace(',', '.'));
+                if (isNaN(v) || v < min || v > max) return undefined;
+                return v;
+            };
+            const curLat = document.getElementById('pvgis-latitude')?.value;
+            const curLon = document.getElementById('pvgis-longitude')?.value;
+            const curCap = document.getElementById('plant-capacity')?.value;
+
+            const lat = readNum('Latitudine (es. 43.55):', (curLat && curLat !== '-' && curLat !== '\u2014') ? curLat : '43.55', -90, 90);
+            if (lat === null) return;
+            if (lat === undefined) { alert('Latitudine non valida.'); return; }
+            const lon = readNum('Longitudine (es. 10.31):', (curLon && curLon !== '-' && curLon !== '\u2014') ? curLon : '10.31', -180, 180);
+            if (lon === null) return;
+            if (lon === undefined) { alert('Longitudine non valida.'); return; }
+            const peak = readNum('Potenza di picco (kWp):', curCap || '1000', 0.001, 1000000);
+            if (peak === null) return;
+            if (peak === undefined) { alert('Potenza non valida.'); return; }
+            const loss = readNum('Perdite di sistema (%):', '14', 0, 100);
+            if (loss === null) return;
+            if (loss === undefined) { alert('Perdite di sistema non valide.'); return; }
+
+            showCalcIndicator(true);
+            try {
+                const url = `https://re.jrc.ec.europa.eu/api/v5_2/seriescalc?lat=${lat}&lon=${lon}&pvcalculation=1&peakpower=${peak}&loss=${loss}&outputformat=csv`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const text = await resp.text();
+                if (!text || text.length < 5000) throw new Error('Risposta PVGIS vuota o non valida.');
+                window._pvgisApiText = text;
+                processPvgisContent(text);
+                updateFormSubmitButtonState();
+            } catch (err) {
+                console.error('Errore download PVGIS API:', err);
+                alert('Impossibile scaricare i dati da PVGIS API:\n' + err.message + '\n\nVerifica la connessione o usa il caricamento CSV manuale.');
+            } finally {
+                showCalcIndicator(false);
+            }
+        };
 
         // Global functions for P&L collapsible rows
         window.toggleTableRowGroup = function(parentKey) {
@@ -7308,6 +7925,7 @@
             const btn = document.getElementById('btn-run-sensitivity');
             const statusEl = document.getElementById('sens-status');
             const container = document.getElementById('sens-results-container');
+            if (!btn || !statusEl || !container || !document.getElementById('sens-var-x')) return;
             
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Calcolo in corso...';
@@ -7351,6 +7969,7 @@
         }
 
         function renderSensitivityResults(results) {
+            State.lastSensitivity = results; // disponibile per il report PDF
             const btn = document.getElementById('btn-run-sensitivity');
             const statusEl = document.getElementById('sens-status');
             const container = document.getElementById('sens-results-container');
@@ -7489,6 +8108,185 @@
         }
 
         document.getElementById('btn-run-sensitivity').addEventListener('click', runSensitivity);
+
+        // =========================================================
+        // MONTE CARLO ANALYSIS (P50 / P90)
+        // =========================================================
+
+        function runMonteCarlo() {
+            if (State.isUpdatePending) return;
+            const btn = document.getElementById('btn-run-montecarlo');
+            const statusEl = document.getElementById('mc-status');
+            const container = document.getElementById('mc-results-container');
+            if (!btn || !statusEl || !container) return;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Simulazioni in corso...';
+            statusEl.textContent = "Elaborazione scenari stocastici...";
+            statusEl.className = "text-center mt-2 text-[10px] text-violet-400 font-medium h-4 animate-pulse";
+            container.innerHTML = '<div class="text-center text-violet-400"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><p>Esecuzione simulazioni Monte Carlo, attendere...</p></div>';
+
+            const mcConfig = {
+                nSim: parseInt(document.getElementById('mc-n-sim').value) || 100,
+                sigmaPun: parseFloat(document.getElementById('mc-sigma-pun').value) || 0,
+                sigmaGen: parseFloat(document.getElementById('mc-sigma-gen').value) || 0
+            };
+
+            syncStateFromDOM();
+            initWorker();
+
+            simWorker.postMessage({
+                action: 'EXECUTE_MONTECARLO',
+                payload: {
+                    State: {
+                        inputs: State.inputs,
+                        plants: State.plants,
+                        stabilimenti: State.stabilimenti,
+                        zonalPun: State.zonalPun,
+                        selectedBessPlantIds: State.selectedBessPlantIds,
+                        previouslySeenPlantIds: State.previouslySeenPlantIds
+                    },
+                    mcConfig
+                }
+            });
+        }
+
+        function renderMonteCarloResults(results) {
+            const btn = document.getElementById('btn-run-montecarlo');
+            const statusEl = document.getElementById('mc-status');
+            const container = document.getElementById('mc-results-container');
+            if (!btn || !statusEl || !container) return;
+            State.lastMonteCarlo = results; // disponibile per il report PDF
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-dice"></i><span>Esegui Monte Carlo</span>';
+            statusEl.textContent = `Completato (${results.nSim} simulazioni)`;
+            statusEl.className = "text-center mt-2 text-[10px] text-emerald-400 font-medium h-4";
+
+            const rows = [
+                { label: 'Equity IRR (%)', k: 'irr', fmt: v => v.toFixed(2) + '%' },
+                { label: 'NPV @ Ke (€)', k: 'npv', fmt: v => formatEuro(v) },
+                { label: 'DSCR Minimo (x)', k: 'dscrMin', fmt: v => v.toFixed(2) + 'x' },
+                { label: 'DSCR Medio (x)', k: 'dscrAvg', fmt: v => v.toFixed(2) + 'x' }
+            ];
+
+            let html = '<div class="overflow-auto w-full"><table class="w-full text-sm text-left">';
+            html += '<thead><tr>'
+                + '<th class="p-3 bg-slate-900 border border-slate-700 text-slate-400 font-semibold">KPI</th>'
+                + '<th class="p-3 bg-slate-900 border border-slate-700 text-rose-400 font-semibold text-right">P10 (Pessimistico)</th>'
+                + '<th class="p-3 bg-slate-900 border border-slate-700 text-slate-200 font-semibold text-right">P50 (Mediano)</th>'
+                + '<th class="p-3 bg-slate-900 border border-slate-700 text-emerald-400 font-semibold text-right">P90 (Ottimistico)</th>'
+                + '<th class="p-3 bg-slate-900 border border-slate-700 text-slate-400 font-semibold text-right">Media</th>'
+                + '</tr></thead><tbody>';
+            rows.forEach(r => {
+                const s = results[r.k];
+                html += '<tr>'
+                    + `<td class="p-3 border border-slate-800 font-semibold text-slate-200">${r.label}</td>`
+                    + `<td class="p-3 border border-slate-800 text-right font-mono text-rose-300">${r.fmt(s.p10)}</td>`
+                    + `<td class="p-3 border border-slate-800 text-right font-mono text-white font-bold">${r.fmt(s.p50)}</td>`
+                    + `<td class="p-3 border border-slate-800 text-right font-mono text-emerald-300">${r.fmt(s.p90)}</td>`
+                    + `<td class="p-3 border border-slate-800 text-right font-mono text-slate-400">${r.fmt(s.mean)}</td>`
+                    + '</tr>';
+            });
+            html += '</tbody></table>';
+
+            // Mini-istogramma testuale della distribuzione IRR (decili)
+            if (results.irrSamples && results.irrSamples.length > 0) {
+                const s = results.irrSamples;
+                html += `<div class="mt-4 text-[10px] text-slate-500">Distribuzione IRR: min ${s[0].toFixed(2)}% &nbsp;•&nbsp; max ${s[s.length - 1].toFixed(2)}% &nbsp;•&nbsp; σ PUN ${results.sigmaPun}% / σ FV ${results.sigmaGen}%</div>`;
+            }
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        const btnMc = document.getElementById('btn-run-montecarlo');
+        if (btnMc) btnMc.addEventListener('click', runMonteCarlo);
+
+        // =========================================================
+        // TORNADO ANALYSIS (deterministica, 6 driver)
+        // =========================================================
+
+        let tornadoResolver = null;
+        function requestTornado() {
+            return new Promise((resolve, reject) => {
+                tornadoResolver = { resolve, reject };
+                syncStateFromDOM();
+                initWorker();
+                simWorker.postMessage({
+                    action: 'EXECUTE_TORNADO',
+                    payload: {
+                        State: {
+                            inputs: State.inputs,
+                            plants: State.plants,
+                            stabilimenti: State.stabilimenti,
+                            zonalPun: State.zonalPun,
+                            selectedBessPlantIds: State.selectedBessPlantIds,
+                            previouslySeenPlantIds: State.previouslySeenPlantIds
+                        }
+                    }
+                });
+            });
+        }
+
+        function runTornado() {
+            if (State.isUpdatePending) return;
+            const btn = document.getElementById('btn-run-tornado');
+            const statusEl = document.getElementById('tornado-status');
+            const container = document.getElementById('tornado-results');
+            if (!btn || !statusEl || !container) return;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Calcolo tornado...';
+            statusEl.textContent = 'Elaborazione 13 scenari...';
+            statusEl.className = 'text-center mt-2 text-[10px] text-sky-400 font-medium h-4 animate-pulse';
+            container.innerHTML = '<div class="text-center text-sky-400"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><p>Calcolo tornado in corso (13 simulazioni)...</p></div>';
+
+            requestTornado()
+                .then(res => { renderTornadoResults(res); })
+                .catch(err => {
+                    statusEl.textContent = 'Errore: ' + err.message;
+                    container.innerHTML = '<div class="text-rose-400 text-xs p-3">Errore nel calcolo del tornado.</div>';
+                });
+        }
+
+        function renderTornadoResults(results) {
+            const btn = document.getElementById('btn-run-tornado');
+            const statusEl = document.getElementById('tornado-status');
+            const container = document.getElementById('tornado-results');
+            if (!container) return;
+            State.lastTornado = results;
+
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-wind"></i><span>Tornado (6 variabili)</span>'; }
+            if (statusEl) {
+                statusEl.textContent = 'Completato';
+                statusEl.className = 'text-center mt-2 text-[10px] text-emerald-400 font-medium h-4';
+            }
+
+            const base = results.baseIrr;
+            const maxSpan = Math.max(...results.rows.map(r => Math.abs(r.irrUp - r.irrDown)), 0.01);
+            let html = '<div class="w-full space-y-2 py-2">';
+            html += `<div class="text-center text-[11px] text-slate-400 mb-3">IRR base: <span class="text-white font-bold">${base.toFixed(2)}%</span> &nbsp;•&nbsp; barre = IRR a ±Δ della variabile</div>`;
+            results.rows.forEach(r => {
+                const leftW = Math.min(50, Math.abs(r.irrDown - base) / maxSpan * 50);
+                const rightW = Math.min(50, Math.abs(r.irrUp - base) / maxSpan * 50);
+                const deltaLabel = ['wacc','inflation','interestRate'].includes(r.key) ? `±${r.delta}pp` : `±${r.delta}%`;
+                html += `
+                <div class="flex items-center space-x-2">
+                    <div class="w-44 text-right text-[10px] text-slate-300 font-semibold truncate" title="${escapeHtml(r.label)} (${deltaLabel})">${escapeHtml(r.label)} <span class="text-slate-500">${deltaLabel}</span></div>
+                    <div class="flex-1 flex items-center h-5 relative bg-slate-900/40 rounded">
+                        <div class="absolute left-1/2 w-px h-5 bg-slate-500 z-10"></div>
+                        <div class="absolute h-3.5 bg-rose-500/80 rounded-l" style="right:50%;width:${leftW}%" title="IRR (−Δ): ${r.irrDown.toFixed(2)}%"></div>
+                        <div class="absolute h-3.5 bg-emerald-500/80 rounded-r" style="left:50%;width:${rightW}%" title="IRR (+Δ): ${r.irrUp.toFixed(2)}%"></div>
+                    </div>
+                    <div class="w-32 text-[9px] font-mono text-slate-400 shrink-0">${r.irrDown.toFixed(1)}% / <span class="text-emerald-400">${r.irrUp.toFixed(1)}%</span></div>
+                </div>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        const btnTornado = document.getElementById('btn-run-tornado');
+        if (btnTornado) btnTornado.addEventListener('click', runTornado);
 
 
 
@@ -7728,7 +8526,7 @@ function _ctx() {
 // ═══════════════════════════════════════════════════════════════════
 // Funzione dispatcher principale
 // ═══════════════════════════════════════════════════════════════════
-window.generateReport = function(reportType) {
+window.generateReport = async function(reportType) {
     if (!window.jspdf || !window.jspdf.jsPDF) {
         alert('Libreria PDF non caricata. Ricarica la pagina e riprova.');
         return;
@@ -7741,6 +8539,16 @@ window.generateReport = function(reportType) {
     if (!r.matrix || !r.matrix.years || r.matrix.years.length === 0) {
         alert('Nessun risultato di simulazione disponibile. Esegui prima un calcolo (Ricalcola Scenario).');
         return;
+    }
+    // Per il report Sensibilità: assicura dati tornado reali (calcolati al volo se mai eseguito)
+    if (reportType === 'sensibilita' && !window.State.lastTornado) {
+        showCalcIndicator(true);
+        try {
+            window.State.lastTornado = await requestTornado();
+        } catch (tornErr) {
+            console.warn('Tornado non disponibile per il PDF:', tornErr);
+        }
+        showCalcIndicator(false);
     }
     try {
         let doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -7759,6 +8567,7 @@ window.generateReport = function(reportType) {
         }
         _pdfFooter(doc);
         doc.save(filename);
+        Audit.log('report.pdf', reportType);
     } catch (err) {
         console.error('Errore generazione PDF:', err);
         alert('Errore durante la generazione del PDF:\n' + err.message);
@@ -8386,30 +9195,87 @@ function _repSensibilita(doc) {
     const { r, p } = _ctx();
     _pdfHeader(doc, 'Analisi di Sensibilità - Variabili Critiche', 'Report N. 07');
     let y = 32;
-    y = _sectionTitle(doc, '1. Sensibilità Singola Variabile (Tornado IRR)', y);
     const baseIrr = r.calculatedIrr || 0;
-    const vars = [
-        { name: 'CAPEX', delta: 10, irrUp: null, irrDown: null },
-        { name: 'OPEX', delta: 10, irrUp: null, irrDown: null },
-        { name: 'WACC', delta: 1, irrUp: null, irrDown: null },
-        { name: 'Inflazione', delta: 1, irrUp: null, irrDown: null },
-        { name: 'PUN zonale', delta: 10, irrUp: null, irrDown: null },
-        { name: 'EURIBOR', delta: 1, irrUp: null, irrDown: null }
-    ];
-    doc.autoTable({
-        startY: y,
-        theme: 'grid',
-        headStyles: { fillColor: [15, 23, 42], textColor: [148, 163, 184], fontSize: 8 },
-        bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
-        head: [['Variabile', 'Scen. Base', 'Variazione ±', 'IRR base', 'Impatto stimato']],
-        body: vars.map(v => [v.name, 'riferimento', '±' + v.delta + (v.name === 'PUN zonale' || v.name === 'CAPEX' || v.name === 'OPEX' ? '%' : 'pp'), _fmtPct(baseIrr), 'eseguire simulazione sensibilità nella scheda dedicata per valore quantitativo']),
-        margin: { left: 14, right: 14 }
-    });
-    y = doc.lastAutoTable.finalY + 6;
+
+    // ── Sezione 1: TORNADO con dati reali (calcolati dal worker) ──
+    y = _sectionTitle(doc, '1. Tornado IRR - Dati Reali (± singola variabile)', y);
+    const torn = window.State.lastTornado;
+    if (torn && torn.rows && torn.rows.length > 0) {
+        doc.autoTable({
+            startY: y,
+            theme: 'grid',
+            headStyles: { fillColor: [15, 23, 42], textColor: [148, 163, 184], fontSize: 8 },
+            bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+            head: [['Variabile (ordinata per impatto)', 'Variazione', 'IRR base', 'IRR (−Δ)', 'IRR (+Δ)', 'Impatto ±']],
+            body: torn.rows.map(row => [
+                row.label,
+                '±' + row.delta + (['wacc', 'inflation', 'interestRate'].includes(row.key) ? ' pp' : ' %'),
+                _fmtPct(torn.baseIrr),
+                _fmtPct(row.irrDown),
+                _fmtPct(row.irrUp),
+                ((row.irrUp - row.irrDown) / 2).toFixed(2) + ' pp'
+            ]),
+            margin: { left: 14, right: 14 },
+            willDrawCell: function(data) {
+                if (data.row.index === 0) doc.setFont('helvetica', 'bold');
+            }
+        });
+        y = doc.lastAutoTable.finalY + 4;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 116, 139);
+        const top = torn.rows[0];
+        doc.text(`Variabile più critica: ${top.label} (impatto ±${((top.irrUp - top.irrDown) / 2).toFixed(2)} pp su IRR). La tabella è ordinata per impatto decrescente.`, 14, y + 2);
+        y += 8;
+    } else {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Tornado non disponibile (calcolo fallito). Esegui "Tornado (6 variabili)" nella scheda Sensibilità e rigenera il report.', 14, y + 4);
+        y += 12;
+    }
+
+    // ── Sezione 2: MONTE CARLO (percentili, se eseguito) ──
+    y = _ensureSpace(doc, 55, y);
+    y = _sectionTitle(doc, '2. Monte Carlo - Percentili (P10 / P50 / P90)', y);
+    const mc = window.State.lastMonteCarlo;
+    if (mc) {
+        const fmtMc = (k, s) => {
+            if (k === 'irr') return [_fmtPct(s.p10), _fmtPct(s.p50), _fmtPct(s.p90), _fmtPct(s.mean)];
+            if (k === 'npv') return [_fmtE(s.p10), _fmtE(s.p50), _fmtE(s.p90), _fmtE(s.mean)];
+            return [s.p10.toFixed(2) + 'x', s.p50.toFixed(2) + 'x', s.p90.toFixed(2) + 'x', s.mean.toFixed(2) + 'x'];
+        };
+        doc.autoTable({
+            startY: y,
+            theme: 'grid',
+            headStyles: { fillColor: [15, 23, 42], textColor: [148, 163, 184], fontSize: 8 },
+            bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+            head: [['KPI', 'P10 (Pessimistico)', 'P50 (Mediano)', 'P90 (Ottimistico)', 'Media']],
+            body: [
+                ['Equity IRR', ...fmtMc('irr', mc.irr)],
+                ['NPV @ Ke', ...fmtMc('npv', mc.npv)],
+                ['DSCR Minimo', ...fmtMc('dscrMin', mc.dscrMin)],
+                ['DSCR Medio', ...fmtMc('dscrAvg', mc.dscrAvg)]
+            ],
+            margin: { left: 14, right: 14 }
+        });
+        y = doc.lastAutoTable.finalY + 4;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Simulazioni: ${mc.nSim} | Volatilità: σ PUN ${mc.sigmaPun}% / σ Produzione FV ${mc.sigmaGen}% | Shock lognormale mean-preserving sui prezzi, gaussiano sulla produzione.`, 14, y + 2);
+        y += 8;
+    } else {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Monte Carlo non ancora eseguito. Apri la scheda Sensibilità → Monte Carlo, esegui e rigenera il report.', 14, y + 4);
+        y += 12;
+    }
 
     y = _ensureSpace(doc, 40, y);
-    y = _sectionTitle(doc, '2. Risultati Sensibilità Salvati (ultima esecuzione)', y);
-    const sens = (window.State.results && window.State.results.sensitivityResults) || null;
+    y = _sectionTitle(doc, '3. Risultati Sensibilità 1D/2D Salvati (ultima esecuzione)', y);
+    const sens = window.State.lastSensitivity || null;
     if (sens && sens.matrix) {
         const targetLabel = { irr: 'IRR %', npv: 'NPV €', dscr_min: 'DSCR min', dscr_avg: 'DSCR avg' }[sens.targetKpi] || 'KPI';
         const xLabels = sens.xVals || [];

@@ -15,8 +15,10 @@ async function exportPnlToExcel() {
     const m = window.State.results.matrix;
     const p = window.State.inputs;
     let years = m && m.years ? m.years : Array.from({length: 20}, (_, i) => i + 1);
-    if (p && p.exitOption && p.exitOption !== 'none') {
-        years = years.slice(0, parseInt(p.exitOption));
+    // exitOption '0' = Nessun Exit -> esporta comunque tutti i 20 anni
+    const exitOptInt = p && p.exitOption !== undefined ? parseInt(p.exitOption) : NaN;
+    if (p && p.exitOption && p.exitOption !== 'none' && !isNaN(exitOptInt) && exitOptInt > 0) {
+        years = years.slice(0, exitOptInt);
     }
     const numYears = years.length;
 
@@ -157,9 +159,13 @@ async function exportPnlToExcel() {
     // 1. QUANTITATIVI DI ENERGIA (MWh)
     addRow('qtyEnergyGroup', 'QUANTITATIVI DI ENERGIA (MWh)', 'group-header', null, '');
     
+    // In CER l'energia condivisa (qtySolarPpa) è un sottoinsieme dell'immessa (qtySolarRid):
+    // sommarla double-counterebbe la produzione. gen = immessa + carica BESS.
+    const _isCerExport = window.State.stabilimenti.filter(s => s.enabled !== false).some(s => s.ppaType === 'cer');
     addRow('qtySolarGen', 'Produzione Fotovoltaica Totale (MWh)', 'bold', m.qtySolarGen, numberFormatMwh, (col) => {
-        // qtySolarGen = qtySolarPpa + qtySolarRid + qtySolarToBess
-        return `${col}${rowMap.qtySolarPpa}+${col}${rowMap.qtySolarRid}+${col}${rowMap.qtySolarToBess}`;
+        return _isCerExport
+            ? `${col}${rowMap.qtySolarRid}+${col}${rowMap.qtySolarToBess}`
+            : `${col}${rowMap.qtySolarPpa}+${col}${rowMap.qtySolarRid}+${col}${rowMap.qtySolarToBess}`;
     });
     
     const activeStabs = window.State.stabilimenti.filter(s => s.enabled !== false);
@@ -587,7 +593,7 @@ async function exportPnlToExcel() {
     }
 
     addRowCe('revenueTotal', 'RICAVI TOTALI SPV (€)', 'group-header', m.revenueTotal, numberFormatEuro, (col) => {
-        return `${col}${rowMapCe.revenueRid}+${col}${rowMapCe.revenuePpa}+${col}${rowMapCe.revenueTimeshifting}+${col}${rowMapCe.revenueArbitrage}`;
+        return `${col}${rowMapCe.revenueRid}+${col}${rowMapCe.revenuePpa}+${col}${rowMapCe.revenueTimeshifting}+${col}${rowMapCe.revenueArbitrage}+${col}${rowMapCe.revenueMsd}`;
     });
     
     addRowCe('revenueRid', 'di cui: Ricavi da RID generato da FV (€)', 'detail', m.revenueRid, numberFormatEuro, (col) => {
@@ -617,6 +623,7 @@ async function exportPnlToExcel() {
     addRowCe('revenueArbitrage', 'di cui: Ricavi da Arbitraggio (€)', 'detail', m.revenueArbitrage, numberFormatEuro, (col) => {
         return `IFERROR('DRIVER OPERATIVI'!${col}${rowMap.qtyBessGridFeedArb}*'DRIVER OPERATIVI'!${col}${rowMap.priceBessArbitrage}, 0)`;
     });
+    addRowCe('revenueMsd', 'di cui: Ricavi Servizi Ancillari BESS - MSD / Capacity (€)', 'detail', m.revenueMsd, numberFormatEuro);
     
     sheetCe.addRow([]); currentRowNumCe++;
     
@@ -849,6 +856,11 @@ async function exportPnlToExcel() {
         return formula;
     });
 
+    // DSRA: utilizzo a copertura del servizio debito (se abilitato)
+    if ((window.State.inputs.dsraMonths || 0) > 0) {
+        addRowRf('dsraDraw', '  (+) Utilizzo DSRA a copertura servizio debito (€)', 'plus', m.dsraDraw, numberFormatEuro);
+    }
+
     sheetRf.addRow([]); currentRowNumRf++;
     
     addRowRf('sec_1', 'SERVIZIO DEL DEBITO SENIOR MUTUO BANCARIO SPV', 'section-title');
@@ -869,11 +881,23 @@ async function exportPnlToExcel() {
         addRowRf('_sweepDetailLabel', `Sweep: ${typeStr} — ${durStr}`, 'detail', null, numberFormatEuro);
     }
     
+    // DSRA: accantonamento/integrazione fino al target (se abilitato)
+    if ((window.State.inputs.dsraMonths || 0) > 0) {
+        addRowRf('dsraFunding', '  (-) Accantonamento/Integrazione DSRA (€)', 'minus', m.dsraFunding, numberFormatEuro);
+    }
+
     sheetRf.addRow([]); currentRowNumRf++;
     
     addRowRf('spvFCFE', 'CASSA DISPONIBILE POST-DEBITO SENIOR (FCFE SPV) (€)', 'bold-teal', m.spvFCFE, numberFormatEuro, (col) => {
-        return `${col}${rowMapRf.cfads}+${col}${rowMapRf.interestPaid}+${col}${rowMapRf.principalScheduled}+${col}${rowMapRf.principalVoluntary}`;
+        let f = `${col}${rowMapRf.cfads}+${col}${rowMapRf.interestPaid}+${col}${rowMapRf.principalScheduled}+${col}${rowMapRf.principalVoluntary}`;
+        if (rowMapRf.dsraDraw) f += `+${col}${rowMapRf.dsraDraw}`;
+        if (rowMapRf.dsraFunding) f += `+${col}${rowMapRf.dsraFunding}`;
+        return f;
     });
+
+    if ((window.State.inputs.dsraMonths || 0) > 0) {
+        addRowRf('dsraRelease', '  (+) Rilascio DSRA a estinzione debito/exit (€)', 'plus', m.dsraRelease, numberFormatEuro);
+    }
 
     // PD è a livello Holding: il servizio PD non è più nel RF SPV (gestito nel Rendiconto Holding, sezione C)
 
@@ -1540,6 +1564,9 @@ async function exportPnlToExcel() {
     addRowDebt('endingBalance', 'Debito Residuo Fine Anno (€)', 'bold', d.endingBalance, numberFormatEuro, (col) => {
         return `MAX(0, ${col}${rowMapDebt['beginningBalance']} + ${col}${rowMapDebt['principalScheduled']} + ${col}${rowMapDebt['principalVoluntary']})`;
     });
+    if ((window.State.inputs.dsraMonths || 0) > 0) {
+        addRowDebt('dsraBalance', 'Saldo DSRA - Riserva Servizio Debito (€)', 'normal', d.dsraBalance, numberFormatEuro);
+    }
     
     sheetDebt.addRow([]); currentRowNumDebt++;
 
@@ -1580,7 +1607,9 @@ async function exportPnlToExcel() {
         addRowDebt('principalPaidPd', '(-) Rimborso Quota Capitale Ammortamento (€)', 'minus', d.principalPaidPd, numberFormatEuro);
         addRowDebt('bulletPayoffPd', '(-) Payoff Bullet / Residuo a Exit (€)', 'minus', d.bulletPayoffPd, numberFormatEuro);
         addRowDebt('endingBalancePd', 'Private Debt Fine Anno (€)', 'bold', d.endingBalancePd, numberFormatEuro, (col) => {
-            return `${col}${rowMapDebt.beginningBalancePd}+${col}${rowMapDebt.interestAccruedPd}-${col}${rowMapDebt.interestPaidPd}-${col}${rowMapDebt.principalPaidPd}-${col}${rowMapDebt.bulletPayoffPd}`;
+            // Righe 'minus' sono memorizzate negative, 'plus' positive:
+            // ending = beginning + accrued - paid - principal - payoff
+            return `${col}${rowMapDebt.beginningBalancePd}-${col}${rowMapDebt.interestAccruedPd}-${col}${rowMapDebt.interestPaidPd}+${col}${rowMapDebt.principalPaidPd}+${col}${rowMapDebt.bulletPayoffPd}`;
         });
     }
 
