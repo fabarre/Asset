@@ -392,6 +392,7 @@ const I18N_EN = {
     'Giornaliero (Media)': 'Daily (Avg)',
     'Mensile (Media)': 'Monthly (Avg)',
     'Tabella Dati Dettaglio': 'Detail Data Table',
+    'Fascia': 'Band',
     'Valori medi o orari corrispondenti alla selezione attiva sul grafico.': 'Average or hourly values matching the active chart selection.',
 
     // ── P&L tab ──

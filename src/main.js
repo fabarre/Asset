@@ -7274,6 +7274,31 @@
             }, 50);
         }
 
+        // Fascia ARERA per una riga della tabella/export (orario: esatta; giorno/mese: dominante)
+        function isItHoliday2025(date) {
+            const dayIdx = Math.floor((date - new Date(2025, 0, 1)) / 86400000);
+            return IT_HOLIDAYS_2025.has(dayIdx);
+        }
+        function getFasciaForRow(date, aggregation) {
+            if (!date || !(date instanceof Date) || isNaN(date)) return '\u2014';
+            if (aggregation === 'orario') {
+                return 'F' + (getAreraBand(date.getDay(), date.getHours(), isItHoliday2025(date)) + 1);
+            }
+            const counts = [0, 0, 0];
+            if (aggregation === 'giornaliero') {
+                for (let h = 0; h < 24; h++) counts[getAreraBand(date.getDay(), h, isItHoliday2025(date))]++;
+            } else { // mensile
+                const y = date.getFullYear(), m = date.getMonth();
+                const dim = new Date(y, m + 1, 0).getDate();
+                for (let d = 1; d <= dim; d++) {
+                    const dd = new Date(y, m, d);
+                    const hol = isItHoliday2025(dd);
+                    for (let h = 0; h < 24; h++) counts[getAreraBand(dd.getDay(), h, hol)]++;
+                }
+            }
+            return 'F' + (counts.indexOf(Math.max(counts[0], counts[1], counts[2])) + 1);
+        }
+
         // Render detailed dispatch profile data table below the chart
         function renderHourlyProfileTable(labels, solGen, batChargeSolar, batChargeGrid, batDischargeGrid, batDischargeGridArb, batDischargeGridTs, batDischargePpa, lossesRte, batSoC, prices, stabLoad, selfConsSolar, selfConsBess, batGridFeedPv, revRidPure, revRidActual, revArbitrage, revTimeshifting, costWithdrawal, revPpaPv, revPpaBess, dates, selectedZones, zonalPrices, selfConsBessArb, selfConsBessTs, revPpaBessArb, revPpaBessTs, cerGseIncentivePv, cerGseIncentiveBessArb, cerGseIncentiveBessTs) {
             const table = document.getElementById('table-hourly-profile');
@@ -7281,6 +7306,7 @@
             const thead = table.querySelector('thead');
             const tbody = table.querySelector('tbody');
             if (!thead || !tbody) return;
+            const aggregation = State.chartAggregation || 'orario';
 
             // Clear previous contents
             thead.innerHTML = '';
@@ -7290,6 +7316,7 @@
             State.activeProfileData = {
                 labels: labels,
                 dates: dates,
+                aggregation: aggregation,
                 solGen: solGen,
                 batChargeSolar: batChargeSolar,
                 batChargeGrid: batChargeGrid,
@@ -7329,6 +7356,7 @@
             let headerHTML = `
                 <tr>
                     <th class="px-4 py-3 text-slate-300 font-semibold border-b border-slate-800 text-left bg-slate-900/40">Periodo / Tempo</th>
+                    <th class="px-4 py-3 text-sky-300 font-semibold border-b border-slate-800 text-center bg-slate-900/30">Fascia</th>
                     <th class="px-4 py-3 text-slate-300 font-semibold border-b border-slate-800 text-right bg-slate-900/20 border-l border-slate-800/60">Produzione Solare (kWh)</th>
                     <th class="px-4 py-3 text-amber-500 font-semibold border-b border-slate-800 text-right bg-slate-900/20">Immissione Diretta Rete FV (kWh)</th>
             `;
@@ -7417,9 +7445,11 @@
                 const revPpaPvVal = revPpaPv[i] !== undefined ? Math.round(revPpaPv[i]) : 0;
                 const revPpaBessVal = revPpaBess[i] !== undefined ? Math.round(revPpaBess[i]) : 0;
 
+                const fascia = getFasciaForRow(dates && dates[i] ? dates[i] : null, aggregation);
                 rowsHTML += `
                     <tr class="hover:bg-slate-900/40 border-b border-slate-850 transition-colors">
                         <td class="px-4 py-2.5 font-medium text-slate-300 bg-slate-900/10">${label}</td>
+                        <td class="px-4 py-2.5 text-center font-mono font-bold text-sky-300 bg-slate-900/20">${fascia}</td>
                         <td class="px-4 py-2.5 text-right font-mono text-slate-300 border-l border-slate-850/60">${sol.toLocaleString('it-IT')}</td>
                         <td class="px-4 py-2.5 text-right font-mono text-amber-500">${gridFeedPv.toLocaleString('it-IT')}</td>
                 `;
@@ -7515,7 +7545,7 @@
             const zones = activeData.selectedZones || ["CNOR"];
             const zonalPrices = activeData.zonalPrices || {};
 
-            let csv = "Periodo/Tempo;Generazione FV (kWh);Cessione FV alla Rete (kWh);";
+            let csv = "Periodo/Tempo;Fascia;Generazione FV (kWh);Cessione FV alla Rete (kWh);";
             if (hasStab) {
                 if (_isCer) {
                     csv += "Fabbisogno Virtuale Membri CER (kWh);Energia Condivisa Virtuale FV (kWh);Energia Condivisa BESS da Arbitraggio (kWh);Energia Condivisa BESS da Timeshifting (kWh);";
@@ -7566,7 +7596,8 @@
                 const loss = activeData.lossesRte[i] !== undefined ? formatDec(activeData.lossesRte[i]) : 0;
                 const soc = activeData.batSoC[i] !== undefined ? formatDec(activeData.batSoC[i]) : 0;
 
-                let rowStr = `"${dateStrVal}";${sol};${gridFeedPv}`;
+                const fasciaCsv = getFasciaForRow(dateVal, aggregation);
+                let rowStr = `"${dateStrVal}";${fasciaCsv};${sol};${gridFeedPv}`;
                 if (hasStab) {
                     const loadVal = activeData.stabLoad[i] !== undefined ? formatDec(activeData.stabLoad[i]) : 0;
                     const consSolar = activeData.selfConsSolar[i] !== undefined ? formatDec(activeData.selfConsSolar[i]) : 0;
@@ -7672,6 +7703,7 @@
 
                 const row = {};
                 row["Periodo / Tempo"] = dateStrVal;
+                row["Fascia"] = getFasciaForRow(dateVal, aggregation);
                 row["Generazione FV (kWh)"] = sol;
                 row["Cessione FV alla Rete (kWh)"] = gridFeedPv;
 
