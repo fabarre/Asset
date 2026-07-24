@@ -826,7 +826,11 @@
             } else {
                 const fileInput = document.getElementById('pvgis-file');
                 const hasFile = (fileInput && fileInput.files && fileInput.files.length > 0) || !!window._pvgisApiText;
-                if (hasFile) {
+                // BESS standalone (senza FV): consentito senza profilo PVGIS
+                const bessTypeVal = (document.getElementById('plant-bess-type') || {}).value;
+                const bessMwhVal = parseFloat((document.getElementById('plant-bess-mwh') || {}).value) || 0;
+                const isBessOnly = bessTypeVal && bessTypeVal !== 'none' && bessMwhVal > 0;
+                if (hasFile || isBessOnly) {
                     btn.disabled = false;
                     btn.className = "w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-lg text-xs cursor-pointer transition-colors flex items-center justify-center";
                 } else {
@@ -3877,10 +3881,13 @@
             reader.readAsArrayBuffer(file);
         };
 
-        function addPlantFromUI() {
+        async function addPlantFromUI() {
             const fileInput = document.getElementById('pvgis-file');
-            if (fileInput.files.length === 0 && !window._pvgisApiText) {
-                alert("Seleziona un file PVGIS (o scarica i dati da PVGIS API) prima di aggiungere l'impianto.");
+            const bessTypeCheck = document.getElementById('plant-bess-type').value;
+            const bessMwhCheck = parseFloat(document.getElementById('plant-bess-mwh').value) || 0;
+            const isBessOnlyCheck = bessTypeCheck !== 'none' && bessMwhCheck > 0;
+            if (fileInput.files.length === 0 && !window._pvgisApiText && !isBessOnlyCheck) {
+                alert("Seleziona un file PVGIS (o scarica i dati da PVGIS API) prima di aggiungere l'impianto.\n\nPer un impianto BESS standalone (senza FV) configura il BESS e premi di nuovo Aggiungi.");
                 return;
             }
             
@@ -3952,6 +3959,42 @@
 
             const marketType = document.getElementById('plant-market-type').value;
             const ferxTariff = parseFloat(document.getElementById('plant-ferx-tariff').value) || 0;
+
+            // ── BESS standalone (senza FV): profilo solare a zero, nessun PVGIS richiesto ──
+            if (isBessOnlyCheck && fileInput.files.length === 0 && !window._pvgisApiText) {
+                const newPlant = {
+                    id: "plant-" + Date.now(),
+                    name, capacity: cap || 0, zone, capex, opex,
+                    enabled: true,
+                    opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement,
+                    connectionCost, landType, landCost, developmentCost, spvAcquisitionCost,
+                    gridConnectionKw, gridVoltage,
+                    inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV,
+                    bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax,
+                    bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears,
+                    bessType, bessConnection,
+                    earnoutType, earnoutVal, earnoutYears,
+                    serviceType, serviceVal, serviceYears,
+                    traderContractType, traderSpread, traderDisp, pnrrContributionPct,
+                    marketType, ferxTariff,
+                    degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct,
+                    pvgisLatitude: null, pvgisLongitude: null, pvgisElevation: null,
+                    pvgisSlope: null, pvgisAzimuth: null, pvgisSystemLosses: null,
+                    pvgisTracking: null, pvgisDatabase: null,
+                    pvgisYield: null, pvgisAnnualProduction: null,
+                    generation: new Float64Array(8760) // nessun fotovoltaico: solo storage
+                };
+                const success = await savePlantToSupabase(newPlant);
+                if (success) {
+                    State.plants.push(newPlant);
+                    Audit.log('plant.add', newPlant.name + ' (BESS standalone)');
+                    renderPlantsList();
+                    renderZonalAverages();
+                    triggerRecalculate();
+                    updateFormSubmitButtonState();
+                }
+                return;
+            }
 
             const importArgs = [name, cap, zone, capex, opex, connectionCost, landType, landCost, developmentCost, spvAcquisitionCost, bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax, bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears, bessType, bessConnection, gridConnectionKw, gridVoltage, inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV, opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement, earnoutType, earnoutVal, earnoutYears, serviceType, serviceVal, serviceYears, traderContractType, traderSpread, traderDisp, pnrrContributionPct, degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct, marketType, ferxTariff];
             if (fileInput.files.length > 0) {
