@@ -186,6 +186,8 @@
                 : 'text-rose-400 text-[11px] font-semibold text-center bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2';
         }
         function onUserAuthenticated(user) {
+            State.currentUser = user || null;
+            updateAdminTabVisibility();
             const badge = document.getElementById('auth-user-badge');
             const logoutBtn = document.getElementById('btn-logout');
             if (badge && user && user.email) {
@@ -194,6 +196,72 @@
             }
             if (logoutBtn) logoutBtn.classList.remove('hidden');
         }
+        // ── Admin: scheda Gestione Utenti (visibile solo a app_metadata.role = 'admin') ──
+        function isCurrentUserAdmin() {
+            return !!(State.currentUser && State.currentUser.app_metadata && State.currentUser.app_metadata.role === 'admin');
+        }
+
+        function updateAdminTabVisibility() {
+            const btn = document.getElementById('btn-tab-users');
+            if (!btn) return;
+            const admin = isCurrentUserAdmin();
+            btn.classList.toggle('hidden', !admin);
+            btn.classList.toggle('flex', admin);
+        }
+
+        window.fetchAdminUsers = async function() {
+            const body = document.getElementById('users-table-body');
+            if (!body) return;
+            if (!isCurrentUserAdmin()) {
+                body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-rose-400">Accesso riservato al ruolo admin.</td></tr>';
+                return;
+            }
+            body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-500"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Caricamento utenti...</td></tr>';
+            try {
+                const { data, error } = await supabaseClient.rpc('admin_list_users');
+                if (error) throw error;
+                renderAdminUsers(data || []);
+            } catch (err) {
+                console.error('admin_list_users error:', err);
+                body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-rose-400">Errore: ' + escapeHtml(err.message) + '</td></tr>';
+            }
+        };
+
+        function renderAdminUsers(users) {
+            const body = document.getElementById('users-table-body');
+            if (!body) return;
+            if (!users.length) {
+                body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-500">Nessun utente registrato.</td></tr>';
+                return;
+            }
+            const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+            const oneHourAgo = Date.now() - 3600 * 1000;
+            let html = '';
+            users.forEach(u => {
+                const lastActivity = u.last_activity ? new Date(u.last_activity).getTime() : 0;
+                let semaforo, semaforoLabel;
+                if (u.sessions_active > 0 && lastActivity >= oneHourAgo) {
+                    semaforo = '\uD83D\uDFE2'; semaforoLabel = 'Online';
+                } else if (u.sessions_active > 0) {
+                    semaforo = '\uD83D\uDFE1'; semaforoLabel = 'Sessione valida';
+                } else {
+                    semaforo = '\u26AB'; semaforoLabel = 'Offline';
+                }
+                const isAdminUser = u.email === (State.currentUser && State.currentUser.email);
+                html += `
+                    <tr class="hover:bg-slate-900/40 border-b border-slate-850 transition-colors">
+                        <td class="py-2.5 pr-4 whitespace-nowrap" title="${semaforoLabel}">${semaforo} <span class="text-[9px] text-slate-500">${semaforoLabel}</span></td>
+                        <td class="py-2.5 pr-4 font-semibold ${isAdminUser ? 'text-emerald-400' : 'text-slate-200'}">${escapeHtml(u.email)}${isAdminUser ? ' <span class="text-[9px] bg-emerald-500/10 border border-emerald-500/30 rounded px-1 py-0.5 ml-1">ADMIN</span>' : ''}</td>
+                        <td class="py-2.5 pr-4 text-slate-400 whitespace-nowrap">${fmtDate(u.created_at)}</td>
+                        <td class="py-2.5 pr-4">${u.confirmed ? '<span class="text-emerald-400">\u2713 S\u00EC</span>' : '<span class="text-amber-400">In attesa</span>'}</td>
+                        <td class="py-2.5 pr-4 text-slate-400 whitespace-nowrap">${fmtDate(u.last_sign_in_at)}</td>
+                        <td class="py-2.5 pr-4 text-slate-400 whitespace-nowrap">${fmtDate(u.last_activity)}</td>
+                        <td class="py-2.5 text-center font-mono">${u.sessions_active}</td>
+                    </tr>`;
+            });
+            body.innerHTML = html;
+        }
+
         function registerAuthListener() {
             if (!supabaseClient || State._authListenerRegistered) return;
             State._authListenerRegistered = true;
@@ -390,7 +458,8 @@
                 'tab-hourly': 'btn-tab-hourly',
                 'tab-financials': 'btn-tab-financials',
                 'tab-stabilimenti': 'btn-tab-stabilimenti',
-                'tab-sensitivity': 'btn-tab-sensitivity'
+                'tab-sensitivity': 'btn-tab-sensitivity',
+                'tab-users': 'btn-tab-users'
             };
             
             document.querySelectorAll('nav button').forEach(btn => {
@@ -398,6 +467,9 @@
             });
             const activeNavBtn = document.getElementById(navMap[tabId]);
             if (activeNavBtn) activeNavBtn.className = "border-b-2 border-emerald-500 text-emerald-400 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2";
+            // Il forEach sopra rimuove 'hidden' dai bottoni: riapplica la visibilità admin
+            updateAdminTabVisibility();
+            if (tabId === 'tab-users') fetchAdminUsers();
             
             // Re-render chart on tab switches to ensure proper layout sizing
             if (tabId === 'tab-dashboard') {

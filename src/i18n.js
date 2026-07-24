@@ -505,6 +505,22 @@ const I18N_EN = {
     'Tornado (6 variabili)': 'Tornado (6 variables)',
     'Grafico Tornado (IRR)': 'Tornado Chart (IRR)',
     'Esegui il tornado per visualizzare i driver critici dell\'IRR.': 'Run the tornado to view the critical IRR drivers.',
+
+    // ── UTENTI tab (admin) ──
+    'UTENTI': 'USERS',
+    'Gestione Utenti': 'User Management',
+    'Utenti registrati, ultimi accessi e stato sessione. Visibile solo al ruolo admin.': 'Registered users, recent logins and session status. Admin role only.',
+    'Aggiorna': 'Refresh',
+    'Stato': 'Status',
+    'Registrato il': 'Registered on',
+    'Confermato': 'Confirmed',
+    'Ultimo accesso': 'Last sign-in',
+    'Ultima attività': 'Last activity',
+    'Sessioni attive': 'Active sessions',
+    'Caricamento...': 'Loading...',
+    '🟢 Online (attività < 1h)': '🟢 Online (activity < 1h)',
+    '🟡 Sessione valida ma inattiva': '🟡 Valid but idle session',
+    '⚫ Offline': '⚫ Offline',
 };
 
 const I18n = {
