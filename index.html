@@ -2692,24 +2692,30 @@
                                         <input type="radio" name="stab-load-source" value="csv" id="stab-load-csv" onchange="toggleLoadSource()" class="accent-amber-500">
                                         <span class="text-sm text-slate-300 font-medium">Importa da CSV</span>
                                     </label>
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input type="radio" name="stab-load-source" value="fasce" id="stab-load-fasce" onchange="toggleLoadSource()" class="accent-amber-500">
+                                        <span class="text-sm text-slate-300 font-medium">Genera da Fasce</span>
+                                    </label>
+                                </div>
+
+                                <!-- Tipologia Consumo (condivisa tra Genera automaticamente e Genera da Fasce) -->
+                                <div class="mb-4">
+                                    <label class="block text-[11px] text-slate-400 mb-1">Tipologia Consumo</label>
+                                    <select id="stab-shift-type" onchange="scheduleLoadPreview(); renderFasceTables();" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none">
+                                        <option value="office">Altri Usi - Solo Orario Ufficio (8-18h)</option>
+                                        <option value="two_shifts">Altri Usi - Due Turni (6-22h)</option>
+                                        <option value="three_shifts">Altri Usi - Tre Turni H24 (Continuo)</option>
+                                        <option value="domestic">Domestico</option>
+                                        <option value="public_lighting">Illuminazione pubblica</option>
+                                    </select>
                                 </div>
 
                                 <!-- Generator form -->
                                 <div id="stab-generator-form" class="space-y-4">
-                                    <div class="grid grid-cols-2 gap-4">
+                                    <div class="grid grid-cols-1 gap-4">
                                         <div>
                                             <label class="block text-[11px] text-slate-400 mb-1">Consumo Annuo (MWh/anno) *</label>
                                             <input type="number" id="stab-annual-consumption" value="" placeholder="es. 500" min="1" step="10" oninput="scheduleLoadPreview()" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none">
-                                        </div>
-                                        <div>
-                                            <label class="block text-[11px] text-slate-400 mb-1">Tipologia Consumo</label>
-                                            <select id="stab-shift-type" onchange="scheduleLoadPreview()" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none">
-                                                <option value="office">Altri Usi - Solo Orario Ufficio (8-18h)</option>
-                                                <option value="two_shifts">Altri Usi - Due Turni (6-22h)</option>
-                                                <option value="three_shifts">Altri Usi - Tre Turni H24 (Continuo)</option>
-                                                <option value="domestic">Domestico</option>
-                                                <option value="public_lighting">Illuminazione pubblica</option>
-                                            </select>
                                         </div>
                                     </div>
                                     <!-- Warnings for Illuminazione pubblica / Coordinates -->
@@ -2787,6 +2793,55 @@
                                     <div class="text-[10px] text-slate-600 bg-slate-900/40 rounded px-3 py-2 border border-slate-800">
                                         <i class="fa-solid fa-info-circle mr-1 text-amber-600"></i>
                                         Formato CSV: <code class="text-amber-500">hour_index,load_kw</code> — 8760 righe, valori in kW (potenza media oraria). Prima riga = intestazione.
+                                    </div>
+                                </div>
+
+                                <!-- Fasce form (F1/F2/F3) -->
+                                <div id="stab-fasce-form" class="hidden space-y-4">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-[11px] text-slate-400 mb-1">Consumo Annuo (MWh/anno) *</label>
+                                            <input type="number" id="stab-fasce-annual" value="" placeholder="es. 500" min="0" step="10" oninput="onFasceAnnualInput()" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none">
+                                        </div>
+                                        <div class="flex items-end pb-1">
+                                            <p class="text-[10px] text-slate-500 leading-relaxed">Il totale viene pre-ripartito su mesi e fasce in base alla Tipologia Consumo; ogni cella resta poi modificabile (kWh ↔ % sincronizzate).</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <label class="flex items-center space-x-2 bg-slate-950 border border-dashed border-slate-600 rounded-lg px-3 py-2 cursor-pointer hover:border-amber-500/50 transition-colors text-xs text-slate-400">
+                                            <i class="fa-solid fa-file-csv text-amber-400"></i>
+                                            <span>Importa CSV kWh</span>
+                                            <input type="file" id="stab-fasce-csv-kwh" accept=".csv" onchange="importFasceCsv('kwh', event)" class="hidden">
+                                        </label>
+                                        <label class="flex items-center space-x-2 bg-slate-950 border border-dashed border-slate-600 rounded-lg px-3 py-2 cursor-pointer hover:border-amber-500/50 transition-colors text-xs text-slate-400">
+                                            <i class="fa-solid fa-file-csv text-violet-400"></i>
+                                            <span>Importa CSV %</span>
+                                            <input type="file" id="stab-fasce-csv-pct" accept=".csv" onchange="importFasceCsv('pct', event)" class="hidden">
+                                        </label>
+                                        <button onclick="downloadFasceCsvTemplate('kwh')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-medium rounded-lg border border-slate-700 transition-colors">
+                                            <i class="fa-solid fa-download text-amber-400 mr-1"></i> Modello kWh
+                                        </button>
+                                        <button onclick="downloadFasceCsvTemplate('pct')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-medium rounded-lg border border-slate-700 transition-colors">
+                                            <i class="fa-solid fa-download text-violet-400 mr-1"></i> Modello %
+                                        </button>
+                                    </div>
+                                    <div id="stab-fasce-msg" class="hidden text-xs rounded-lg px-3 py-2"></div>
+
+                                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        <div>
+                                            <h5 class="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-2">Consumi per Fascia (kWh)</h5>
+                                            <div id="fasce-kwh-table" class="overflow-x-auto premium-scrollbar"></div>
+                                        </div>
+                                        <div>
+                                            <h5 class="text-[10px] font-bold text-violet-400 uppercase tracking-wider mb-2">Ripartizione Percentuale (%)</h5>
+                                            <div id="fasce-pct-table" class="overflow-x-auto premium-scrollbar"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded-lg px-4 py-2.5">
+                                        <span class="text-[11px] text-slate-400">Totale calcolato in tempo reale</span>
+                                        <span id="fasce-total-badge" class="text-xs font-bold text-amber-400 font-mono">0 kWh (0.0 MWh/anno)</span>
                                     </div>
                                 </div>
                             </div>

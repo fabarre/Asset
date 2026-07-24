@@ -1643,9 +1643,286 @@
         }
 
         function toggleLoadSource() {
-            const isGenerated = document.getElementById('stab-load-generated').checked;
-            document.getElementById('stab-generator-form').classList.toggle('hidden', !isGenerated);
-            document.getElementById('stab-csv-form').classList.toggle('hidden', isGenerated);
+            const radio = document.querySelector('input[name="stab-load-source"]:checked');
+            const mode = radio ? radio.value : 'generated';
+            document.getElementById('stab-generator-form').classList.toggle('hidden', mode !== 'generated');
+            document.getElementById('stab-csv-form').classList.toggle('hidden', mode !== 'csv');
+            document.getElementById('stab-fasce-form').classList.toggle('hidden', mode !== 'fasce');
+            if (mode === 'fasce') initFasceTables();
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // GENERA DA FASCE (F1/F2/F3 ARERA) — matrice 12 mesi × 3 fasce kWh ↔ %
+        // ═══════════════════════════════════════════════════════════════════
+        const FASCE_MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+        const FASCE_BANDS = ['F1','F2','F3'];
+        let fasceKwh = Array.from({ length: 12 }, () => [0, 0, 0]);
+        let fasceTablesBuilt = false;
+
+        // Banda ARERA: 0=F1 (lun-ven 8-19), 1=F2 (lun-ven 7-8,19-23 + sab 7-23), 2=F3 (notte/dom/festivi)
+        function getAreraBand(dow, hour, isHoliday) {
+            if (isHoliday || dow === 0) return 2;
+            if (dow === 6) return (hour >= 7 && hour < 23) ? 1 : 2;
+            if (hour >= 8 && hour < 19) return 0;
+            if (hour >= 7 && hour < 23) return 1;
+            return 2;
+        }
+
+        // Pesi di forma giornaliera per Tipologia Consumo (riusa le curve esistenti normalizzate)
+        function computeShiftWeights(shiftType, plantId) {
+            const worksSat = document.getElementById('stab-works-saturday') ? document.getElementById('stab-works-saturday').checked : true;
+            const worksSun = document.getElementById('stab-works-sunday') ? document.getElementById('stab-works-sunday').checked : true;
+            const worksHol = document.getElementById('stab-works-holidays') ? document.getElementById('stab-works-holidays').checked : true;
+            if (shiftType === 'public_lighting') {
+                const plant = State.plants.find(p => p.id === plantId);
+                const lat = plant ? plant.pvgisLatitude : null;
+                const lng = plant ? plant.pvgisLongitude : null;
+                return calculateTwilightCurve(1000, lat, lng);
+            }
+            if (shiftType === 'domestic') {
+                return generateDomesticCurve(1000, worksSat, worksSun, worksHol);
+            }
+            return generateLoadCurve(1000, worksSat, worksSun, worksHol, shiftType, null);
+        }
+
+        // Pre-ripartizione del consumo annuo su mesi/fasce secondo la Tipologia
+        function distributeAnnualToFasce() {
+            const annualMwh = parseFloat(document.getElementById('stab-fasce-annual').value) || 0;
+            const shiftType = document.getElementById('stab-shift-type').value;
+            const plantId = document.getElementById('stab-plant-id').value;
+            const w = computeShiftWeights(shiftType, plantId);
+            const monthWeight = new Float64Array(12);
+            const bandWeight = Array.from({ length: 12 }, () => [0, 0, 0]);
+            for (let d = 0; d < 365; d++) {
+                const m = getMonthOfHour(d * 24);
+                const dow = (3 + d) % 7;
+                const isHoliday = IT_HOLIDAYS_2025.has(d);
+                for (let h = 0; h < 24; h++) {
+                    const t = d * 24 + h;
+                    monthWeight[m] += w[t];
+                    bandWeight[m][getAreraBand(dow, h, isHoliday)] += w[t];
+                }
+            }
+            const totalW = monthWeight.reduce((a, b) => a + b, 0);
+            const annualKwh = annualMwh * 1000;
+            fasceKwh = Array.from({ length: 12 }, (_, m) => {
+                const monthK = totalW > 0 ? annualKwh * monthWeight[m] / totalW : annualKwh / 12;
+                return [0, 1, 2].map(b => monthWeight[m] > 0 ? monthK * bandWeight[m][b] / monthWeight[m] : monthK / 3);
+            });
+        }
+
+        function getFasceTotalKwh() {
+            return fasceKwh.reduce((acc, row) => acc + row[0] + row[1] + row[2], 0);
+        }
+
+        function onFasceAnnualInput() {
+            // Ridistribuisci mantenendo le quote interne di ogni mese (se già editata) o da Tipologia (se vergine)
+            const total = getFasceTotalKwh();
+            const annualMwh = parseFloat(document.getElementById('stab-fasce-annual').value) || 0;
+            if (total <= 0) {
+                distributeAnnualToFasce();
+            } else if (annualMwh > 0) {
+                const factor = (annualMwh * 1000) / total;
+                for (let m = 0; m < 12; m++) for (let b = 0; b < 3; b++) fasceKwh[m][b] *= factor;
+            }
+            renderFasceTables();
+        }
+
+        function initFasceTables() {
+            if (getFasceTotalKwh() <= 0 && (parseFloat(document.getElementById('stab-fasce-annual').value) || 0) > 0) {
+                distributeAnnualToFasce();
+            }
+            const kwhContainer = document.getElementById('fasce-kwh-table');
+            const pctContainer = document.getElementById('fasce-pct-table');
+            if (!kwhContainer || !pctContainer) return;
+
+            const headCell = (txt, cls) => `<th class="px-2 py-1.5 text-[9px] uppercase tracking-wider text-slate-400 border-b border-slate-800 ${cls || ''}">${txt}</th>`;
+            let kwhHtml = '<table class="w-full text-[11px]"><thead><tr>' + headCell('Mese', 'text-left') + headCell('F1') + headCell('F2') + headCell('F3') + headCell('Tot Mese', 'text-right') + '</tr></thead><tbody>';
+            let pctHtml = '<table class="w-full text-[11px]"><thead><tr>' + headCell('Mese', 'text-left') + headCell('F1') + headCell('F2') + headCell('F3') + '</tr></thead><tbody>';
+            for (let m = 0; m < 12; m++) {
+                kwhHtml += `<tr class="border-b border-slate-800/40"><td class="px-2 py-1 text-slate-400 whitespace-nowrap">${FASCE_MONTHS[m]}</td>`;
+                pctHtml += `<tr class="border-b border-slate-800/40"><td class="px-2 py-1 text-slate-400 whitespace-nowrap">${FASCE_MONTHS[m]}</td>`;
+                for (let b = 0; b < 3; b++) {
+                    kwhHtml += `<td class="px-1 py-0.5"><input type="number" min="0" step="any" data-m="${m}" data-b="${b}" oninput="onFasceKwhInput(${m},${b},this)" class="fasce-kwh-input w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-right font-mono text-amber-300 focus:border-amber-500 outline-none"></td>`;
+                    pctHtml += `<td class="px-1 py-0.5"><input type="number" min="0" max="100" step="any" data-m="${m}" data-b="${b}" oninput="onFascePctInput(${m},${b},this)" class="fasce-pct-input w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-right font-mono text-violet-300 focus:border-violet-500 outline-none"></td>`;
+                }
+                kwhHtml += `<td class="px-2 py-1 text-right font-mono font-bold text-slate-200 fasce-month-total" data-m="${m}">0</td></tr>`;
+                pctHtml += `</tr>`;
+            }
+            kwhHtml += '</tbody></table>';
+            pctHtml += '</tbody></table>';
+            kwhContainer.innerHTML = kwhHtml;
+            pctContainer.innerHTML = pctHtml;
+            fasceTablesBuilt = true;
+            renderFasceTables();
+        }
+
+        // Aggiorna % e totali dalla matrice kWh (source of truth), senza toccare gli input kWh
+        function renderFasceTables() {
+            if (!fasceTablesBuilt) { initFasceTables(); return; }
+            const fmtK = (v) => v > 0 ? Math.round(v).toLocaleString('it-IT') : '';
+            const fmtP = (v) => v > 0 ? v.toFixed(1) : '';
+            document.querySelectorAll('.fasce-kwh-input').forEach(el => {
+                const m = +el.dataset.m, b = +el.dataset.b;
+                const v = fasceKwh[m][b];
+                const txt = fmtK(v);
+                if (el.value !== txt && document.activeElement !== el) el.value = txt;
+            });
+            document.querySelectorAll('.fasce-pct-input').forEach(el => {
+                const m = +el.dataset.m, b = +el.dataset.b;
+                const monthTotal = fasceKwh[m][0] + fasceKwh[m][1] + fasceKwh[m][2];
+                const p = monthTotal > 0 ? (fasceKwh[m][b] / monthTotal * 100) : 0;
+                const txt = fmtP(p);
+                if (el.value !== txt && document.activeElement !== el) el.value = txt;
+            });
+            document.querySelectorAll('.fasce-month-total').forEach(el => {
+                const m = +el.dataset.m;
+                const t = fasceKwh[m][0] + fasceKwh[m][1] + fasceKwh[m][2];
+                el.textContent = t > 0 ? Math.round(t).toLocaleString('it-IT') : '—';
+            });
+            const totalKwh = getFasceTotalKwh();
+            const badge = document.getElementById('fasce-total-badge');
+            if (badge) badge.textContent = Math.round(totalKwh).toLocaleString('it-IT') + ' kWh (' + (totalKwh / 1000).toFixed(1) + ' MWh/anno)';
+        }
+
+        window.onFasceKwhInput = function(m, b, el) {
+            fasceKwh[m][b] = Math.max(0, parseFloat(String(el.value).replace(',', '.')) || 0);
+            renderFasceTables();
+        };
+
+        window.onFascePctInput = function(m, b, el) {
+            let p = parseFloat(String(el.value).replace(',', '.')) || 0;
+            p = Math.min(99.9, Math.max(0, p));
+            const others = fasceKwh[m][0] + fasceKwh[m][1] + fasceKwh[m][2] - fasceKwh[m][b];
+            // Imposta la quota banda a p% del totale mese, mantenendo invariati i kWh delle altre fasce
+            fasceKwh[m][b] = others > 0 ? (p / (100 - p)) * others : fasceKwh[m][b];
+            renderFasceTables();
+        };
+
+        // ── Import CSV fasce (kWh o %) ──
+        window.importFasceCsv = function(kind, event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const msgEl = document.getElementById('stab-fasce-msg');
+            const showMsg = (text, isError) => {
+                if (!msgEl) return;
+                msgEl.textContent = text;
+                msgEl.className = 'text-xs rounded-lg px-3 py-2 ' + (isError ? 'bg-rose-500/10 border border-rose-500/30 text-rose-400' : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400');
+            };
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const lines = e.target.result.trim().split(/\r?\n/).filter(l => l.trim());
+                    const rows = [];
+                    lines.forEach(line => {
+                        const sep = line.includes(';') ? ';' : (line.includes('\t') ? '\t' : ',');
+                        const parts = line.split(sep).map(x => x.trim());
+                        const nums = parts.map(x => parseFloat(String(x).replace(',', '.')));
+                        const valid = nums.filter(n => !isNaN(n));
+                        if (valid.length >= 3) rows.push(valid.slice(-3));
+                    });
+                    if (rows.length !== 12) throw new Error('Attese 12 righe valide (una per mese, 3 fasce), trovate ' + rows.length);
+
+                    if (kind === 'kwh') {
+                        for (let m = 0; m < 12; m++) {
+                            if (rows[m].some(v => v < 0)) throw new Error('Valori negativi al mese ' + FASCE_MONTHS[m]);
+                            fasceKwh[m] = [rows[m][0], rows[m][1], rows[m][2]];
+                        }
+                        renderFasceTables();
+                        showMsg('\u2713 Importati consumi kWh: tabella kWh alimentata, percentuali ricalcolate.', false);
+                    } else {
+                        const badMonths = [];
+                        rows.forEach((r, m) => {
+                            const sum = r[0] + r[1] + r[2];
+                            if (Math.abs(sum - 100) > 0.5) badMonths.push(FASCE_MONTHS[m] + ' (' + sum.toFixed(1) + '%)');
+                        });
+                        if (badMonths.length > 0) throw new Error('Somma percentuali \u2260 100% nei mesi: ' + badMonths.join(', '));
+                        // Se la matrice kWh è vuota, pre-ripartisci dal consumo annuo dichiarato
+                        if (getFasceTotalKwh() <= 0) {
+                            const annualMwh = parseFloat(document.getElementById('stab-fasce-annual').value) || 0;
+                            if (annualMwh <= 0) throw new Error('Definisci prima il Consumo Annuo (MWh/anno) per scalare le percentuali importate.');
+                            distributeAnnualToFasce();
+                        }
+                        for (let m = 0; m < 12; m++) {
+                            const monthTotal = fasceKwh[m][0] + fasceKwh[m][1] + fasceKwh[m][2];
+                            if (monthTotal > 0) {
+                                fasceKwh[m] = [monthTotal * rows[m][0] / 100, monthTotal * rows[m][1] / 100, monthTotal * rows[m][2] / 100];
+                            }
+                        }
+                        renderFasceTables();
+                        showMsg('\u2713 Importate percentuali (100%/mese verificato): tabella kWh calcolata di conseguenza.', false);
+                    }
+                    Audit.log('stab.fasce_import', kind + ' CSV');
+                } catch (err) {
+                    showMsg('\u2717 ' + err.message, true);
+                } finally {
+                    event.target.value = '';
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        window.downloadFasceCsvTemplate = function(kind) {
+            let csv = kind === 'kwh'
+                ? 'mese;F1_kwh;F2_kwh;F3_kwh\n'
+                : 'mese;F1_pct;F2_pct;F3_pct\n';
+            for (let m = 0; m < 12; m++) {
+                csv += (m + 1) + (kind === 'kwh' ? ';0;0;0\n' : ';33,3;33,3;33,4\n');
+            }
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            a.href = url;
+            a.download = kind === 'kwh' ? 'modello_fasce_kwh.csv' : 'modello_fasce_pct.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        // ── Ricostruzione curva 8760h dalla matrice fasce ──
+        function buildCurveFromFasce(shiftType, plantId) {
+            const w = computeShiftWeights(shiftType, plantId);
+            const load = new Float64Array(8760);
+            const bandWeight = Array.from({ length: 12 }, () => [0, 0, 0]);
+            const bandHours = Array.from({ length: 12 }, () => [0, 0, 0]);
+            const bandOf = new Int8Array(8760);
+            for (let d = 0; d < 365; d++) {
+                const m = getMonthOfHour(d * 24);
+                const dow = (3 + d) % 7;
+                const isHoliday = IT_HOLIDAYS_2025.has(d);
+                for (let h = 0; h < 24; h++) {
+                    const t = d * 24 + h;
+                    const b = getAreraBand(dow, h, isHoliday);
+                    bandOf[t] = b;
+                    bandWeight[m][b] += w[t];
+                    bandHours[m][b]++;
+                }
+            }
+            for (let t = 0; t < 8760; t++) {
+                const m = getMonthOfHour(t);
+                const b = bandOf[t];
+                const E = fasceKwh[m][b];
+                if (E <= 0) continue;
+                const W = bandWeight[m][b];
+                // kWh della fascia distribuiti sulle ore della fascia secondo i pesi della Tipologia
+                load[t] = W > 0 ? E * w[t] / W : E / Math.max(1, bandHours[m][b]);
+            }
+            return load;
+        }
+
+        // In edit mode: ricostruisce la matrice fasce dalla curva salvata (aggregazione mese/fascia)
+        function rebuildFasceMatrixFromCurve(curve) {
+            fasceKwh = Array.from({ length: 12 }, () => [0, 0, 0]);
+            for (let d = 0; d < 365; d++) {
+                const m = getMonthOfHour(d * 24);
+                const dow = (3 + d) % 7;
+                const isHoliday = IT_HOLIDAYS_2025.has(d);
+                for (let h = 0; h < 24; h++) {
+                    const t = d * 24 + h;
+                    fasceKwh[m][getAreraBand(dow, h, isHoliday)] += curve[t];
+                }
+            }
+            const annualEl = document.getElementById('stab-fasce-annual');
+            if (annualEl) annualEl.value = (getFasceTotalKwh() / 1000).toFixed(1);
         }
 
         function onStabCsvSelected() {
@@ -1908,12 +2185,13 @@
 
             populatePlantSelectForStabilimento(id);
             document.getElementById('stab-plant-id').value = s.plantId || '';
-            if (s.loadSource === 'csv') {
-                document.getElementById('stab-load-csv').checked = true;
-            } else {
-                document.getElementById('stab-load-generated').checked = true;
-            }
+            const srcRadio = document.getElementById(s.loadSource === 'fasce' ? 'stab-load-fasce' : (s.loadSource === 'csv' ? 'stab-load-csv' : 'stab-load-generated'));
+            if (srcRadio) srcRadio.checked = true;
             toggleLoadSource();
+            if (s.loadSource === 'fasce' && s.load) {
+                rebuildFasceMatrixFromCurve(s.load);
+                renderFasceTables();
+            }
 
             // UI: switch to edit mode
             document.getElementById('stab-form-title').textContent = 'Modifica: ' + s.name;
@@ -1946,6 +2224,12 @@
             document.getElementById('stab-load-generated').checked = true;
             toggleLoadSource();
             stabLoadedCurve = null;
+            fasceKwh = Array.from({ length: 12 }, () => [0, 0, 0]);
+            const fasceAnnualEl = document.getElementById('stab-fasce-annual');
+            if (fasceAnnualEl) fasceAnnualEl.value = '';
+            if (fasceTablesBuilt) renderFasceTables();
+            const fasceMsg = document.getElementById('stab-fasce-msg');
+            if (fasceMsg) fasceMsg.classList.add('hidden');
             // Reset the annual consumption to empty (user must explicitly fill it)
             document.getElementById('stab-annual-consumption').value = '';
             // Hide confirmation badges
@@ -1984,8 +2268,9 @@
             const ppaType   = document.getElementById('stab-ppa-type').value;
             const ppaPrice  = parseFloat(document.getElementById('stab-ppa-price').value);
             const ppaDur    = parseInt(document.getElementById('stab-ppa-duration').value);
-            const loadSrc   = document.getElementById('stab-load-generated').checked ? 'generated' : 'csv';
-            const annualMwh = parseFloat(document.getElementById('stab-annual-consumption').value) || 0;
+            const loadSrcRadio = document.querySelector('input[name="stab-load-source"]:checked');
+            const loadSrc   = loadSrcRadio ? loadSrcRadio.value : 'generated';
+            let annualMwh   = parseFloat(document.getElementById('stab-annual-consumption').value) || 0;
             const worksSat  = document.getElementById('stab-works-saturday').checked;
             const worksSun  = document.getElementById('stab-works-sunday').checked;
             const worksHol  = document.getElementById('stab-works-holidays').checked;
@@ -2022,6 +2307,15 @@
             let loadCurve;
             if (loadSrc === 'generated') {
                 loadCurve = generateLoadCurve(annualMwh, worksSat, worksSun, worksHol, shiftType, plantId);
+            } else if (loadSrc === 'fasce') {
+                const totalKwh = getFasceTotalKwh();
+                if (totalKwh <= 0) {
+                    msgEl.textContent = 'La tabella Fasce \u00E8 vuota: inserisci un Consumo Annuo o valori kWh maggiori di zero.';
+                    msgEl.classList.remove('hidden');
+                    return;
+                }
+                loadCurve = buildCurveFromFasce(shiftType, plantId);
+                annualMwh = totalKwh / 1000;
             } else {
                 loadCurve = stabLoadedCurve || (existingStab ? existingStab.load : null);
             }
