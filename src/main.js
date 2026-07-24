@@ -2135,6 +2135,10 @@
                 return false;
             }
              try {
+                if (!currentUserId()) {
+                    alert("Autenticazione richiesta per salvare i dati.");
+                    return false;
+                }
                 let { error } = await supabaseClient.from('stabilimenti').upsert({
                     id: stab.id, name: stab.name, plant_id: stab.plantId,
                     ppa_type: stab.ppaType, ppa_price: stab.ppaPrice, ppa_duration: stab.ppaDuration,
@@ -2142,7 +2146,8 @@
                     works_saturday: stab.worksSaturday, works_sunday: stab.worksSunday,
                     works_holidays: stab.worksHolidays, shift_type: stab.shiftType,
                     load_source: stab.loadSource,
-                    cer_share_type: stab.cerShareType
+                    cer_share_type: stab.cerShareType,
+                    user_id: currentUserId()
                 });
                 if (error) {
                     if (error.message && (error.message.includes('cer_share_type') || error.code === 'PGRST204')) {
@@ -2153,7 +2158,8 @@
                             annual_consumption_mwh: stab.annualConsumption,
                             works_saturday: stab.worksSaturday, works_sunday: stab.worksSunday,
                             works_holidays: stab.worksHolidays, shift_type: stab.shiftType,
-                            load_source: stab.loadSource
+                            load_source: stab.loadSource,
+                            user_id: currentUserId()
                         });
                         error = retryError;
                     }
@@ -2167,7 +2173,7 @@
                 // Save load curve in chunks
                 if (stab.load) {
                     const rows = [];
-                    for (let t = 0; t < 8760; t++) rows.push({ stabilimento_id: stab.id, hour_index: t, load_kw: stab.load[t] });
+                    for (let t = 0; t < 8760; t++) rows.push({ stabilimento_id: stab.id, hour_index: t, load_kw: stab.load[t], user_id: currentUserId() });
                     const chunkSize = 1000;
                     for (let i = 0; i < rows.length; i += chunkSize) {
                         const chunk = rows.slice(i, i + chunkSize);
@@ -2800,7 +2806,8 @@
                 Object.keys(p).forEach(key => {
                     rows.push({
                         parameter_key: key,
-                        parameter_value: String(p[key])
+                        parameter_value: String(p[key]),
+                        user_id: currentUserId()
                     });
                 });
                 
@@ -2808,19 +2815,21 @@
                 if (State.selectedBessPlantIds) {
                     rows.push({
                         parameter_key: 'selectedBessPlantIds',
-                        parameter_value: JSON.stringify(Array.from(State.selectedBessPlantIds))
+                        parameter_value: JSON.stringify(Array.from(State.selectedBessPlantIds)),
+                        user_id: currentUserId()
                     });
                 }
                 if (State.selectedGmePlantIds) {
                     rows.push({
                         parameter_key: 'selectedGmePlantIds',
-                        parameter_value: JSON.stringify(Array.from(State.selectedGmePlantIds))
+                        parameter_value: JSON.stringify(Array.from(State.selectedGmePlantIds)),
+                        user_id: currentUserId()
                     });
                 }
                 
                 const { error } = await supabaseClient
                     .from('simulation_config')
-                    .upsert(rows, { onConflict: 'parameter_key' });
+                    .upsert(rows, { onConflict: 'parameter_key,user_id' });
                 
                 if (error) throw error;
                 ConfigHistory.record(JSON.stringify(State.inputs));
@@ -3001,11 +3010,12 @@
                 }
                 
                 if (!configData || configData.length === 0) {
-                    throw new Error("La tabella simulation_config è vuota in Supabase. Impossibile procedere senza fallback.");
-                }
-
-                const dbKeys = configData.map(r => r.parameter_key);
-                
+                    // Nuovo utente senza configurazione: semina i default letti dalla UI
+                    // e li persiste come configurazione personale (multi-tenancy per-utente)
+                    console.warn("Nessuna configurazione per questo utente: inizializzo i valori di default.");
+                    syncStateFromDOM();
+                    await saveConfigToSupabase();
+                } else {
                 configData.forEach(row => {
                     const key = row.parameter_key;
                     const val = row.parameter_value;
@@ -3167,6 +3177,7 @@
                             console.error("Errore nel parsing di disabledStabilimenti:", err);
                         }
                     }
+                } // fine ramo config esistente
                 
                 // Carica gli scenari nominati salvati
                 await loadScenariosFromSupabase();
@@ -3310,11 +3321,11 @@
         // Scrittura chunkata di uno scenario (parameter_value varchar(255) -> righe da 200 char)
         async function writeScenarioRows(id, name, payload) {
             const json = JSON.stringify(payload);
-            const rows = [{ parameter_key: SCENARIO_PREFIX + id + '::name', parameter_value: String(name).substring(0, 250) }];
+            const rows = [{ parameter_key: SCENARIO_PREFIX + id + '::name', parameter_value: String(name).substring(0, 250), user_id: currentUserId() }];
             for (let i = 0; i * 200 < json.length; i++) {
-                rows.push({ parameter_key: SCENARIO_PREFIX + id + '::data::' + i, parameter_value: json.substring(i * 200, (i + 1) * 200) });
+                rows.push({ parameter_key: SCENARIO_PREFIX + id + '::data::' + i, parameter_value: json.substring(i * 200, (i + 1) * 200), user_id: currentUserId() });
             }
-            const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key' });
+            const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key,user_id' });
             if (error) throw error;
         }
 
@@ -3444,9 +3455,17 @@
         }
 
         // Save single plant to Supabase
+        function currentUserId() {
+            return (State.currentUser && State.currentUser.id) ? State.currentUser.id : null;
+        }
+
         async function savePlantToSupabase(plant) {
             if (!supabaseClient) {
                 alert("Database non connesso. Impossibile salvare l'impianto nel database.");
+                return false;
+            }
+            if (!currentUserId()) {
+                alert("Autenticazione richiesta per salvare i dati.");
                 return false;
             }
             const statusEl = document.getElementById('sync-status');
@@ -3518,7 +3537,8 @@
                     ferx_tariff_eur_mwh: plant.ferxTariff !== undefined ? plant.ferxTariff : 0,
                     degrade_rid_pct: plant.degradeRidPct !== undefined ? plant.degradeRidPct : 0,
                     degrade_timeshifting_pct: plant.degradeTimeshiftingPct !== undefined ? plant.degradeTimeshiftingPct : 0,
-                    degrade_arbitrage_pct: plant.degradeArbitragePct !== undefined ? plant.degradeArbitragePct : 0
+                    degrade_arbitrage_pct: plant.degradeArbitragePct !== undefined ? plant.degradeArbitragePct : 0,
+                    user_id: currentUserId()
                 };
 
                 let { error: plantError } = await supabaseClient
@@ -3542,7 +3562,8 @@
                     rows.push({
                         plant_id: plant.id,
                         hour_index: t,
-                        generation_kw: plant.generation[t]
+                        generation_kw: plant.generation[t],
+                        user_id: currentUserId()
                     });
                 }
                 
@@ -7630,9 +7651,11 @@
                 // Prepare consolidated hourly telemetry rows
                 const telemetryRows = [];
                 const r = State.results;
+                const telemetryUid = currentUserId();
                 for (let t = 0; t < 8760; t++) {
                     telemetryRows.push({
                         hour_index: t,
+                        user_id: telemetryUid,
                         generation_kw: r.combinedSolarProfile[t],
                         price_eur_mwh: r.generalMedionePrices[t],
                         bess_soc_kwh: r.bessSimulation.hourlySoC[t],
@@ -7665,7 +7688,7 @@
                     // Send to Supabase Table 'hourly_telemetry'
                     const { error } = await supabaseClient
                         .from('hourly_telemetry')
-                        .upsert(chunk, { onConflict: 'hour_index' });
+                        .upsert(chunk, { onConflict: 'hour_index,user_id' });
                     
                     if (error) throw error;
                 }

@@ -47,8 +47,9 @@ const Audit = {
         if (this.entries.length > this.MAX_ENTRIES) this.entries.pop();
         if (typeof supabaseClient !== 'undefined' && supabaseClient) {
             try {
+                const uid = (typeof currentUserId === 'function') ? currentUserId() : null;
                 await supabaseClient.from('simulation_config')
-                    .upsert({ parameter_key: key, parameter_value: payload }, { onConflict: 'parameter_key' });
+                    .upsert({ parameter_key: key, parameter_value: payload, user_id: uid }, { onConflict: 'parameter_key,user_id' });
                 this._prune();
             } catch (err) {
                 console.warn('[Audit] scrittura fallita:', err.message);
