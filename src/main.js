@@ -214,7 +214,14 @@
                 triggerRecalculate();
             } catch (err) {
                 console.error('Boot dopo autenticazione fallito:', err);
-                alert('Errore nel caricamento dei dati:\n' + err.message + '\n\nSe le policy RLS sono restrittive, è necessario autenticarsi.');
+                // RLS restrittive o errore dati: riproponi il login invece di lasciare l'app bloccata
+                showAuthOverlay();
+                const statusEl = document.getElementById('sync-status');
+                if (statusEl) {
+                    statusEl.textContent = "Stato Connessione: Accesso negato - login richiesto";
+                    statusEl.className = "text-xs text-rose-400 font-bold";
+                }
+                showAuthError('Accesso ai dati negato: autenticati per continuare. (' + err.message + ')');
             } finally {
                 State.isLoading = false;
                 showCalcIndicator(false);
