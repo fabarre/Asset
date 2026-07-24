@@ -1,7 +1,8 @@
 {
   "scripts": {
     "test": "node tests/test_worker.mjs",
-    "test:e2e": "node tests/e2e_validate.js"
+    "test:e2e": "node tests/e2e_validate.js",
+    "sb": "node tools/sb.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
