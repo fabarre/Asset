@@ -1204,7 +1204,8 @@ async function exportPnlToExcel() {
         const secRow = sheetHc.getRow(currentRowNumHc - 1);
         if (secRow) secRow.getCell(1).value = 'SERVIZIO PRIVATE DEBT (HOLDING LEVEL)';
         addRowHc('pdInterestPaid', '  (-) Interessi Private Debt Pagati dalla Holding (€)', 'minus', m.pdInterestPaid, numberFormatEuro, (col) => {
-            return `AMMORTAMENTO!${col}${rowMapDebt['interestPaidPd']}`;
+            // AMMORTAMENTO interestPaidPd è in segno positivo (riga plus): qui va negato
+            return `-(AMMORTAMENTO!${col}${rowMapDebt['interestPaidPd']})`;
         });
         addRowHc('pdPrincipalPaid', '  (-) Quota Capitale Private Debt (Ammortamento) (€)', 'minus', m.pdPrincipalPaid, numberFormatEuro, (col) => {
             return `AMMORTAMENTO!${col}${rowMapDebt['principalPaidPd']}`;
