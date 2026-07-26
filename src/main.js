@@ -5225,7 +5225,7 @@
                 'dsraDraw','dsraFunding','dsraRelease',
                 'holdcoInterestReceived','holdcoLoanRepaymentReceived','spvLockedDividends','holdcoDividendReceived',
                 'dividendsPaid',
-                'holdcoInflowTotal','holdcoOpex','holdcoEarnoutPaid','holdcoIresTaxPaid','holdcoNetProfit',
+                'holdcoInflowTotal','holdcoOpex','holdcoEarnoutPaid','holdcoIresTaxPaid','holdcoIrapTaxPaid','holdcoNetProfit',
                 'exitValuationGroup', 'exitEnterpriseValue', 'exitDebtPayoff', 'exitPexTaxRow',
                 'pdBulletPayoff','peExitShare','afExitCost',
                 'exitLimitedLiability',
@@ -5403,6 +5403,7 @@
                 { key: 'holdcoOpex', label: '  (-) Spese Funzionamento Holding (€)', type: 'minus' },
                 { key: 'holdcoEarnoutPaid', label: '  (-) Earn-Out Holding (€)', type: 'minus' },
                 { key: 'holdcoIresTaxPaid', label: '  (-) Imposta IRES HoldCo (24% su interessi netti e 5% dividendi) (€)', type: 'bold-rose' },
+                { key: 'holdcoIrapTaxPaid', label: '  (-) Imposta IRAP HoldCo (3,9% su Valore Produzione Netta) (€)', type: 'bold-rose' },
                 { key: 'holdcoNetProfit', label: 'UTILE NETTO HOLDING CIVILISTICO (€)', type: 'bold' },
                 { key: 'hc_reconcileLoanRepayment', label: '  (+) Rimborso Capitale Finanziamento Soci (Cassa Patrimoniale) (€)', type: 'plus' },
                 ...(p.pdEnabled ? [
@@ -5751,6 +5752,7 @@
                 setCell('holdcoOpex', m.holdcoOpex[i], true, formatMinusEuro);
                 setCell('holdcoEarnoutPaid', m.holdcoEarnoutPaid[i], true, formatMinusEuro);
                 setCell('holdcoIresTaxPaid', m.holdcoIresTaxPaid[i], true, formatMinusEuro);
+                if (m.holdcoIrapTaxPaid) setCell('holdcoIrapTaxPaid', m.holdcoIrapTaxPaid[i], true, formatMinusEuro);
                 setCell('holdcoNetProfit', m.holdcoNetProfit[i]);
                 setCell('hc_reconcileLoanRepayment', m.holdcoLoanRepaymentReceived[i], true, formatPlusEuro);
                 // exitValuationGroup: mostra sempre un valore esplicito nell'anno exit

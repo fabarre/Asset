@@ -1912,7 +1912,7 @@ function runSensitivityLoop(baseState, config) {
                 currentTaxesSpv: [], iresTaxSpv: [], irapTaxSpv: [], deferredTaxes: [], civilTaxesSpv: [], netProfitSpv: [], cfads: [],
                 deductibleInterest: [], interestCF: [], rolCF: [], taxLossCF: [],
                 dividendsPaid: [], holdcoFCFE: [], rolCapacity: [], bessAugmentationCost: [], mraRelease: [],
-                maintReserve: [], holdcoOpex: [], holdcoIresTaxPaid: [], holdcoNetProfit: [], holdcoEarnoutPaid: [], holdcoBuyoutPaid: [],
+                maintReserve: [], holdcoOpex: [], holdcoIresTaxPaid: [], holdcoIrapTaxPaid: [], holdcoNetProfit: [], holdcoEarnoutPaid: [], holdcoBuyoutPaid: [],
                 holdcoInflowTotal: [], holdcoInterestReceived: [], holdcoLoanRepaymentReceived: [], holdcoDividendReceived: [], partnerDividendReceived: [], spvLockedDividends: [],
                 cfadsCumulated: [], holdcoFCFECumulated: [], principalScheduled: [], principalVoluntary: [],
                 dsraFunding: [], dsraDraw: [], dsraRelease: [],
@@ -2805,8 +2805,14 @@ function runSensitivityLoop(baseState, config) {
                 // HoldCo Level Inflows (Sponsor ownership = 100% dei flussi intra-gruppo, al netto quote PE)
                 const yHoldcoOpex = 15000 * inflationMultiplier;
                 // Aggiungiamo yOpexAssetManagement come ricavo per la Holdco
-                const taxableHoldcoRevenues = yTotalInterestPaid + (0.05 * yPeDividendToSponsor) + yOpexAssetManagement;
+                // HoldCo IRES: se gli interessi PD sono deducibili (flag pdTaxDeductible),
+                // riducono la base imponibile Holding (prima era un no-op: bug corretto)
+                const yPdInterestDeductibleHoldco = (p.pdEnabled && p.pdTaxDeductible !== false) ? yPdInterestPaid : 0;
+                const taxableHoldcoRevenues = yTotalInterestPaid + (0.05 * yPeDividendToSponsor) + yOpexAssetManagement - yPdInterestDeductibleHoldco;
                 const yHoldcoIresTaxPaid = Math.max(0, taxableHoldcoRevenues - yHoldcoOpex) * p.iresRate;
+                // HoldCo IRAP: base = valore della produzione (fees Asset Mgt intra-gruppo) - costi operativi Holding.
+                // Interessi attivi/passivi e dividendi sono esclusi dalla base IRAP (D.Lgs. 446/97).
+                const yHoldcoIrapTaxPaid = Math.max(0, yOpexAssetManagement - yHoldcoOpex) * p.irapRate;
 
                 // ── EXIT: payoff PD bullet, quota PE, costi AF (success fee / warrant / convertible) ──
                 let exitNetProceeds = 0;
@@ -2877,7 +2883,7 @@ function runSensitivityLoop(baseState, config) {
                     // Deve ripagare: saldo PD (capitale + interessi PIK se bullet) + servizio PD dell'anno (se annual/amortizing).
                     if (p.pdEnabled && pdAmount > 0) {
                         // Cassa Holding disponibile a exit = cumulato FCFE Sponsor + exitNetProceeds
-                        const holdcoCashAtExit = cumulativeHoldcoFCFE + exitNetProceeds + (yTotalInterestPaid + yTotalLoanRepayment + yPeDividendToSponsor + yOpexAssetManagement - yHoldcoOpex - yHoldcoIresTaxPaid - yHoldcoEarnoutPaid);
+                        const holdcoCashAtExit = cumulativeHoldcoFCFE + exitNetProceeds + (yTotalInterestPaid + yTotalLoanRepayment + yPeDividendToSponsor + yOpexAssetManagement - yHoldcoOpex - yHoldcoIresTaxPaid - yHoldcoIrapTaxPaid - yHoldcoEarnoutPaid);
                         // Payoff PD bullet/residuo
                         yPdBulletPayoffHoldco = yPdBulletPayoff; // saldo PD catturato (bullet_exit o residuo annual/amortizing)
                         // Il payoff è cappato alla cassa Holding (limited liability Holding)
@@ -2895,7 +2901,7 @@ function runSensitivityLoop(baseState, config) {
                     // Per bullet_exit il servizio annuo è 0 (PIK); il payoff è a exit (yPdBulletPayoffHoldco).
                     yPdInterestPaidHoldco = yPdInterestPaid; // cassa pagata dalla Holding per interessi PD annuali
                     // FCFE Sponsor = flussi intra-gruppo (quota Sponsor) + exit net proceeds - servizio PD Holding - payoff PD Holding
-                    yHoldcoFCFE = yTotalInterestPaid + yTotalLoanRepayment + yPeDividendToSponsor - yHoldcoOpex - yHoldcoIresTaxPaid - yHoldcoEarnoutPaid + exitNetProceeds + yOpexAssetManagement - yPdInterestPaidHoldco - yPdBulletPayoffHoldco - yPdPrincipalPaid;
+                    yHoldcoFCFE = yTotalInterestPaid + yTotalLoanRepayment + yPeDividendToSponsor - yHoldcoOpex - yHoldcoIresTaxPaid - yHoldcoIrapTaxPaid - yHoldcoEarnoutPaid + exitNetProceeds + yOpexAssetManagement - yPdInterestPaidHoldco - yPdBulletPayoffHoldco - yPdPrincipalPaid;
                     totalHoldcoFCFE += yHoldcoFCFE;
                     cashFlowsForIRR.push(yHoldcoFCFE);
                     
@@ -3036,7 +3042,8 @@ function runSensitivityLoop(baseState, config) {
                 matrix.maintReserve.push(yMaintReserve);
                 matrix.holdcoOpex.push(yHoldcoOpex);
                 matrix.holdcoIresTaxPaid.push(yHoldcoIresTaxPaid);
-                matrix.holdcoNetProfit.push(yTotalInterestPaid + yPeDividendToSponsor + yOpexAssetManagement - yHoldcoOpex - yHoldcoIresTaxPaid - yHoldcoEarnoutPaid);
+                matrix.holdcoIrapTaxPaid.push(yHoldcoIrapTaxPaid);
+                matrix.holdcoNetProfit.push(yTotalInterestPaid + yPeDividendToSponsor + yOpexAssetManagement - yHoldcoOpex - yHoldcoIresTaxPaid - yHoldcoIrapTaxPaid - yHoldcoEarnoutPaid);
                 matrix.holdcoEarnoutPaid.push(yHoldcoEarnoutPaid);
                 matrix.holdcoBuyoutPaid.push(0);
                 matrix.holdcoInflowTotal.push(yTotalInterestPaid + yTotalLoanRepayment + yPeDividendToSponsor + yOpexAssetManagement);

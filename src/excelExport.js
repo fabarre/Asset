@@ -1041,12 +1041,12 @@ async function exportPnlToExcel() {
         if (yearIdx === 0) {
             return `0`;
         } else {
-            const prevIsExit = (yearIdx - 1 === numYears - 1) ? 'TRUE' : 'FALSE';
+            const prevIsExit = (yearIdx - 1 === numYears - 1) ? 'TRUE()' : 'FALSE()';
             return `IF(FINANZA!$B$${rowMapFin['dividendLock']}="Sì", IF(AND(AMMORTAMENTO!${prevCol}${rowMapDebt['endingBalance']} > 0.01, NOT(${prevIsExit})), ${prevCol}${rowMapRf.spvLockedDividends} + MAX(0, ${prevCol}${rowMapRf.spvFCFE} + ${prevCol}${rowMapRf.holdcoInterestReceived} + ${prevCol}${rowMapRf.holdcoLoanRepaymentReceived}), 0), 0)`;
         }
     });
     addRowRf('holdcoDividendReceived', '  (-) Dividendi SPV Distribuiti a HoldCo (⇒ Sez. C) (€)', 'minus', m.holdcoDividendReceived, numberFormatEuro, (col, yearIdx) => {
-        const isExitYear = yearIdx === numYears - 1 ? 'TRUE' : 'FALSE';
+        const isExitYear = yearIdx === numYears - 1 ? 'TRUE()' : 'FALSE()';
         return `-IF(FINANZA!$B$${rowMapFin['dividendLock']}="Sì", IF(AND(AMMORTAMENTO!${col}${rowMapDebt['endingBalance']} > 0.01, NOT(${isExitYear})), 0, MAX(0, ${col}${rowMapRf.spvFCFE} + ${col}${rowMapRf.holdcoInterestReceived} + ${col}${rowMapRf.holdcoLoanRepaymentReceived}) + ${col}${rowMapRf.spvLockedDividends}), MAX(0, ${col}${rowMapRf.spvFCFE} + ${col}${rowMapRf.holdcoInterestReceived} + ${col}${rowMapRf.holdcoLoanRepaymentReceived}))`;
     });
     
@@ -1174,12 +1174,22 @@ async function exportPnlToExcel() {
     
     addRowHc('holdcoOpex', '  (-) Spese Funzionamento Holding (€)', 'minus', m.holdcoOpex, numberFormatEuro);
     addRowHc('holdcoEarnoutPaid', '  (-) Earn-Out Holding (€)', 'minus', m.holdcoEarnoutPaid, numberFormatEuro);
-    addRowHc('holdcoIresTaxPaid', '  (-) Imposta IRES HoldCo (24% su interessi netti e 5% dividendi) (€)', 'bold-rose', m.holdcoIresTaxPaid, numberFormatEuro);
+    // IRES HoldCo: 24% su (interessi + 5% dividendi + asset mgt - opex - interessi PD se deducibili)
+    const _pdDedHc = window.State.inputs.pdEnabled && window.State.inputs.pdTaxDeductible !== false;
+    addRowHc('holdcoIresTaxPaid', '  (-) Imposta IRES HoldCo (24% su interessi netti e 5% dividendi) (€)', 'bold-rose', m.holdcoIresTaxPaid, numberFormatEuro, (col) => {
+        let f = `-MAX(0, ${col}${rowMapHc.hc_holdcoInterestReceived}+0.05*${col}${rowMapHc.hc_holdcoDividendReceived}+${col}${rowMapHc.hc_holdcoAssetManagementReceived}+${col}${rowMapHc.holdcoOpex}`;
+        if (_pdDedHc && rowMapHc.pdInterestPaid) f += `+${col}${rowMapHc.pdInterestPaid}`;
+        f += `)*'DRIVER OPERATIVI'!$B$${rowMap.iresRateConst}`;
+        return f;
+    });
+    addRowHc('holdcoIrapTaxPaid', '  (-) Imposta IRAP HoldCo (3,9% su Valore Produzione Netta) (€)', 'bold-rose', m.holdcoIrapTaxPaid, numberFormatEuro, (col) => {
+        return `-MAX(0, ${col}${rowMapHc.hc_holdcoAssetManagementReceived}+${col}${rowMapHc.holdcoOpex})*'DRIVER OPERATIVI'!$B$${rowMap.irapRateConst}`;
+    });
     
     sheetHc.addRow([]); currentRowNumHc++;
     
     addRowHc('holdcoNetProfit', 'UTILE NETTO HOLDING CIVILISTICO (€)', 'bold', m.holdcoNetProfit, numberFormatEuro, (col) => {
-        return `${col}${rowMapHc.hc_holdcoInterestReceived}+${col}${rowMapHc.hc_holdcoDividendReceived}+${col}${rowMapHc.hc_holdcoAssetManagementReceived}+${col}${rowMapHc.holdcoOpex}+${col}${rowMapHc.holdcoEarnoutPaid}+${col}${rowMapHc.holdcoIresTaxPaid}`;
+        return `${col}${rowMapHc.hc_holdcoInterestReceived}+${col}${rowMapHc.hc_holdcoDividendReceived}+${col}${rowMapHc.hc_holdcoAssetManagementReceived}+${col}${rowMapHc.holdcoOpex}+${col}${rowMapHc.holdcoEarnoutPaid}+${col}${rowMapHc.holdcoIresTaxPaid}+${col}${rowMapHc.holdcoIrapTaxPaid}`;
     });
     
     addRowHc('hc_reconcileLoanRepayment', '  (+) Rimborso Capitale Finanziamento Soci (Cassa Patrimoniale) (€)', 'plus', m.holdcoLoanRepaymentReceived, numberFormatEuro, (col) => {
