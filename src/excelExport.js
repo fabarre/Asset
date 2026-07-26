@@ -220,6 +220,26 @@ async function exportPnlToExcel() {
     const totalKwp = window.State.plants.reduce((sum, p) => p.enabled !== false ? sum + (parseFloat(p.capacity) || 0) : sum, 0);
     addRow('totKwp', 'Potenza Totale Impianti (kWp)', 'bold', Array(numYears).fill(totalKwp), '#,##0');
 
+    // ── Parametri fiscali (driver formule CE) ──
+    const _res = window.State.results;
+    const _idcAmount = (p.loanTerm > 0 && (_res.debtAmount || 0) > 0)
+        ? _res.debtAmount * (p.interestRate || 0) * (((p.constructionMonths !== undefined ? p.constructionMonths : 6) / 12)) * (((p.idcDrawdownFactor !== undefined ? p.idcDrawdownFactor : 50)) / 100)
+        : 0;
+    const _fiscalBase = (_res.totalEpcCapex || 0) + (_res.bessCAPEX || 0) + (_res.totalConnectionCapex || 0)
+        + (_res.totalLandDdsAttualizzatoCapex || 0) + (_res.totalDevelopmentCapex || 0) + _idcAmount;
+    let _bessAugCost = 0;
+    window.State.plants.filter(pl => pl.enabled !== false).forEach(pl => {
+        if ((pl.bessMw || 0) > 0 && pl.bessType !== 'graphene' && (pl.bessMwh || 0) > 0) {
+            _bessAugCost += (pl.bessMwh * 1000 * (pl.bessCapexKwh !== undefined ? pl.bessCapexKwh : 300)) * 0.5;
+        }
+    });
+    addRow('fiscalDeprRateConst', 'Aliquota Ammortamento Fiscale (%)', 'bold', Array(numYears).fill(p.fiscalDeprRate || 0.09), numberFormatPct);
+    addRow('iresRateConst', 'Aliquota IRES (%)', 'bold', Array(numYears).fill(p.iresRate !== undefined ? p.iresRate : 0.24), numberFormatPct);
+    addRow('irapRateConst', 'Aliquota IRAP (%)', 'bold', Array(numYears).fill(p.irapRate !== undefined ? p.irapRate : 0.039), numberFormatPct);
+    addRow('fiscalBaseConst', 'Base Amm.to Fiscale (incl. IDC) (€)', 'bold', Array(numYears).fill(_fiscalBase), numberFormatEuro);
+    addRow('idcConst', 'IDC Capitalizzato (€)', 'bold', Array(numYears).fill(_idcAmount), numberFormatEuro);
+    addRow('bessAugConst', 'CAPEX Sostituzione BESS - anno 10 (€)', 'bold', Array(numYears).fill(_bessAugCost), numberFormatEuro);
+
     // Riga Vuota
     sheetOp.addRow([]); currentRowNum++;
 
@@ -708,15 +728,121 @@ async function exportPnlToExcel() {
     
     sheetCe.addRow([]); currentRowNumCe++;
     
-    addRowCe('currentTaxesSpv', '  (-) Imposte Correnti SPV (IRES 24% + IRAP 3.9%) (€)', 'minus', m.currentTaxesSpv, numberFormatEuro);
-    addRowCe('iresTaxSpv', 'di cui: IRES (24% su EBT +/- Variazioni Fiscali) (€)', 'detail', m.iresTaxSpv, numberFormatEuro);
-    addRowCe('irapTaxSpv', 'di cui: IRAP (3.9% su EBIT + Costi Indeducibili) (€)', 'detail', m.irapTaxSpv, numberFormatEuro);
-    addRowCe('deferredTaxes', '  (-/+) Variazione Imposte Differite (⇒ Sez. B) (€)', 'detail', m.deferredTaxes, numberFormatEuro);
+    // ── CALCOLO FISCALE DI SUPPORTO (formule: Amm.to Fiscale, Art. 96, Art. 84, Differite) ──
+    const _zeroArr = Array(numYears).fill(0);
+    addRowCe('taxSupportHdr', 'CALCOLO FISCALE DI SUPPORTO (Amm.to Fiscale, Art. 96/84 TUIR)', 'group-header', null, '');
+    
+    // Ammortamento fiscale (anno 1 dimezzato) + Aug BESS da anno 11
+    addRowCe('taxFiscalDeprBase', 'Amm.to Fiscale Base - anno 1 al 50% (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+        const base = `'DRIVER OPERATIVI'!$B$${rowMap.fiscalBaseConst}`;
+        const rate = `'DRIVER OPERATIVI'!$B$${rowMap.fiscalDeprRateConst}`;
+        if (yi === 0) return `MIN(${base}*${rate}/2, ${base})`;
+        const prevCol = getColLetter(yi + 1);
+        return `MIN(${base}*${rate}, ${prevCol}${rowMapCe.taxFiscalRemaining})`;
+    });
+    addRowCe('taxFiscalRemaining', 'Base Fiscale Residua (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+        const base = `'DRIVER OPERATIVI'!$B$${rowMap.fiscalBaseConst}`;
+        if (yi === 0) return `${base}-${col}${rowMapCe.taxFiscalDeprBase}`;
+        const prevCol = getColLetter(yi + 1);
+        return `MAX(0, ${prevCol}${rowMapCe.taxFiscalRemaining}-${col}${rowMapCe.taxFiscalDeprBase})`;
+    });
+    addRowCe('taxAugDepr', 'Amm.to Fiscale Aug BESS - da anno 11 (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+        const aug = `'DRIVER OPERATIVI'!$B$${rowMap.bessAugConst}`;
+        const rate = `'DRIVER OPERATIVI'!$B$${rowMap.fiscalDeprRateConst}`;
+        const prevCol = getColLetter(yi + 1);
+        return `IF(${yi + 1}>10, MIN(${aug}*${rate}, ${prevCol}${rowMapCe.taxAugRemaining}), 0)`;
+    });
+    addRowCe('taxAugRemaining', 'Base Fiscale Aug BESS Residua (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+        const aug = `'DRIVER OPERATIVI'!$B$${rowMap.bessAugConst}`;
+        if (yi <= 9) return `${aug}`;
+        const prevCol = getColLetter(yi + 1);
+        return `MAX(0, ${prevCol}${rowMapCe.taxAugRemaining}-${col}${rowMapCe.taxAugDepr})`;
+    });
+    addRowCe('taxFiscalDepr', 'Amm.to Fiscale Totale (€)', 'detail', _zeroArr, numberFormatEuro, (col) => {
+        return `${col}${rowMapCe.taxFiscalDeprBase}+${col}${rowMapCe.taxAugDepr}`;
+    });
+    
+    // Art. 96 TUIR — deducibilità interessi passivi entro ROL 30%
+    addRowCe('taxRolCapacity', 'ROL 30% EBITDA - Art. 96 (€)', 'detail', m.rolCapacity, numberFormatEuro, (col) => {
+        return `MAX(0, 0.3*${col}${rowMapCe.ebitda})`;
+    });
+    addRowCe('taxNetInterest', 'Interessi Passivi Netti - Art. 96 (€)', 'detail', _zeroArr, numberFormatEuro, (col) => {
+        let f = `MAX(0, -${col}${rowMapCe.interest}-${col}${rowMapCe.sociInterestAccrued}`;
+        if (rowMapCe.afInterestAccrued) f += `-${col}${rowMapCe.afInterestAccrued}`;
+        f += `-${col}${rowMapCe.interestActive})`;
+        return f;
+    });
+    addRowCe('taxDeductibleInterest', 'Interessi Deducibili - Art. 96 (€)', 'detail', m.deductibleInterest, numberFormatEuro, (col, yi) => {
+        const prevRol = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxRolCF}` : '0';
+        return `${col}${rowMapCe.interestActive}+MIN(${col}${rowMapCe.taxNetInterest}, ${col}${rowMapCe.taxRolCapacity}+${prevRol})`;
+    });
+    addRowCe('taxRolCF', 'ROL Riportato a Nuovo - Art. 96 (€)', 'detail', m.rolCF, numberFormatEuro, (col, yi) => {
+        const prevRol = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxRolCF}` : '0';
+        return `MAX(0, ${prevRol}+${col}${rowMapCe.taxRolCapacity}-MIN(${col}${rowMapCe.taxNetInterest}, ${col}${rowMapCe.taxRolCapacity}+${prevRol}))`;
+    });
+    
+    // IRES — imponibile, NOL primi 3 anni (100%) e ordinaria (80%)
+    addRowCe('taxTaxableIres', 'Imponibile IRES Lordo (€)', 'detail', _zeroArr, numberFormatEuro, (col) => {
+        return `${col}${rowMapCe.ebitda}+${col}${rowMapCe.interestActive}-${col}${rowMapCe.taxDeductibleInterest}-${col}${rowMapCe.taxFiscalDepr}`;
+    });
+    addRowCe('taxNolFirst3Applied', 'NOL Primi 3 Anni Utilizzata - 100% (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+        const prev = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxLossFirst3CF}` : '0';
+        return `IF(${col}${rowMapCe.taxTaxableIres}>0, MIN(${col}${rowMapCe.taxTaxableIres}, ${prev}), 0)`;
+    });
+    addRowCe('taxLossFirst3CF', 'NOL Primi 3 Anni Riportata (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+        const prev = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxLossFirst3CF}` : '0';
+        const newLoss = yi < 3 ? `MAX(0, -${col}${rowMapCe.taxTaxableIres})` : '0';
+        return `MAX(0, ${prev}-${col}${rowMapCe.taxNolFirst3Applied})+${newLoss}`;
+    });
+    addRowCe('taxNolNormalApplied', 'NOL Ordinaria Utilizzata - 80% (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+        const prev = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxLossNormalCF}` : '0';
+        return `IF(${col}${rowMapCe.taxTaxableIres}-${col}${rowMapCe.taxNolFirst3Applied}>0, MIN((${col}${rowMapCe.taxTaxableIres}-${col}${rowMapCe.taxNolFirst3Applied})*0.8, ${prev}), 0)`;
+    });
+    addRowCe('taxLossNormalCF', 'NOL Ordinaria Riportata (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+        const prev = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxLossNormalCF}` : '0';
+        const newLoss = yi >= 3 ? `MAX(0, -${col}${rowMapCe.taxTaxableIres})` : '0';
+        return `MAX(0, ${prev}-${col}${rowMapCe.taxNolNormalApplied})+${newLoss}`;
+    });
+    addRowCe('taxTaxableFinal', 'Imponibile IRES Netto - post NOL (€)', 'detail', _zeroArr, numberFormatEuro, (col) => {
+        return `MAX(0, ${col}${rowMapCe.taxTaxableIres}-${col}${rowMapCe.taxNolFirst3Applied}-${col}${rowMapCe.taxNolNormalApplied})`;
+    });
+    
+    // IRAP — base = EBIT + IMU + quota IDC civilistico
+    addRowCe('taxCivilIdc', 'Quota IDC in Amm.to Civilistico - IRAP (€)', 'detail', _zeroArr, numberFormatEuro, (col) => {
+        return `-${col}${rowMapCe.depreciationCivil}*('DRIVER OPERATIVI'!$B$${rowMap.idcConst}/'DRIVER OPERATIVI'!$B$${rowMap.fiscalBaseConst})`;
+    });
+    addRowCe('taxIrapBase', 'Base Imponibile IRAP (€)', 'detail', _zeroArr, numberFormatEuro, (col) => {
+        return `MAX(0, ${col}${rowMapCe.ebit}-${col}${rowMapCe.opexTaxes}+${col}${rowMapCe.taxCivilIdc})`;
+    });
+    
+    // Imposte Differite — delta (fiscale - civilistico) x aliquote, con fondo e reversal
+    addRowCe('taxDeferredRaw', 'Delta Amm.to x Aliquote (€)', 'detail', _zeroArr, numberFormatEuro, (col) => {
+        return `(${col}${rowMapCe.taxFiscalDepr}+${col}${rowMapCe.depreciationCivil})*('DRIVER OPERATIVI'!$B$${rowMap.iresRateConst}+'DRIVER OPERATIVI'!$B$${rowMap.irapRateConst})`;
+    });
+    
+    addRowCe('currentTaxesSpv', '  (-) Imposte Correnti SPV (IRES 24% + IRAP 3.9%) (€)', 'minus', m.currentTaxesSpv, numberFormatEuro, (col) => {
+        return `-(${col}${rowMapCe.iresTaxSpv}+${col}${rowMapCe.irapTaxSpv})`;
+    });
+    addRowCe('iresTaxSpv', 'di cui: IRES (24% su EBT +/- Variazioni Fiscali) (€)', 'detail', m.iresTaxSpv, numberFormatEuro, (col) => {
+        return `${col}${rowMapCe.taxTaxableFinal}*'DRIVER OPERATIVI'!$B$${rowMap.iresRateConst}`;
+    });
+    addRowCe('irapTaxSpv', 'di cui: IRAP (3.9% su EBIT + Costi Indeducibili) (€)', 'detail', m.irapTaxSpv, numberFormatEuro, (col) => {
+        return `${col}${rowMapCe.taxIrapBase}*'DRIVER OPERATIVI'!$B$${rowMap.irapRateConst}`;
+    });
+    addRowCe('deferredTaxes', '  (-/+) Variazione Imposte Differite (⇒ Sez. B) (€)', 'detail', m.deferredTaxes, numberFormatEuro, (col, yi) => {
+        const prevFund = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxDeferredFund}` : '0';
+        return `IF(${col}${rowMapCe.taxDeferredRaw}<0, -MIN(ABS(${col}${rowMapCe.taxDeferredRaw}), MAX(0, ${prevFund})), ${col}${rowMapCe.taxDeferredRaw})`;
+    });
+    addRowCe('taxDeferredFund', 'Fondo Imposte Differite - saldo (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+        const prevFund = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxDeferredFund}` : '0';
+        return `${prevFund}+${col}${rowMapCe.deferredTaxes}`;
+    });
     
     sheetCe.addRow([]); currentRowNumCe++;
     
     addRowCe('netProfitSpv', 'UTILE NETTO CIVILISTICO SPV (⇒ Sez. B) (€)', 'bold', m.netProfitSpv, numberFormatEuro, (col) => {
-        return `${col}${rowMapCe.ebt}+${col}${rowMapCe.currentTaxesSpv}+${col}${rowMapCe.deferredTaxes}`;
+        // netProfit = EBT - (correnti + differite); correnti già negative, differite da sottrarre
+        return `${col}${rowMapCe.ebt}+${col}${rowMapCe.currentTaxesSpv}-${col}${rowMapCe.deferredTaxes}`;
     });
 
     // Applicazione Formule Ce a posteriori (dopo che rowMapCe è completa)
