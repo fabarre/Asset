@@ -1363,6 +1363,46 @@ async function exportPnlToExcel() {
     addFinRow('sweepYears', 'Durata Cash Sweep (Anni, 0=Sempre)');
     sheetFin.getCell(`B${rowMapFin['sweepYears']}`).value = paramsFin.sweepYears;
 
+    // --- Preammortamento, DSCR Sculpting, Refinancing (parametri per formule AMMORTAMENTO) ---
+    addFinRow('seniorGracePeriodMonths', 'Preammortamento Senior (Mesi)');
+    sheetFin.getCell(`B${rowMapFin['seniorGracePeriodMonths']}`).value = paramsFin.seniorGracePeriodMonths !== undefined ? paramsFin.seniorGracePeriodMonths : 6;
+
+    addFinRow('sculptingEnabled', 'DSCR Sculpting (Rata Sagomata)');
+    sheetFin.getCell(`B${rowMapFin['sculptingEnabled']}`).value = paramsFin.sculptingEnabled ? 'Sì' : 'No';
+
+    addFinRow('targetDscr', 'Target DSCR Sculpting (x)');
+    sheetFin.getCell(`B${rowMapFin['targetDscr']}`).value = paramsFin.targetDscr !== undefined ? paramsFin.targetDscr : 1.30;
+    sheetFin.getCell(`B${rowMapFin['targetDscr']}`).numFmt = '0.00"x"';
+
+    addFinRow('refiEnabled', 'Refinancing / Miniperm Attivo');
+    sheetFin.getCell(`B${rowMapFin['refiEnabled']}`).value = paramsFin.refiEnabled ? 'Sì' : 'No';
+
+    addFinRow('refiYear', 'Anno Refinancing');
+    sheetFin.getCell(`B${rowMapFin['refiYear']}`).value = paramsFin.refiYear !== undefined ? paramsFin.refiYear : 7;
+
+    addFinRow('refiInterestRate', 'Nuovo Tasso Refinancing (%)');
+    sheetFin.getCell(`B${rowMapFin['refiInterestRate']}`).value = (paramsFin.refiInterestRate !== undefined ? paramsFin.refiInterestRate : 5.0) / 100;
+    sheetFin.getCell(`B${rowMapFin['refiInterestRate']}`).numFmt = numberFormatPct;
+
+    addFinRow('refiLoanTerm', 'Nuova Durata Refinancing (Anni)');
+    sheetFin.getCell(`B${rowMapFin['refiLoanTerm']}`).value = paramsFin.refiLoanTerm !== undefined ? paramsFin.refiLoanTerm : 10;
+
+    // Costanti derivate (formule su parametri sopra)
+    addFinRow('graceCappedYears', 'Preammortamento in Anni (capped)');
+    sheetFin.getCell(`B${rowMapFin['graceCappedYears']}`).value = { formula: `MIN(B${rowMapFin['seniorGracePeriodMonths']}/12, MAX(0, B${rowMapFin['loanTerm']}-1))` };
+
+    addFinRow('graceFullYears', 'Preammortamento - Anni Interi');
+    sheetFin.getCell(`B${rowMapFin['graceFullYears']}`).value = { formula: `INT(B${rowMapFin['graceCappedYears']})` };
+
+    addFinRow('graceFrac', 'Preammortamento - Frazione Anno');
+    sheetFin.getCell(`B${rowMapFin['graceFrac']}`).value = { formula: `B${rowMapFin['graceCappedYears']}-B${rowMapFin['graceFullYears']}` };
+
+    addFinRow('amortizingYears', 'Anni Effettivi Ammortamento');
+    sheetFin.getCell(`B${rowMapFin['amortizingYears']}`).value = { formula: `MAX(0.1, B${rowMapFin['loanTerm']}-B${rowMapFin['graceCappedYears']})` };
+
+    addFinRow('activeMaturity', 'Scadenza Effettiva Debito Senior');
+    sheetFin.getCell(`B${rowMapFin['activeMaturity']}`).value = { formula: `IF(B${rowMapFin['refiEnabled']}="Sì", MIN(20, B${rowMapFin['refiYear']}-1+B${rowMapFin['refiLoanTerm']}), B${rowMapFin['loanTerm']})` };
+
     sheetFin.addRow([]); currentRowFin++;
 
     // --- FINANZIAMENTO SOCI E HOLDING ---
@@ -1685,12 +1725,36 @@ async function exportPnlToExcel() {
         const prevCol = getColLetter(yearIdx + 1);
         return `${prevCol}${rowMapDebt.endingBalance}`;
     });
+    // Righe di supporto: tasso attivo (gestisce refinancing) e rata annuitaria attiva
+    addRowDebt('activeRate', 'Tasso Debito Attivo (post-Refi) (%)', 'detail', d.interestAccrued.map(() => 0), numberFormatPct, (col, yearIdx) => {
+        return `IF(AND(FINANZA!$B$${rowMapFin['refiEnabled']}="Sì", ${yearIdx + 1} >= FINANZA!$B$${rowMapFin['refiYear']}), FINANZA!$B$${rowMapFin['refiInterestRate']}, FINANZA!$B$${rowMapFin['interestRate']})`;
+    });
+    addRowDebt('activeAnnuity', 'Rata Annuitaria Attiva (€)', 'detail', d.interestAccrued.map(() => 0), numberFormatEuro, (col, yearIdx) => {
+        if (yearIdx === 0) {
+            return `PMT(FINANZA!$B$${rowMapFin['interestRate']}, FINANZA!$B$${rowMapFin['amortizingYears']}, -FINANZA!$B$${rowMapFin['debt']})`;
+        }
+        const prevCol = getColLetter(yearIdx + 1);
+        return `IF(AND(FINANZA!$B$${rowMapFin['refiEnabled']}="Sì", ${yearIdx + 1} = FINANZA!$B$${rowMapFin['refiYear']}), PMT(${col}${rowMapDebt.activeRate}, FINANZA!$B$${rowMapFin['refiLoanTerm']}, -${col}${rowMapDebt.beginningBalance}), ${prevCol}${rowMapDebt.activeAnnuity})`;
+    });
     addRowDebt('interestAccrued', '(-) Quota Interessi Mutuo Maturati (€)', 'minus', d.interestAccrued, numberFormatEuro, (col, yearIdx) => {
-        return `-IF(${yearIdx + 1} <= FINANZA!$B$${rowMapFin['loanTerm']}, MAX(0, ${col}${rowMapDebt['beginningBalance']}) * FINANZA!$B$${rowMapFin['interestRate']}, 0)`;
+        return `-IF(${yearIdx + 1} <= FINANZA!$B$${rowMapFin['activeMaturity']}, MAX(0, ${col}${rowMapDebt['beginningBalance']}) * ${col}${rowMapDebt.activeRate}, 0)`;
     });
     addRowDebt('principalScheduled', '(-) Quota Capitale Programmata (€)', 'minus', d.principalScheduled, numberFormatEuro, (col, yearIdx) => {
         const yearNum = yearIdx + 1;
-        return `-IF(${yearNum} <= FINANZA!$B$${rowMapFin['loanTerm']}, MAX(0, MIN(${col}${rowMapDebt['beginningBalance']}, PMT(FINANZA!$B$${rowMapFin['interestRate']}, FINANZA!$B$${rowMapFin['loanTerm']}, -FINANZA!$B$${rowMapFin['debt']}) + ${col}${rowMapDebt['interestAccrued']})), 0)`;
+        const graceFull = `FINANZA!$B$${rowMapFin['graceFullYears']}`;
+        const graceFrac = `FINANZA!$B$${rowMapFin['graceFrac']}`;
+        const sculpt = `FINANZA!$B$${rowMapFin['sculptingEnabled']}="Sì"`;
+        const target = `FINANZA!$B$${rowMapFin['targetDscr']}`;
+        const cfads = `'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf['cfads']}`;
+        const begin = `${col}${rowMapDebt['beginningBalance']}`;
+        const intF = `-${col}${rowMapDebt['interestAccrued']}`; // interessi dell'anno (positivi)
+        const annuity = `${col}${rowMapDebt['activeAnnuity']}`;
+        const maturity = `FINANZA!$B$${rowMapFin['activeMaturity']}`;
+        // Quota capitale da annuità: in anno misto grazia -> (rata - interessi) x (1 - frazione grazia)
+        const baseAmort = `IF(AND(${graceFrac}>0, ${yearNum}=${graceFull}+1), (${annuity}-${intF})*(1-${graceFrac}), ${annuity}-${intF})`;
+        // Sculpting: post-grace -> CFADS/target - interessi; a scadenza -> balloon totale
+        const sculptBranch = `IF(${yearNum}=${maturity}, MAX(0, ${begin}), MIN(MAX(0, ${begin}), MAX(0, ${cfads}/${target}-${intF})))`;
+        return `-IF(${yearNum} > ${maturity}, 0, IF(${yearNum} <= ${graceFull}, 0, IF(${sculpt}, ${sculptBranch}, MIN(MAX(0, ${begin}), MAX(0, ${baseAmort})))))`;
     });
     addRowDebt('principalVoluntary', '(-) Quota Capitale Prepagata - Cash Sweep (€)', 'minus', d.principalVoluntary, numberFormatEuro, (col, yearIdx) => {
         const yearNum = yearIdx + 1;
