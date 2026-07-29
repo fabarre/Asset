@@ -2437,7 +2437,7 @@
                     alert("Autenticazione richiesta per salvare i dati.");
                     return false;
                 }
-                let { error } = await supabaseClient.from('stabilimenti').upsert({
+                const stabPayload = {
                     id: stab.id, name: stab.name, plant_id: stab.plantId,
                     ppa_type: stab.ppaType, ppa_price: stab.ppaPrice, ppa_duration: stab.ppaDuration,
                     annual_consumption_mwh: stab.annualConsumption,
@@ -2446,20 +2446,36 @@
                     load_source: stab.loadSource,
                     cer_share_type: stab.cerShareType,
                     user_id: currentUserId()
-                });
-                if (error) {
-                    if (error.message && (error.message.includes('cer_share_type') || error.code === 'PGRST204')) {
-                        console.warn("Colonna 'cer_share_type' non presente nel database stabilimenti. Riprovo senza questa colonna. Si consiglia di applicare la migrazione 'supabase_cer_migration.sql'.");
-                        const { error: retryError } = await supabaseClient.from('stabilimenti').upsert({
-                            id: stab.id, name: stab.name, plant_id: stab.plantId,
-                            ppa_type: stab.ppaType, ppa_price: stab.ppaPrice, ppa_duration: stab.ppaDuration,
-                            annual_consumption_mwh: stab.annualConsumption,
-                            works_saturday: stab.worksSaturday, works_sunday: stab.worksSunday,
-                            works_holidays: stab.worksHolidays, shift_type: stab.shiftType,
-                            load_source: stab.loadSource,
-                            user_id: currentUserId()
-                        });
-                        error = retryError;
+                };
+
+                let { data: upData, error } = await supabaseClient
+                    .from('stabilimenti')
+                    .update(stabPayload)
+                    .eq('id', stab.id)
+                    .eq('user_id', currentUserId())
+                    .select();
+
+                if (!error && (!upData || upData.length === 0)) {
+                    const { error: insErr } = await supabaseClient
+                        .from('stabilimenti')
+                        .insert(stabPayload);
+                    error = insErr;
+                }
+
+                if (error && error.message && (error.message.includes('cer_share_type') || error.code === 'PGRST204')) {
+                    delete stabPayload.cer_share_type;
+                    let { data: upDataRetry, error: retryError } = await supabaseClient
+                        .from('stabilimenti')
+                        .update(stabPayload)
+                        .eq('id', stab.id)
+                        .eq('user_id', currentUserId())
+                        .select();
+                    error = retryError;
+                    if (!retryError && (!upDataRetry || upDataRetry.length === 0)) {
+                        const { error: insErr } = await supabaseClient
+                            .from('stabilimenti')
+                            .insert(stabPayload);
+                        error = insErr;
                     }
                 }
                 if (error) {
@@ -2468,14 +2484,20 @@
                     return false;
                 }
 
-                // Save load curve in chunks
+                // Save load curve via DELETE + INSERT (evita ON CONFLICT)
                 if (stab.load) {
+                    await supabaseClient
+                        .from('stabilimento_load')
+                        .delete()
+                        .eq('stabilimento_id', stab.id)
+                        .eq('user_id', currentUserId());
+
                     const rows = [];
                     for (let t = 0; t < 8760; t++) rows.push({ stabilimento_id: stab.id, hour_index: t, load_kw: stab.load[t], user_id: currentUserId() });
                     const chunkSize = 1000;
                     for (let i = 0; i < rows.length; i += chunkSize) {
                         const chunk = rows.slice(i, i + chunkSize);
-                        const { error: le } = await supabaseClient.from('stabilimento_load').upsert(chunk, { onConflict: 'stabilimento_id,hour_index' });
+                        const { error: le } = await supabaseClient.from('stabilimento_load').insert(chunk);
                         if (le) {
                             console.error('Errore salvataggio curva carico:', le);
                             alert(`Errore nel salvataggio della curva di consumo del profilo: ${le.message}\nVerifica i permessi/RLS della tabella.`);
@@ -3839,39 +3861,69 @@
                     user_id: currentUserId()
                 };
 
-                let { error: plantError } = await supabaseClient
+                // 1. Prova UPDATE prima (evita clausola ON CONFLICT)
+                const { data: updateData, error: updateErr } = await supabaseClient
                     .from('plants')
-                    .upsert(payload);
+                    .update(payload)
+                    .eq('id', plant.id)
+                    .eq('user_id', currentUserId())
+                    .select();
+
+                let plantError = updateErr;
+                if (!updateErr && (!updateData || updateData.length === 0)) {
+                    // Impianto nuovo: esegui INSERT diretto
+                    const { error: insertErr } = await supabaseClient
+                        .from('plants')
+                        .insert(payload);
+                    plantError = insertErr;
+                }
                 
                 if (plantError && (plantError.message && (plantError.message.includes('pnrr_contribution_pct') || plantError.code === 'PGRST204'))) {
-                    console.warn("Colonna 'pnrr_contribution_pct' non presente nel database impianti. Riprovo senza questa colonna. Si consiglia di applicare la migrazione 'migration_cer_rid_params.sql'.");
+                    console.warn("Colonna 'pnrr_contribution_pct' non presente nel database impianti. Riprovo senza questa colonna.");
                     delete payload.pnrr_contribution_pct;
-                    const { error: retryError } = await supabaseClient
+                    const { data: updateDataRetry, error: retryErr } = await supabaseClient
                         .from('plants')
-                        .upsert(payload);
-                    plantError = retryError;
+                        .update(payload)
+                        .eq('id', plant.id)
+                        .eq('user_id', currentUserId())
+                        .select();
+                    plantError = retryErr;
+                    if (!retryErr && (!updateDataRetry || updateDataRetry.length === 0)) {
+                        const { error: insErr } = await supabaseClient
+                            .from('plants')
+                            .insert(payload);
+                        plantError = insErr;
+                    }
                 }
                 
                 if (plantError) throw plantError;
                 
-                // 2. Prepare generation rows
-                const rows = [];
-                for (let t = 0; t < 8760; t++) {
-                    rows.push({
-                        plant_id: plant.id,
-                        hour_index: t,
-                        generation_kw: plant.generation[t],
-                        user_id: currentUserId()
-                    });
-                }
-                
-                const chunkSize = 1000;
-                for (let i = 0; i < rows.length; i += chunkSize) {
-                    const chunk = rows.slice(i, i + chunkSize);
-                    const { error: genError } = await supabaseClient
+                // 2. Rigenera le righe di produzione tramite DELETE + INSERT (evita ON CONFLICT)
+                if (plant.generation) {
+                    await supabaseClient
                         .from('plant_generation')
-                        .upsert(chunk, { onConflict: 'plant_id,hour_index' });
-                    if (genError) throw genError;
+                        .delete()
+                        .eq('plant_id', plant.id)
+                        .eq('user_id', currentUserId());
+
+                    const rows = [];
+                    for (let t = 0; t < 8760; t++) {
+                        rows.push({
+                            plant_id: plant.id,
+                            hour_index: t,
+                            generation_kw: plant.generation[t],
+                            user_id: currentUserId()
+                        });
+                    }
+                    
+                    const chunkSize = 1000;
+                    for (let i = 0; i < rows.length; i += chunkSize) {
+                        const chunk = rows.slice(i, i + chunkSize);
+                        const { error: genError } = await supabaseClient
+                            .from('plant_generation')
+                            .insert(chunk);
+                        if (genError) throw genError;
+                    }
                 }
                 
                 statusEl.textContent = `Impianto ${plant.name} salvato!`;

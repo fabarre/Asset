@@ -5,7 +5,7 @@
 //  - CDN (tailwind, chart.js, librerie): cache-first con aggiornamento in background
 //  - API Supabase: MAI cachate (dati sempre live)
 // ─────────────────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'asset-shell-v1';
+const CACHE_NAME = 'asset-shell-v4';
 const APP_SHELL = [
     './',
     './index.html',
