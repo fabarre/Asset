@@ -1163,11 +1163,6 @@ async function exportPnlToExcel() {
     addRowHc('hc_holdcoDividendReceived', '  di cui: Dividendi SPV ricevuti (quota Sponsor) (€)', 'detail', m.holdcoDividendReceived, numberFormatEuro, (col) => {
         return `-('RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoDividendReceived})`;
     });
-    if (window.State.inputs.peEnabled && window.State.inputs.peMode !== 'royalty_fee') {
-        addRowHc('hc_peDividendPaid', '  (-) Quota Dividendi/Preferred Private Equity (non sale alla HoldCo) (€)', 'minus', m.peDividendPaid, numberFormatEuro, (col) => {
-            return `'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.peDividendPaid}`;
-        });
-    }
     addRowHc('hc_holdcoAssetManagementReceived', '  di cui: Ricavi Gestione Amministrativa & Asset Mgt ricevuti da SPV (€)', 'detail', m.opexAssetManagement, numberFormatEuro, (col) => {
         return `-('CONTO ECONOMICO'!${col}${rowMapCe.opexAssetManagement})`;
     });
@@ -1266,9 +1261,8 @@ async function exportPnlToExcel() {
     sheetHc.addRow([]); currentRowNumHc++;
     
     addRowHc('holdcoFCFE', 'FCFE — FLUSSO NETTO INVESTITORE (€)', 'total-gold', m.holdcoFCFE, numberFormatEuro, (col) => {
-        // FCFE Holding = netProfit + rimborso soci + exit SPV - servizio PD Holding - payoff PD Holding + quota PE dividend
+        // FCFE Holding = netProfit + rimborso soci + exit SPV - servizio PD Holding - payoff PD Holding
         let formula = `${col}${rowMapHc.holdcoNetProfit}+${col}${rowMapHc.hc_reconcileLoanRepayment}+${col}${rowMapHc.exitValuationGroup}`;
-        if (rowMapHc.hc_peDividendPaid) formula += `+${col}${rowMapHc.hc_peDividendPaid}`;
         if (rowMapHc.pdInterestPaid) formula += `+${col}${rowMapHc.pdInterestPaid}`;
         if (rowMapHc.pdPrincipalPaid) formula += `+${col}${rowMapHc.pdPrincipalPaid}`;
         if (rowMapHc.pdBulletPayoff) formula += `+${col}${rowMapHc.pdBulletPayoff}`;

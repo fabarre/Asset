@@ -5450,7 +5450,6 @@
                 { key: 'hc_holdcoInterestReceived', label: '  di cui: Interessi Finanziamento Soci ricevuti (€)', type: 'detail', parent: 'holdcoInflowTotal' },
                 { key: 'hc_holdcoLoanRepaymentReceived', label: '  di cui: Rimborso Capitale Finanziamento Soci ricevuto (€)', type: 'detail', parent: 'holdcoInflowTotal' },
                 { key: 'hc_holdcoDividendReceived', label: '  di cui: Dividendi SPV ricevuti (quota Sponsor) (€)', type: 'detail', parent: 'holdcoInflowTotal' },
-                ...(p.peEnabled && p.peMode !== 'royalty_fee' ? [{ key: 'hc_peDividendPaid', label: '  (-) Quota Dividendi/Preferred Private Equity (non sale alla HoldCo) (€)', type: 'minus' }] : []),
                 { key: 'hc_holdcoAssetManagementReceived', label: '  di cui: Ricavi Gestione Amministrativa & Asset Mgt ricevuti da SPV (€)', type: 'detail', parent: 'holdcoInflowTotal' },
                 { key: 'holdcoOpex', label: '  (-) Spese Funzionamento Holding (€)', type: 'minus' },
                 { key: 'holdcoEarnoutPaid', label: '  (-) Earn-Out Holding (€)', type: 'minus' },
@@ -5799,7 +5798,6 @@
                 setCell('hc_holdcoInterestReceived', m.holdcoInterestReceived[i], true, formatPlusEuro);
                 setCell('hc_holdcoLoanRepaymentReceived', m.holdcoLoanRepaymentReceived[i], true, formatPlusEuro);
                 setCell('hc_holdcoDividendReceived', m.holdcoDividendReceived[i], true, formatPlusEuro);
-                if (m.peDividendPaid) setCell('hc_peDividendPaid', m.peDividendPaid[i], true, formatMinusEuro);
                 setCell('hc_holdcoAssetManagementReceived', m.opexAssetManagement[i], true, formatPlusEuro);
                 setCell('holdcoOpex', m.holdcoOpex[i], true, formatMinusEuro);
                 setCell('holdcoEarnoutPaid', m.holdcoEarnoutPaid[i], true, formatMinusEuro);
