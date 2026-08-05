@@ -2257,6 +2257,8 @@ function runSensitivityLoop(baseState, config) {
                             pPhysBessGridFeed = (plant._physBessGridFeedMwhY1 || 0) * bessDegradationMult;
                             
                             const zonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                            const stab = activeStabilimenti.find(s => s.plantId === plant.id);
+                            const loadProfile = (stab && stab.ppaType === 'on-site' && stab.load) ? stab.load : null;
                             for (let t = 0; t < 8760; t++) {
                                 const fee = getBrpFeeForMonth(plant, yr, getMonthOfHour(t));
                                 const pricePUN = zonePrices[t];
