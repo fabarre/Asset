@@ -585,6 +585,7 @@ function runSensitivityLoop(baseState, config) {
                     const p_fed_pv = Math.max(0, solar - load);
                     
                     const pricePUN = punProfile[t];
+                    const month = getMonthOfHour(t);
                     const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
             : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
@@ -1082,11 +1083,11 @@ function runSensitivityLoop(baseState, config) {
                         const solVal = solarProfile[h];
                         const lodVal = loadProfile[h];
                         const pricePUN = punProfile[h];
+                        const month = getMonthOfHour(h);
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
             : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
                         const pricePPA = ppaPrice / 1000;
-                        const month = getMonthOfHour(h);
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
                         
