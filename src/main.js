@@ -7497,10 +7497,27 @@
                 const revPpaPvVal = revPpaPv[i] !== undefined ? Math.round(revPpaPv[i]) : 0;
                 const revPpaBessVal = revPpaBess[i] !== undefined ? Math.round(revPpaBess[i]) : 0;
 
-                const fascia = getFasciaForRow(dates && dates[i] ? dates[i] : null, aggregation);
+                const dateVal = dates && dates[i] ? dates[i] : null;
+                const fascia = getFasciaForRow(dateVal, aggregation);
+                
+                let dateStrForTable = label;
+                if (dateVal) {
+                    const y = dateVal.getFullYear();
+                    const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+                    const d = String(dateVal.getDate()).padStart(2, '0');
+                    if (aggregation === 'mensile') {
+                        dateStrForTable = `${m}/${y}`;
+                    } else if (aggregation === 'giornaliero') {
+                        dateStrForTable = `${d}/${m}/${y}`;
+                    } else {
+                        const hh = String(dateVal.getHours()).padStart(2, '0');
+                        dateStrForTable = `${d}/${m}/${y} ${hh}:00`;
+                    }
+                }
+
                 rowsHTML += `
                     <tr class="hover:bg-slate-900/40 border-b border-slate-850 transition-colors">
-                        <td class="px-4 py-2.5 font-medium text-slate-300 bg-slate-900/10">${label}</td>
+                        <td class="px-4 py-2.5 font-medium text-slate-300 bg-slate-900/10">${dateStrForTable}</td>
                         <td class="px-4 py-2.5 text-center font-mono font-bold text-sky-300 bg-slate-900/20">${fascia}</td>
                         <td class="px-4 py-2.5 text-right font-mono text-slate-300 border-l border-slate-850/60">${sol.toLocaleString('it-IT')}</td>
                         <td class="px-4 py-2.5 text-right font-mono text-amber-500">${gridFeedPv.toLocaleString('it-IT')}</td>
@@ -7622,10 +7639,10 @@
                 const y = date.getFullYear();
                 const m = String(date.getMonth() + 1).padStart(2, '0');
                 const d = String(date.getDate()).padStart(2, '0');
-                if (agg === 'mensile') return `${y}-${m}`;
-                if (agg === 'giornaliero') return `${y}-${m}-${d}`;
+                if (agg === 'mensile') return `${m}/${y}`;
+                if (agg === 'giornaliero') return `${d}/${m}/${y}`;
                 const hh = String(date.getHours()).padStart(2, '0');
-                return `${y}-${m}-${d} ${hh}:00`;
+                return `${d}/${m}/${y} ${hh}:00`;
             };
 
             const formatDec = (val) => {
@@ -7726,10 +7743,10 @@
                 const y = date.getFullYear();
                 const m = String(date.getMonth() + 1).padStart(2, '0');
                 const d = String(date.getDate()).padStart(2, '0');
-                if (agg === 'mensile') return `${y}-${m}`;
-                if (agg === 'giornaliero') return `${y}-${m}-${d}`;
+                if (agg === 'mensile') return `${m}/${y}`;
+                if (agg === 'giornaliero') return `${d}/${m}/${y}`;
                 const hh = String(date.getHours()).padStart(2, '0');
-                return `${y}-${m}-${d} ${hh}:00`;
+                return `${d}/${m}/${y} ${hh}:00`;
             };
 
             const formatDec = (val) => {
@@ -7754,7 +7771,8 @@
                 const soc = activeData.batSoC[i] !== undefined ? formatDec(activeData.batSoC[i]) : 0;
 
                 const row = {};
-                row["Periodo / Tempo"] = dateStrVal;
+                // Pass JS Date object directly to SheetJS, or string label if no date is available
+                row["Periodo / Tempo"] = dateVal ? dateVal : dateStrVal;
                 row["Fascia"] = getFasciaForRow(dateVal, aggregation);
                 row["Generazione FV (kWh)"] = sol;
                 row["Cessione FV alla Rete (kWh)"] = gridFeedPv;
@@ -7818,7 +7836,7 @@
             }
 
             try {
-                const worksheet = XLSX.utils.json_to_sheet(excelRows);
+                const worksheet = XLSX.utils.json_to_sheet(excelRows, { cellDates: true });
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Dati Profilo BESS");
                 
