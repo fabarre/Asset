@@ -7317,7 +7317,7 @@
             });
 
             // Render corresponding data table below the chart
-            renderHourlyProfileTable(labels, rawSolGen, rawBatChargeSolar, rawBatChargeGrid, rawBatDischargeGrid, rawBatDischargeGridArb, rawBatDischargeGridTs, rawBatDischargePpa, rawLossesRte, rawBatSoC, rawPrices, rawStabLoad, rawSelfConsSolar, rawSelfConsBess, rawBatGridFeedPv, rawRevRidPure, rawRevRidActual, rawRevArbitrage, rawRevTimeshifting, rawCostWithdrawal, rawRevPpaPv, rawRevPpaBess, data.dates, data.selectedZones, data.zonalPrices, rawSelfConsBessArb, rawSelfConsBessTs, rawRevPpaBessArb, rawRevPpaBessTs, rawCerGseIncentivePv, rawCerGseIncentiveBessArb, rawCerGseIncentiveBessTs);
+            renderHourlyProfileTable(data.labels, data.solGen, data.batChargeSolar, data.batChargeGrid, data.batDischargeGrid, data.batDischargeGridArb, data.batDischargeGridTs, data.batDischargePpa, data.lossesRte, data.batSoC, data.prices, data.stabLoad, data.selfConsSolar, data.selfConsBess, data.batGridFeedPv, data.revRidPure, data.revRidActual, data.revArbitrage, data.revTimeshifting, data.costWithdrawal, data.revPpaPv, data.revPpaBess, data.dates, data.selectedZones, data.zonalPrices, data.selfConsBessArb, data.selfConsBessTs, data.revPpaBessArb, data.revPpaBessTs, data.cerGseIncentivePv, data.cerGseIncentiveBessArb, data.cerGseIncentiveBessTs);
                 } catch (err) {
                     console.error("Errore durante il rendering del grafico orario:", err);
                 } finally {
@@ -7771,8 +7771,12 @@
                 const soc = activeData.batSoC[i] !== undefined ? formatDec(activeData.batSoC[i]) : 0;
 
                 const row = {};
-                // Pass JS Date object directly to SheetJS, or string label if no date is available
-                row["Periodo / Tempo"] = dateVal ? dateVal : dateStrVal;
+                // Calculate correct Excel serial date without local timezone shift for hourly data
+                if (aggregation === 'orario' && dateVal) {
+                    row["Periodo / Tempo"] = 25569.0 + (dateVal.getTime() / 86400000);
+                } else {
+                    row["Periodo / Tempo"] = dateVal ? dateVal : dateStrVal;
+                }
                 row["Fascia"] = getFasciaForRow(dateVal, aggregation);
                 row["Generazione FV (kWh)"] = sol;
                 row["Cessione FV alla Rete (kWh)"] = gridFeedPv;
@@ -7843,7 +7847,7 @@
                     const range = XLSX.utils.decode_range(worksheet['!ref']);
                     for (let R = range.s.r + 1; R <= range.e.r; ++R) {
                         const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: 0 })];
-                        if (cell && cell.t === 'd') {
+                        if (cell && (cell.t === 'd' || cell.t === 'n')) {
                             cell.z = aggregation === 'orario' ? "dd/mm/yyyy hh:mm" : "dd/mm/yyyy";
                         }
                     }
