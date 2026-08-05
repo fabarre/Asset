@@ -9,6 +9,15 @@ function getMonthOfHour(t) {
     return 11;
 }
 
+function getBrpFeeForMonth(plant, yr, monthIndex) {
+    const absMonth = (yr - 1) * 12 + monthIndex + 1;
+    const fee1M = plant.brpFee1Months !== undefined ? plant.brpFee1Months : 18;
+    const fee2M = plant.brpFee2Months !== undefined ? plant.brpFee2Months : 6;
+    if (absMonth <= fee1M) return plant.brpFee1 !== undefined ? plant.brpFee1 : 2;
+    if (absMonth <= fee1M + fee2M) return plant.brpFee2 !== undefined ? plant.brpFee2 : 1;
+    return plant.brpFee3 !== undefined ? plant.brpFee3 : 0;
+}
+
 // Festività italiane 2025 (indice giorno 0-based dal 1° gennaio) — usate dai generatori di curve di carico
 const IT_HOLIDAYS_2025 = new Set([0, 5, 109, 110, 114, 120, 152, 226, 304, 341, 358, 359]);
 
@@ -153,7 +162,9 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
         const pricePUN = punProfile[t];
         const month = getMonthOfHour(t);
         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
-        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
+            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : ((pricePUN * lossMult - gseImb) / 1000);
         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
         const pricePPA = ppaPrice / 1000;
         const lodVal = loadProfile ? Math.max(0, loadProfile[t]) : 0;
@@ -253,7 +264,9 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
         const pricePUN = punProfile[t];
         const month = getMonthOfHour(t);
         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
-        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
+            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : ((pricePUN * lossMult - gseImb) / 1000);
         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
         const pricePPA = ppaPrice / 1000;
 
@@ -572,7 +585,9 @@ function runSensitivityLoop(baseState, config) {
                     const p_fed_pv = Math.max(0, solar - load);
                     
                     const pricePUN = punProfile[t];
-                    const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+                    const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
+            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : ((pricePUN * lossMult - gseImb) / 1000);
                     const pricePPA = ppaPrice / 1000;
                     
                     hourlyGridFeed[t] = p_fed_pv;
@@ -940,7 +955,9 @@ function runSensitivityLoop(baseState, config) {
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                         
                         const pricePPA = ppaPrice / 1000;
-                        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+                        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
+            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : ((pricePUN * lossMult - gseImb) / 1000);
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
                         
                         const V_next = V[t+1];
@@ -1065,7 +1082,9 @@ function runSensitivityLoop(baseState, config) {
                         const solVal = solarProfile[h];
                         const lodVal = loadProfile[h];
                         const pricePUN = punProfile[h];
-                        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+                        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
+            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : ((pricePUN * lossMult - gseImb) / 1000);
                         const pricePPA = ppaPrice / 1000;
                         const month = getMonthOfHour(h);
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
@@ -1392,7 +1411,9 @@ function runSensitivityLoop(baseState, config) {
                     const month = getMonthOfHour(t);
                     const traderPrice = plant.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                     
-                    const priceRID = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+                    const priceRID = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
+                        : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
+                        : ((pricePUN * lossMult - gseImb) / 1000);
                     const costGrid = (traderPrice * (1 + lossWithdraw / 100) + spread + disp) / 1000;
 
                     // Baseline solar flows (without BESS)
@@ -1433,7 +1454,9 @@ function runSensitivityLoop(baseState, config) {
                     arbitrageCostY1 = 0;
                     for (let t = 0; t < 8760; t++) {
                         const pricePUN = zonePrices[t];
-                        const priceRID = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+                        const priceRID = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
+                            : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
+                            : ((pricePUN * lossMult - gseImb) / 1000);
                         const actualRid = plantSim.hourlyGridFeed[t];
                         bessRidRevY1 += (actualRid - plant.generation[t]) * priceRID;
                         arbitrageRevY1 += plantSim.hourlyRevenueArbitrageGrid[t] || 0;
@@ -1497,7 +1520,9 @@ function runSensitivityLoop(baseState, config) {
                     for (let t = 0; t < 8760; t++) {
                         const solar = plant.generation[t];
                         const pricePUN = zonePrices[t];
-                        const priceRID = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+                        const priceRID = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
+                            : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
+                            : ((pricePUN * lossMult - gseImb) / 1000);
                         const month = getMonthOfHour(t);
                         const traderPrice = plant.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                         const costGrid = (traderPrice * (1 + lossWithdraw / 100) + spread + disp) / 1000;
@@ -2126,7 +2151,9 @@ function runSensitivityLoop(baseState, config) {
                         for (let t = 0; t < 8760; t++) {
                             const solar = plant.generation[t] * solarDegradation;
                             const pricePUN = zonePrices[t];
-                            const basePrice = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) : ((pricePUN * lossMult - gseImb) / 1000);
+                            const basePrice = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
+                                : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
+                                : ((pricePUN * lossMult - gseImb) / 1000);
                             const priceRID = basePrice * currentRidDecay;
                             const month = getMonthOfHour(t);
                             const traderPrice = plant.traderContractType === 'pun_medio' ? plant._monthlyAveragePun[month] : pricePUN;
@@ -2213,26 +2240,82 @@ function runSensitivityLoop(baseState, config) {
                         }
                         pPhysSolarRid = Math.max(0, pPhysSolarGen - pPhysSolarPpa - pPhysSolarToBess);
 
-                        if (yr <= ppaDuration) {
-                            solarRidRev = (plant._solarRidRevY1 || 0) * solarDegradation * currentRidDecay;
-                            solarPpaRev = (plant._solarPpaRevY1 || 0) * solarDegradation;
-                            bessPpaRev = (plant._bessPpaRevY1 || 0) * bessDegradationMult;
-                            timeshiftingRev = (plant._timeshiftingRevY1 || 0) * bessDegradationMult * currentTimeshiftingDecay;
-                            arbitrageRev = (plant._arbitrageRevY1 || 0) * bessDegradationMult * currentArbitrageDecay;
-                            pPhysBessSelfCons = (plant._physBessSelfConsMwhY1 || 0) * bessDegradationMult;
+                        if (plant.marketType === 'brp') {
+                            // Per BRP recalculate hourly to account for dynamic monthly fees
+                            solarRidRev = 0;
+                            timeshiftingRev = 0;
+                            arbitrageRev = 0;
+                            solarPpaRev = (yr <= ppaDuration) ? (plant._solarPpaRevY1 || 0) * solarDegradation : 0;
+                            bessPpaRev = (yr <= ppaDuration) ? (plant._bessPpaRevY1 || 0) * bessDegradationMult : 0;
+                            pPhysBessSelfCons = (yr <= ppaDuration) ? (plant._physBessSelfConsMwhY1 || 0) * bessDegradationMult : 0;
                             pPhysBessGridFeed = (plant._physBessGridFeedMwhY1 || 0) * bessDegradationMult;
+                            
+                            const zonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                            for (let t = 0; t < 8760; t++) {
+                                const fee = getBrpFeeForMonth(plant, yr, getMonthOfHour(t));
+                                const pricePUN = zonePrices[t];
+                                const priceRID = ((pricePUN + fee) * lossMult / 1000) * currentRidDecay;
+                                
+                                const solarGridFeedHourly = Math.max(0, plant.generation[t] - (loadProfile ? Math.min(plant.generation[t], loadProfile[t]) : 0) - (plantSim.hourlyChargeSolar ? plantSim.hourlyChargeSolar[t] : 0));
+                                solarRidRev += solarGridFeedHourly * solarDegradation * priceRID;
+                                
+                                if (yr > ppaDuration && (plantSim.hourlySelfCons && plantSim.hourlyChargeSolar)) {
+                                    // BESS PPA becomes BESS RID after PPA expires
+                                    const actualPpa = plantSim.hourlySelfCons[t];
+                                    const baseSolarPpa = loadProfile ? Math.min(plant.generation[t], loadProfile[t]) : 0;
+                                    timeshiftingRev += (actualPpa - baseSolarPpa) * bessDegradationMult * priceRID;
+                                    pPhysBessGridFeed += (actualPpa - baseSolarPpa) * bessDegradationMult / 1000;
+                                }
+                                
+                                timeshiftingRev += (plantSim.hourlyRevenueTimeshifting[t] || 0) * bessDegradationMult * currentTimeshiftingDecay / ((plant._timeshiftingRevY1 || 1) > 0 ? (plant._timeshiftingRevY1 / (plantSim.hourlyRevenueTimeshifting[t] || 1)) : 1) * 0; // Handled below by re-evaluating priceRID? No wait, timeshiftingRev is just the volume * priceRID
+                            }
+                            
+                            // Timeshifting and arbitrage revenues need accurate volumes to multiply by the new priceRID
+                            // For timeshifting grid feed:
+                            let tsGridFeedMwh = 0;
+                            let arbGridFeedMwh = 0;
+                            if (plantSim && plantSim.hourlyDischargeTimeshifting) {
+                                for(let t=0; t<8760; t++) tsGridFeedMwh += plantSim.hourlyDischargeTimeshifting[t];
+                            }
+                            if (plantSim && plantSim.hourlyDischargeArbitrage) {
+                                for(let t=0; t<8760; t++) arbGridFeedMwh += plantSim.hourlyDischargeArbitrage[t];
+                            }
+                            // In BRP we just apply average PUN + average fee for simplicity on BESS to avoid complex hourly loops on BESS discharge
+                            let avgFeeYr = 0;
+                            for(let m=0; m<12; m++) avgFeeYr += getBrpFeeForMonth(plant, yr, m);
+                            avgFeeYr /= 12;
+                            const avgPriceRidBess = ((plant._weightedPun + avgFeeYr) * lossMult / 1000) * currentRidDecay;
+                            
+                            timeshiftingRev = (tsGridFeedMwh / 1000) * bessDegradationMult * avgPriceRidBess;
+                            if (yr > ppaDuration) {
+                                const bessPpaMwhYr = (plant._bessSelfConsMwhY1 || 0) * bessDegradationMult;
+                                timeshiftingRev += bessPpaMwhYr * avgPriceRidBess;
+                            }
+                            arbitrageRev = (arbGridFeedMwh / 1000) * bessDegradationMult * avgPriceRidBess * currentArbitrageDecay / currentRidDecay;
+                            pBessGridChargingCost = (plant._arbitrageCostY1 || 0) * bessDegradationMult * currentArbitrageDecay;
+                            
                         } else {
-                            solarPpaRev = 0;
-                            bessPpaRev = 0;
-                            solarRidRev = pPhysSolarRid * ridPriceYr;
-                            timeshiftingRev = (plant._timeshiftingRevY1 || 0) * bessDegradationMult * currentTimeshiftingDecay;
-                            arbitrageRev = (plant._arbitrageRevY1 || 0) * bessDegradationMult * currentArbitrageDecay;
-                            const bessPpaMwhYr = (plant._bessSelfConsMwhY1 || 0) * bessDegradationMult;
-                            timeshiftingRev += bessPpaMwhYr * ridPriceYr;
-                            pPhysBessSelfCons = 0;
-                            pPhysBessGridFeed = ((plant._physBessSelfConsMwhY1 || 0) + (plant._physBessGridFeedMwhY1 || 0)) * bessDegradationMult;
+                            if (yr <= ppaDuration) {
+                                solarRidRev = (plant._solarRidRevY1 || 0) * solarDegradation * currentRidDecay;
+                                solarPpaRev = (plant._solarPpaRevY1 || 0) * solarDegradation;
+                                bessPpaRev = (plant._bessPpaRevY1 || 0) * bessDegradationMult;
+                                timeshiftingRev = (plant._timeshiftingRevY1 || 0) * bessDegradationMult * currentTimeshiftingDecay;
+                                arbitrageRev = (plant._arbitrageRevY1 || 0) * bessDegradationMult * currentArbitrageDecay;
+                                pPhysBessSelfCons = (plant._physBessSelfConsMwhY1 || 0) * bessDegradationMult;
+                                pPhysBessGridFeed = (plant._physBessGridFeedMwhY1 || 0) * bessDegradationMult;
+                            } else {
+                                solarPpaRev = 0;
+                                bessPpaRev = 0;
+                                solarRidRev = pPhysSolarRid * ridPriceYr;
+                                timeshiftingRev = (plant._timeshiftingRevY1 || 0) * bessDegradationMult * currentTimeshiftingDecay;
+                                arbitrageRev = (plant._arbitrageRevY1 || 0) * bessDegradationMult * currentArbitrageDecay;
+                                const bessPpaMwhYr = (plant._bessSelfConsMwhY1 || 0) * bessDegradationMult;
+                                timeshiftingRev += bessPpaMwhYr * ridPriceYr;
+                                pPhysBessSelfCons = 0;
+                                pPhysBessGridFeed = ((plant._physBessSelfConsMwhY1 || 0) + (plant._physBessGridFeedMwhY1 || 0)) * bessDegradationMult;
+                            }
+                            pBessGridChargingCost = (plant._arbitrageCostY1 || 0) * bessDegradationMult * currentArbitrageDecay;
                         }
-                        pBessGridChargingCost = (plant._arbitrageCostY1 || 0) * bessDegradationMult * currentArbitrageDecay;
                     }
 
                     if (!(stab && stab.ppaType === 'cer')) {

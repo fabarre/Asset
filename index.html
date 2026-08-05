@@ -1793,6 +1793,7 @@
                                 <select id="plant-market-type" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2.5 py-1.5 rounded text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" onchange="onMarketTypeChange(); recalcPlantKpis();">
                                     <option value="rid" selected>RID GSE (Mercato Libero / PUN)</option>
                                     <option value="fer_x">Decreto FER X (Tariffa Incentivante)</option>
+                                    <option value="brp">Ritiro BRP (Fee Dinamica)</option>
                                 </select>
                             </div>
 
@@ -1837,6 +1838,40 @@
                                     <p class="text-[9px] text-slate-400 leading-relaxed">
                                         <strong class="text-sky-400">Nota FER X:</strong> Se selezionato, l'energia immessa in rete (al netto di autoconsumo) verrà valorizzata a questa tariffa fissa (modalità CfD a due vie), garantendo immunità dalla volatilità del PUN zonale.
                                     </p>
+                                </div>
+                            </div>
+
+                            <!-- Parametri BRP -->
+                            <div id="market-params-brp" class="hidden space-y-3 pt-2 border-t border-slate-800/60">
+                                <p class="text-[9px] text-fuchsia-500 uppercase tracking-widest font-bold mb-2">Parametri Ritiro BRP</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Fee 1 (€/MWh)</label>
+                                        <input type="number" id="plant-brp-fee1" value="2" step="0.1" class="w-full bg-slate-950 border border-fuchsia-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Durata Fee 1 (Mesi)</label>
+                                        <input type="number" id="plant-brp-fee1-months" value="18" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Fee 2 (€/MWh)</label>
+                                        <input type="number" id="plant-brp-fee2" value="1" step="0.1" class="w-full bg-slate-950 border border-fuchsia-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Durata Fee 2 (Mesi)</label>
+                                        <input type="number" id="plant-brp-fee2-months" value="6" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Fee 3 (€/MWh)</label>
+                                        <input type="number" id="plant-brp-fee3" value="0" step="0.1" class="w-full bg-slate-950 border border-fuchsia-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 outline-none">
+                                    </div>
+                                    <div class="flex items-center pt-5">
+                                        <span class="text-[9px] text-slate-500 italic">Fee 3 valida per restanti mesi</span>
+                                    </div>
                                 </div>
                             </div>
 

@@ -554,9 +554,11 @@
             const marketType = document.getElementById('plant-market-type').value;
             const ridParams = document.getElementById('market-params-rid');
             const ferxParams = document.getElementById('market-params-ferx');
+            const brpParams = document.getElementById('market-params-brp');
             const decayParams = document.getElementById('market-params-decay');
             if (ridParams) ridParams.classList.toggle('hidden', marketType !== 'rid');
             if (ferxParams) ferxParams.classList.toggle('hidden', marketType !== 'fer_x');
+            if (brpParams) brpParams.classList.toggle('hidden', marketType !== 'brp');
             if (decayParams) decayParams.classList.toggle('hidden', marketType === 'fer_x');
         };
 
@@ -903,6 +905,11 @@
             // Trader & network parameters
             document.getElementById('plant-market-type').value = plant.marketType || 'rid';
             document.getElementById('plant-ferx-tariff').value = plant.ferxTariff !== undefined ? plant.ferxTariff : 85;
+            document.getElementById('plant-brp-fee1').value = plant.brpFee1 !== undefined ? plant.brpFee1 : 2;
+            document.getElementById('plant-brp-fee1-months').value = plant.brpFee1Months !== undefined ? plant.brpFee1Months : 18;
+            document.getElementById('plant-brp-fee2').value = plant.brpFee2 !== undefined ? plant.brpFee2 : 1;
+            document.getElementById('plant-brp-fee2-months').value = plant.brpFee2Months !== undefined ? plant.brpFee2Months : 6;
+            document.getElementById('plant-brp-fee3').value = plant.brpFee3 !== undefined ? plant.brpFee3 : 0;
             if (window.onMarketTypeChange) window.onMarketTypeChange();
             
             document.getElementById('plant-trader-contract-type').value = plant.traderContractType || 'pun_orario';
@@ -1176,6 +1183,11 @@
                 // Trader & network parameters
                 marketType: document.getElementById('plant-market-type').value,
                 ferxTariff: parseFloat(document.getElementById('plant-ferx-tariff').value) || 0,
+                brpFee1: parseFloat(document.getElementById('plant-brp-fee1').value) || 0,
+                brpFee1Months: parseInt(document.getElementById('plant-brp-fee1-months').value) || 0,
+                brpFee2: parseFloat(document.getElementById('plant-brp-fee2').value) || 0,
+                brpFee2Months: parseInt(document.getElementById('plant-brp-fee2-months').value) || 0,
+                brpFee3: parseFloat(document.getElementById('plant-brp-fee3').value) || 0,
                 traderContractType: document.getElementById('plant-trader-contract-type').value,
                 traderSpread: parseFloat(document.getElementById('plant-trader-spread-eur-mwh').value) || 0,
                 traderDisp: parseFloat(document.getElementById('plant-trader-disp-eur-mwh').value) || 0,
@@ -3305,6 +3317,11 @@
                                 traderDisp: parseFloat(p.trader_disp_eur_mwh || 0),
                                 marketType: p.market_type || 'rid',
                                 ferxTariff: p.ferx_tariff_eur_mwh !== null && p.ferx_tariff_eur_mwh !== undefined ? parseFloat(p.ferx_tariff_eur_mwh) : 0,
+                                brpFee1: p.brp_fee1 !== null && p.brp_fee1 !== undefined ? parseFloat(p.brp_fee1) : 2,
+                                brpFee1Months: p.brp_fee1_months !== null && p.brp_fee1_months !== undefined ? parseInt(p.brp_fee1_months) : 18,
+                                brpFee2: p.brp_fee2 !== null && p.brp_fee2 !== undefined ? parseFloat(p.brp_fee2) : 1,
+                                brpFee2Months: p.brp_fee2_months !== null && p.brp_fee2_months !== undefined ? parseInt(p.brp_fee2_months) : 6,
+                                brpFee3: p.brp_fee3 !== null && p.brp_fee3 !== undefined ? parseFloat(p.brp_fee3) : 0,
                                 pnrrContributionPct: parseFloat(p.pnrr_contribution_pct || 0),
                                 degradeRidPct: p.degrade_rid_pct !== undefined && p.degrade_rid_pct !== null ? parseFloat(p.degrade_rid_pct) : 0,
                                 degradeTimeshiftingPct: p.degrade_timeshifting_pct !== undefined && p.degrade_timeshifting_pct !== null ? parseFloat(p.degrade_timeshifting_pct) : 0,
@@ -3855,6 +3872,11 @@
                     pnrr_contribution_pct: plant.pnrrContributionPct || 0,
                     market_type: plant.marketType || 'rid',
                     ferx_tariff_eur_mwh: plant.ferxTariff !== undefined ? plant.ferxTariff : 0,
+                    brp_fee1: plant.brpFee1 !== undefined ? plant.brpFee1 : 2,
+                    brp_fee1_months: plant.brpFee1Months !== undefined ? plant.brpFee1Months : 18,
+                    brp_fee2: plant.brpFee2 !== undefined ? plant.brpFee2 : 1,
+                    brp_fee2_months: plant.brpFee2Months !== undefined ? plant.brpFee2Months : 6,
+                    brp_fee3: plant.brpFee3 !== undefined ? plant.brpFee3 : 0,
                     degrade_rid_pct: plant.degradeRidPct !== undefined ? plant.degradeRidPct : 0,
                     degrade_timeshifting_pct: plant.degradeTimeshiftingPct !== undefined ? plant.degradeTimeshiftingPct : 0,
                     degrade_arbitrage_pct: plant.degradeArbitragePct !== undefined ? plant.degradeArbitragePct : 0,
