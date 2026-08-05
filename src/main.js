@@ -8241,7 +8241,8 @@
                 'input-cerFissaSmall', 'input-cerFissaMedium', 'input-cerFissaLarge',
                 'input-cerCapSmall', 'input-cerCapMedium', 'input-cerCapLarge',
                 'input-cerVarReferencePrice', 'input-cerVarMax',
-                'input-cerGeoNord', 'input-cerGeoCentro', 'input-cerGeoSud'
+                'input-cerGeoNord', 'input-cerGeoCentro', 'input-cerGeoSud',
+                'plant-brp-fee1', 'plant-brp-fee1-months', 'plant-brp-fee2', 'plant-brp-fee2-months', 'plant-brp-fee3'
             ];
             inputs.forEach(id => {
                 const el = document.getElementById(id);
