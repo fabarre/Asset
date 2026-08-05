@@ -6566,7 +6566,7 @@
                 
                 for (let i = 0; i < length; i++) {
                     const hourIndex = start + i;
-                    const date = new Date(2025, 0, Math.floor(hourIndex / 24) + 1, hourIndex % 24);
+                    const date = new Date(Date.UTC(2025, 0, Math.floor(hourIndex / 24) + 1, hourIndex % 24));
                     dateList.push(date);
                     const dayStr = date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
                     const hourOfDay = hourIndex % 24;
@@ -6630,9 +6630,9 @@
                     start = 0;
                     length = 365;
                     for (let d = 0; d < 365; d++) {
-                        const date = new Date(2025, 0, d + 1);
+                        const date = new Date(Date.UTC(2025, 0, d + 1));
                         dateList.push(date);
-                        labelList.push(date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }));
+                        labelList.push(date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', timeZone: 'UTC' }));
                     }
                 }
             } else if (aggregation === 'mensile') {
@@ -7502,15 +7502,15 @@
                 
                 let dateStrForTable = label;
                 if (dateVal) {
-                    const y = dateVal.getFullYear();
-                    const m = String(dateVal.getMonth() + 1).padStart(2, '0');
-                    const d = String(dateVal.getDate()).padStart(2, '0');
+                    const y = dateVal.getUTCFullYear();
+                    const m = String(dateVal.getUTCMonth() + 1).padStart(2, '0');
+                    const d = String(dateVal.getUTCDate()).padStart(2, '0');
                     if (aggregation === 'mensile') {
                         dateStrForTable = `${m}/${y}`;
                     } else if (aggregation === 'giornaliero') {
                         dateStrForTable = `${d}/${m}/${y}`;
                     } else {
-                        const hh = String(dateVal.getHours()).padStart(2, '0');
+                        const hh = String(dateVal.getUTCHours()).padStart(2, '0');
                         dateStrForTable = `${d}/${m}/${y} ${hh}:00`;
                     }
                 }
@@ -7636,12 +7636,12 @@
 
             const formatDateForExport = (date, agg) => {
                 if (!date) return "";
-                const y = date.getFullYear();
-                const m = String(date.getMonth() + 1).padStart(2, '0');
-                const d = String(date.getDate()).padStart(2, '0');
+                const y = date.getUTCFullYear();
+                const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+                const d = String(date.getUTCDate()).padStart(2, '0');
                 if (agg === 'mensile') return `${m}/${y}`;
                 if (agg === 'giornaliero') return `${d}/${m}/${y}`;
-                const hh = String(date.getHours()).padStart(2, '0');
+                const hh = String(date.getUTCHours()).padStart(2, '0');
                 return `${d}/${m}/${y} ${hh}:00`;
             };
 
@@ -7740,12 +7740,12 @@
 
             const formatDateForExport = (date, agg) => {
                 if (!date) return "";
-                const y = date.getFullYear();
-                const m = String(date.getMonth() + 1).padStart(2, '0');
-                const d = String(date.getDate()).padStart(2, '0');
+                const y = date.getUTCFullYear();
+                const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+                const d = String(date.getUTCDate()).padStart(2, '0');
                 if (agg === 'mensile') return `${m}/${y}`;
                 if (agg === 'giornaliero') return `${d}/${m}/${y}`;
-                const hh = String(date.getHours()).padStart(2, '0');
+                const hh = String(date.getUTCHours()).padStart(2, '0');
                 return `${d}/${m}/${y} ${hh}:00`;
             };
 
@@ -7837,6 +7837,18 @@
 
             try {
                 const worksheet = XLSX.utils.json_to_sheet(excelRows, { cellDates: true });
+                
+                // Force 24-hour format on the first column (date column)
+                if (worksheet['!ref']) {
+                    const range = XLSX.utils.decode_range(worksheet['!ref']);
+                    for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+                        const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: 0 })];
+                        if (cell && cell.t === 'd') {
+                            cell.z = aggregation === 'orario' ? "dd/mm/yyyy hh:mm" : "dd/mm/yyyy";
+                        }
+                    }
+                }
+                
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Dati Profilo BESS");
                 
