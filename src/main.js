@@ -3387,6 +3387,9 @@
                 if (configError) {
                     throw new Error("Errore nel recupero di simulation_config: " + configError.message);
                 }
+
+                // C4: ripristina branding (ragione sociale/tagline/logo) dalle chiavi brand::*
+                applyBrandRows(configData || []);
                 
                 if (!configData || configData.length === 0) {
                     // Nuovo utente senza configurazione: semina i default letti dalla UI
@@ -3401,6 +3404,8 @@
                     
                     // Le chiavi scenario:: e audit:: NON sono parametri attivi
                     if (key.startsWith('scenario::') || key.startsWith('audit::')) return;
+                    // Le chiavi brand:: sono gestite da applyBrandRows (non devono finire in inputs)
+                    if (key.startsWith('brand::')) return;
                     
                     // Ripristino Selezioni speciali
                     if (key === 'selectedBessPlantIds') {
@@ -9102,19 +9107,32 @@ const _fmtMwh = v => (v === null || v === undefined || isNaN(v)) ? '-' : v.toLoc
 // ── Helper: header/footer su ogni pagina ──
 function _pdfHeader(doc, title, subtitle) {
     const W = doc.internal.pageSize.getWidth();
+    const b = State.branding || {};
     // Banda superiore
     doc.setFillColor(11, 15, 25);
-    doc.rect(0, 0, W, 22, 'F');
+    doc.rect(0, 0, W, 26, 'F');
     doc.setFillColor(16, 185, 129);
-    doc.rect(0, 22, W, 1.2, 'F');
+    doc.rect(0, 26, W, 1.2, 'F');
+    let leftX = 14;
+    if (b.logoDataUrl) {
+        const ratio = b.logoRatio || 0.4;
+        const lh = 14;
+        const lw = Math.min(32, lh / ratio);
+        try { doc.addImage(b.logoDataUrl, 'PNG', 14, 5, lw, lh, undefined, 'FAST'); leftX = 14 + lw + 4; } catch (e) { /* logo non disegnabile */ }
+    }
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
-    doc.text(window._currentProjectName || 'Progetto New Green Deal', 14, 10);
+    doc.text(window._currentProjectName || 'Progetto New Green Deal', leftX, 10);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(148, 163, 184);
-    doc.text(title, 14, 17);
+    doc.text(title, leftX, 17);
+    if (b.company) {
+        doc.setFontSize(7);
+        doc.setTextColor(16, 185, 129);
+        doc.text(b.company + (b.tagline ? '  |  ' + b.tagline : ''), leftX, 23);
+    }
     doc.setTextColor(255, 255, 255);
     doc.text(subtitle, W - 14, 10, { align: 'right' });
     doc.setTextColor(148, 163, 184);
@@ -9124,15 +9142,24 @@ function _pdfFooter(doc) {
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
     const pages = doc.internal.getNumberOfPages();
+    const b = State.branding || {};
     for (let i = 1; i <= pages; i++) {
         doc.setPage(i);
+        // Watermark leggero diagonale con la ragione sociale
+        if (b.company) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(36);
+            doc.setTextColor(226, 232, 240);
+            doc.text(b.company, W / 2, H / 2, { align: 'center', angle: 30 });
+        }
         doc.setDrawColor(30, 41, 59);
         doc.setLineWidth(0.3);
         doc.line(14, H - 12, W - 14, H - 12);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
         doc.setTextColor(100, 116, 139);
-        doc.text('Documento generato automaticamente - ' + (window._currentProjectName || 'Progetto New Green Deal'), 14, H - 7);
+        const footerLeft = (b.company ? b.company + ' - ' : '') + 'Documento generato automaticamente - ' + (window._currentProjectName || 'Progetto New Green Deal');
+        doc.text(footerLeft, 14, H - 7);
         doc.text('Pagina ' + i + ' di ' + pages, W - 14, H - 7, { align: 'right' });
     }
 }
@@ -9171,6 +9198,144 @@ function _ctx() {
 // ═══════════════════════════════════════════════════════════════════
 // Funzione dispatcher principale
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// C4: BRANDING REPORT — ragione sociale, tagline e logo persistiti per
+// utente in simulation_config (chiavi brand::*, logo chunkato a 200 char
+// per il limite varchar(255)). Applicato a copertina/intestazioni PDF,
+// watermark e foglio COPERTINA Excel.
+// ═══════════════════════════════════════════════════════════════════
+State.branding = State.branding || { company: '', tagline: '', logoDataUrl: '', logoRatio: 0 };
+
+function applyBrandRows(rows) {
+    const b = State.branding;
+    b.company = ''; b.tagline = ''; b.logoRatio = 0;
+    const logoChunks = [];
+    rows.forEach(r => {
+        if (r.parameter_key === 'brand::company') b.company = r.parameter_value || '';
+        else if (r.parameter_key === 'brand::tagline') b.tagline = r.parameter_value || '';
+        else if (r.parameter_key === 'brand::logoRatio') b.logoRatio = parseFloat(r.parameter_value) || 0;
+        else if (r.parameter_key.startsWith('brand::logo::')) {
+            const idx = parseInt(r.parameter_key.split('::')[2], 10);
+            if (!isNaN(idx)) logoChunks[idx] = r.parameter_value;
+        }
+    });
+    b.logoDataUrl = logoChunks.length ? logoChunks.join('') : '';
+    refreshBrandUI();
+}
+
+function refreshBrandUI() {
+    const b = State.branding;
+    const cEl = document.getElementById('brand-company');
+    const tEl = document.getElementById('brand-tagline');
+    const prev = document.getElementById('brand-logo-preview');
+    if (cEl && document.activeElement !== cEl) cEl.value = b.company;
+    if (tEl && document.activeElement !== tEl) tEl.value = b.tagline;
+    if (prev) {
+        if (b.logoDataUrl) { prev.src = b.logoDataUrl; prev.classList.remove('hidden'); }
+        else { prev.removeAttribute('src'); prev.classList.add('hidden'); }
+    }
+}
+
+window.handleBrandLogoUpload = function(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!/image\/(png|jpeg)/.test(file.type)) { showToast('Formato logo non supportato: usa PNG o JPEG.', 'warning'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+            // Downscale a 480px max per contenere lo storage chunkato
+            const maxW = 480;
+            const scale = Math.min(1, maxW / img.width);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            State.branding.logoDataUrl = canvas.toDataURL('image/png');
+            State.branding.logoRatio = canvas.height / canvas.width;
+            refreshBrandUI();
+            showToast('Logo caricato: salva con "Salva branding" per persistere.', 'info');
+        };
+        img.onerror = () => showToast('File immagine non valido.', 'error');
+        img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+};
+
+window.clearBrandLogo = function() {
+    State.branding.logoDataUrl = '';
+    State.branding.logoRatio = 0;
+    refreshBrandUI();
+};
+
+window.saveBranding = async function() {
+    const b = State.branding;
+    const cEl = document.getElementById('brand-company');
+    const tEl = document.getElementById('brand-tagline');
+    b.company = (cEl ? cEl.value : '').trim().substring(0, 250);
+    b.tagline = (tEl ? tEl.value : '').trim().substring(0, 250);
+    if (!supabaseClient) { showToast('Database non connesso: branding non persistito.', 'warning'); return; }
+    try {
+        await supabaseClient.from('simulation_config').delete().like('parameter_key', 'brand::logo::%');
+        const rows = [
+            { parameter_key: 'brand::company', parameter_value: b.company, user_id: currentUserId() },
+            { parameter_key: 'brand::tagline', parameter_value: b.tagline, user_id: currentUserId() },
+            { parameter_key: 'brand::logoRatio', parameter_value: String(b.logoRatio || 0), user_id: currentUserId() }
+        ];
+        for (let i = 0; i * 200 < b.logoDataUrl.length; i++) {
+            rows.push({ parameter_key: 'brand::logo::' + i, parameter_value: b.logoDataUrl.substring(i * 200, (i + 1) * 200), user_id: currentUserId() });
+        }
+        const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key,user_id' });
+        if (error) throw error;
+        Audit.log('branding.save', b.company || '(senza ragione sociale)');
+        showToast('Branding salvato: applicato a PDF ed Excel.', 'success');
+    } catch (err) {
+        showToast('Errore salvataggio branding: ' + err.message, 'error');
+    }
+};
+
+// ── Copertina PDF (report portrait) ──
+function _pdfCover(doc, reportTitle) {
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
+    const b = State.branding || {};
+    doc.setFillColor(11, 15, 25);
+    doc.rect(0, 0, W, 60, 'F');
+    doc.setFillColor(16, 185, 129);
+    doc.rect(0, 60, W, 1.5, 'F');
+    let x = 14;
+    if (b.logoDataUrl) {
+        const ratio = b.logoRatio || 0.4;
+        const lh = 22;
+        const lw = Math.min(60, lh / ratio);
+        try { doc.addImage(b.logoDataUrl, 'PNG', 14, 19, lw, lh, undefined, 'FAST'); x = 14 + lw + 6; } catch (e) { /* logo non disegnabile */ }
+    }
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(b.company || 'Solar & BESS M&A Deal Simulator', x, 28);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(148, 163, 184);
+    doc.text(b.tagline || 'Deal Simulator: Multi-Plant & BESS Enterprise', x, 36);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.text(reportTitle, W / 2, 105, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.setTextColor(71, 85, 105);
+    doc.text(window._currentProjectName || 'Progetto New Green Deal', W / 2, 115, { align: 'center' });
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(0.8);
+    doc.line(W / 2 - 30, 122, W / 2 + 30, 122);
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Data report: ' + new Date().toLocaleDateString('it-IT'), W / 2, 132, { align: 'center' });
+    doc.text('Documento confidenziale - preparato esclusivamente per il destinatario', W / 2, H - 20, { align: 'center' });
+}
+
 window.generateReport = async function(reportType) {
     if (!window.jspdf || !window.jspdf.jsPDF) {
         showToast('Libreria PDF non caricata. Ricarica la pagina e riprova.', 'error');
@@ -9202,6 +9367,18 @@ window.generateReport = async function(reportType) {
     }
     try {
         let doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const COVER_TITLES = {
+            executive_summary: 'Executive Summary',
+            relazione_tecnica: 'Relazione Tecnica',
+            struttura_finanziaria: 'Struttura Finanziaria',
+            exit_valutazione: 'Exit & Valutazione',
+            sensibilita: 'Analisi di Sensibilità',
+            full_due_diligence: 'Due Diligence Completa'
+        };
+        if (COVER_TITLES[reportType]) {
+            _pdfCover(doc, COVER_TITLES[reportType]);
+            doc.addPage();
+        }
         let filename = 'report.pdf';
         switch (reportType) {
             case 'executive_summary':       _repExecutiveSummary(doc); filename = 'Executive_Summary.pdf'; break;

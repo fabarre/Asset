@@ -546,6 +546,33 @@
                                 <i class="fa-solid fa-file-arrow-down"></i>
                                 <span>Genera e Scarica PDF</span>
                             </button>
+                            <div class="pt-3 border-t border-slate-800 space-y-2">
+                                <div class="flex items-center space-x-2">
+                                    <i class="fa-solid fa-stamp text-rose-400 text-[11px]"></i>
+                                    <h4 class="font-bold text-slate-300 text-[10px] tracking-wide uppercase">Branding report (PDF/Excel)</h4>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1">Ragione sociale</label>
+                                    <input type="text" id="brand-company" maxlength="250" placeholder="Es. GreenCo S.p.A." class="w-full bg-slate-950 border border-slate-700/80 text-white px-2.5 py-1.5 rounded text-xs outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1">Tagline (opzionale)</label>
+                                    <input type="text" id="brand-tagline" maxlength="250" placeholder="Es. Renewable Energy Investments" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2.5 py-1.5 rounded text-xs outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500">
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <label class="flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] cursor-pointer transition-colors">
+                                        <i class="fa-solid fa-image"></i>
+                                        <span>Carica logo</span>
+                                        <input type="file" id="brand-logo-file" accept="image/png,image/jpeg" class="hidden" onchange="handleBrandLogoUpload(event)">
+                                    </label>
+                                    <button onclick="clearBrandLogo()" class="px-2.5 py-1.5 bg-slate-800/60 hover:bg-slate-700 text-slate-400 font-bold rounded-lg text-[10px] transition-colors">Rimuovi</button>
+                                    <img id="brand-logo-preview" class="h-8 max-w-[90px] object-contain hidden" alt="Logo">
+                                </div>
+                                <button onclick="saveBranding()" class="w-full flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 px-3 rounded-lg text-[11px] transition duration-150">
+                                    <i class="fa-solid fa-floppy-disk"></i>
+                                    <span>Salva branding</span>
+                                </button>
+                            </div>
                         </div>
                         <p class="text-[9px] text-slate-500 leading-relaxed">Il documento PDF viene generato in locale e scaricato nella cartella download configurata nel browser. Nessun dato lascia il dispositivo.</p>
                     </div>
@@ -3131,7 +3158,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=10"></script>
+    <script src="./src/main.js?v=11"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

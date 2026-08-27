@@ -7,10 +7,45 @@ async function exportPnlToExcel() {
     }
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Solar & BESS M&A Deal Simulator';
+    const brand = (window.State && window.State.branding) || {};
+    workbook.creator = brand.company || 'Solar & BESS M&A Deal Simulator';
+    workbook.company = brand.company || '';
     workbook.lastModifiedBy = 'Enterprise Edition';
     workbook.created = new Date();
     workbook.modified = new Date();
+
+    // C4: foglio COPERTINA brandizzato (primo foglio della cartella)
+    const cover = workbook.addWorksheet('COPERTINA', { views: [{ showGridLines: false }] });
+    cover.columns = [{ width: 4 }, { width: 60 }, { width: 40 }];
+    let coverRow = 3;
+    if (brand.logoDataUrl) {
+        try {
+            const imgId = workbook.addImage({ base64: brand.logoDataUrl.split(',')[1], extension: 'png' });
+            cover.addImage(imgId, { tl: { col: 1.05, row: coverRow - 1 }, ext: { width: 160, height: Math.max(30, Math.min(80, 160 * (brand.logoRatio || 0.4))) } });
+            coverRow += 6;
+        } catch (e) { /* immagine non incorporabile */ }
+    }
+    const cTitle = cover.getCell(`B${coverRow}`);
+    cTitle.value = brand.company || 'Solar & BESS M&A Deal Simulator';
+    cTitle.font = { bold: true, size: 18, color: { argb: 'FF0B0F19' } };
+    if (brand.tagline) {
+        coverRow++;
+        const cTag = cover.getCell(`B${coverRow}`);
+        cTag.value = brand.tagline;
+        cTag.font = { size: 11, color: { argb: 'FF64748B' } };
+    }
+    coverRow += 2;
+    const cProj = cover.getCell(`B${coverRow}`);
+    cProj.value = 'Progetto: ' + (window._currentProjectName || 'Progetto New Green Deal');
+    cProj.font = { bold: true, size: 12, color: { argb: 'FF10B981' } };
+    coverRow++;
+    const cDate = cover.getCell(`B${coverRow}`);
+    cDate.value = 'Data report: ' + new Date().toLocaleString('it-IT');
+    cDate.font = { size: 10, color: { argb: 'FF64748B' } };
+    coverRow++;
+    const cNote = cover.getCell(`B${coverRow}`);
+    cNote.value = 'Documento confidenziale - generato automaticamente dal Deal Simulator';
+    cNote.font = { italic: true, size: 9, color: { argb: 'FF94A3B8' } };
 
     const m = window.State.results.matrix;
     const p = window.State.inputs;
