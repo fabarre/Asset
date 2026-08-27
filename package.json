@@ -2,6 +2,7 @@
   "scripts": {
     "test": "node tests/test_worker.mjs",
     "test:e2e": "node tests/e2e_validate.js",
+    "test:xss": "node tests/xss_validate.js",
     "sb": "node tools/sb.mjs"
   },
   "dependencies": {

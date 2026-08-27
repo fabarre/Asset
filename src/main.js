@@ -33,6 +33,15 @@
         }
         window.escapeHtml = escapeHtml;
 
+        // Escaping per stringhe JS dentro attributi inline (onclick="f('${escapeJs(id)}')").
+        // A differenza di escapeHtml usa sequenze \xNN: le entità HTML verrebbero
+        // decodificate dal parser prima dell'esecuzione JS, vanificando l'escape.
+        function escapeJs(str) {
+            return String(str).replace(/[\\'"<>&]/g, (c) => (
+                { '\\': '\\\\', "'": '\\x27', '"': '\\x22', '<': '\\x3c', '>': '\\x3e', '&': '\\x26' }[c]
+            ));
+        }
+
         const PROJECT_LIFE = 20;
 
         // Initialize default profiles
@@ -410,7 +419,7 @@
                         <div class="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-8 z-[9999]">
                             <div class="bg-red-500/10 border border-red-500 text-red-500 p-6 rounded-lg max-w-xl text-center shadow-2xl">
                                 <h1 class="text-2xl font-bold mb-4">Errore Critico Inizializzazione DB</h1>
-                                <p class="mb-4">Il database Supabase non ha risposto in tempo o si è verificato un errore (${sbErr.message}).</p>
+                                <p class="mb-4">Il database Supabase non ha risposto in tempo o si è verificato un errore (${escapeHtml(sbErr.message)}).</p>
                                 <p class="font-bold text-lg mb-6">L'applicazione è stata bloccata per evitare l'uso di dati di default errati.</p>
                                 <button onclick="window.location.reload()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-colors">
                                     Ricarica Pagina
@@ -2095,11 +2104,11 @@
                 const stabToggleThumb = stabEnabled ? 'transform:translateX(14px);' : 'transform:translateX(2px);';
 
                 html += `
-                <div class="px-4 py-3 hover:bg-slate-800/30 transition-colors cursor-pointer group ${stabOpacity}" onclick="selectStabilimentoForEdit('${s.id}')">
+                <div class="px-4 py-3 hover:bg-slate-800/30 transition-colors cursor-pointer group ${stabOpacity}" onclick="selectStabilimentoForEdit('${escapeJs(s.id)}')">
                     <div class="flex items-start justify-between">
                         <div class="flex items-center mr-3 mt-0.5 shrink-0" onclick="event.stopPropagation()">
                             <button
-                                onclick="window.toggleStabEnabled('${s.id}')"
+                                onclick="window.toggleStabEnabled('${escapeJs(s.id)}')"
                                 title="${stabEnabled ? 'Escludi dalla simulazione' : 'Includi nella simulazione'}"
                                 style="display:inline-flex;align-items:center;width:34px;height:20px;border-radius:10px;border:none;cursor:pointer;padding:0;transition:background 0.2s;${stabToggleTrack}"
                                 aria-pressed="${stabEnabled}"
@@ -2135,7 +2144,7 @@
                                 <i class="fa-solid fa-clock-rotate-left mr-1"></i>In attesa di ricalcolo o Impianto disattivato...
                             </div>`)}
                         </div>
-                        <button onclick="event.stopPropagation(); deleteStabilimento('${s.id}')" class="opacity-0 group-hover:opacity-100 ml-2 p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-all text-xs">
+                        <button onclick="event.stopPropagation(); deleteStabilimento('${escapeJs(s.id)}')" class="opacity-0 group-hover:opacity-100 ml-2 p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-all text-xs">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
@@ -3656,7 +3665,7 @@
                 const checked = State.selectedCompareIds.has(s.id) ? 'checked' : '';
                 html += `
                     <label class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-violet-600/50 cursor-pointer transition-colors">
-                        <input type="checkbox" ${checked} onchange="toggleScenarioCompare('${s.id}')" class="w-3 h-3 rounded border-slate-700 text-violet-500 focus:ring-violet-500 bg-slate-900">
+                        <input type="checkbox" ${checked} onchange="toggleScenarioCompare('${escapeJs(s.id)}')" class="w-3 h-3 rounded border-slate-700 text-violet-500 focus:ring-violet-500 bg-slate-900">
                         <span class="text-[10px] text-slate-300 font-semibold">${escapeHtml(s.name)}</span>
                     </label>`;
             });
@@ -4567,10 +4576,10 @@
                     : 'transform:translateX(2px);';
 
                 html += `
-                    <tr class="${rowClass}" onclick="window.startEditPlant(event, '${p.id}')">
+                    <tr class="${rowClass}" onclick="window.startEditPlant(event, '${escapeJs(p.id)}')">
                         <td class="py-2.5 text-center" onclick="event.stopPropagation()">
                             <button
-                                onclick="window.togglePlantEnabled('${p.id}')"
+                                onclick="window.togglePlantEnabled('${escapeJs(p.id)}')"
                                 title="${isEnabled ? 'Escludi dalla simulazione' : 'Includi nella simulazione'}"
                                 style="display:inline-flex;align-items:center;width:34px;height:20px;border-radius:10px;border:none;cursor:pointer;padding:0;transition:background 0.2s;${toggleTrack}"
                                 aria-pressed="${isEnabled}"
@@ -4590,7 +4599,7 @@
                         <td><span class="px-2 py-0.5 rounded text-[10px] font-medium ${p.bessMwh > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-400'}">${bessDesc}</span></td>
                         <td class="text-emerald-400 font-bold">€ ${weightedPun.toFixed(2)}</td>
                         <td class="text-right" onclick="event.stopPropagation()">
-                            <button onclick="window.deletePlant('${p.id}')" class="text-red-400 hover:text-red-300 font-bold"><i class="fa-solid fa-trash-can"></i></button>
+                            <button onclick="window.deletePlant('${escapeJs(p.id)}')" class="text-red-400 hover:text-red-300 font-bold"><i class="fa-solid fa-trash-can"></i></button>
                         </td>
                     </tr>
                 `;
@@ -4979,8 +4988,8 @@
                 const plantDiv = document.createElement('div');
                 plantDiv.className = "flex items-center space-x-2 px-2 py-1 hover:bg-slate-900 rounded cursor-pointer transition-colors";
                 plantDiv.innerHTML = `
-                    <input type="checkbox" id="chk-gme-plant-${plant.id}" ${isSelected ? 'checked' : ''} class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
-                    <label for="chk-gme-plant-${plant.id}" class="text-xs text-slate-300 truncate cursor-pointer select-none w-full">${escapeHtml(plant.name)}</label>
+                    <input type="checkbox" id="chk-gme-plant-${escapeHtml(plant.id)}" ${isSelected ? 'checked' : ''} class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
+                    <label for="chk-gme-plant-${escapeHtml(plant.id)}" class="text-xs text-slate-300 truncate cursor-pointer select-none w-full">${escapeHtml(plant.name)}</label>
                 `;
                 plantDiv.querySelector('input').addEventListener('change', function(e) {
                     const checked = e.target.checked;
@@ -8062,8 +8071,8 @@
                 const plantDiv = document.createElement('div');
                 plantDiv.className = "flex items-center space-x-2 px-2 py-1 hover:bg-slate-900 rounded cursor-pointer transition-colors";
                 plantDiv.innerHTML = `
-                    <input type="checkbox" id="chk-bess-plant-${plant.id}" ${isSelected ? 'checked' : ''} class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
-                    <label for="chk-bess-plant-${plant.id}" class="text-xs text-slate-300 truncate cursor-pointer select-none w-full">${escapeHtml(plant.name)}</label>
+                    <input type="checkbox" id="chk-bess-plant-${escapeHtml(plant.id)}" ${isSelected ? 'checked' : ''} class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
+                    <label for="chk-bess-plant-${escapeHtml(plant.id)}" class="text-xs text-slate-300 truncate cursor-pointer select-none w-full">${escapeHtml(plant.name)}</label>
                 `;
                 
                 plantDiv.querySelector('input').addEventListener('change', function(e) {
