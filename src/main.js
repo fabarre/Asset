@@ -23,7 +23,8 @@
             revenueChartInstance: null,
             hourlyChartInstance: null,
             isUpdatePending: false,
-            recalcNeeded: false
+            recalcNeeded: false,
+            allowAnonymous: false // valorizzato in loadSupabaseConfig (host locali o ALLOW_ANONYMOUS)
         };
 
         function escapeHtml(str) {
@@ -129,7 +130,13 @@
                 }
             }
             if (!config) return 'no_config';
-            
+
+            // Gate modalità anonima: consentita solo su host locali (sviluppo) o se il
+            // file di configurazione di ambiente dichiara esplicitamente ALLOW_ANONYMOUS: true.
+            // In produzione l'accesso richiede sempre login (RLS owner-based).
+            const isLocalHost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(location.hostname);
+            State.allowAnonymous = (config.ALLOW_ANONYMOUS === true) || isLocalHost;
+
             urlInput.value = config.SUPABASE_URL;
             keyInput.value = config.SUPABASE_ANON_KEY;
             urlInput.disabled = true;
@@ -168,6 +175,8 @@
         function showAuthOverlay() {
             const ov = document.getElementById('auth-overlay');
             if (ov) ov.style.display = 'flex';
+            const anonWrap = document.getElementById('auth-anonymous-wrap');
+            if (anonWrap) anonWrap.style.display = State.allowAnonymous ? '' : 'none';
             const emailEl = document.getElementById('auth-email');
             if (emailEl) setTimeout(() => emailEl.focus(), 150);
         }
@@ -342,6 +351,10 @@
         };
 
         window.continueAnonymous = async function() {
+            if (!State.allowAnonymous) {
+                showAuthError('Accesso anonimo non consentito in questo ambiente: effettua il login.');
+                return;
+            }
             hideAuthOverlay();
             const statusEl = document.getElementById('sync-status');
             if (statusEl) {

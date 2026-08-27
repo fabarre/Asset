@@ -112,6 +112,11 @@ function loadCredentials() {
         const ov = document.getElementById('auth-overlay');
         return !!ov && ov.style.display !== 'none';
     });
+    // Gate anonimi: visibile solo su host locali o con ALLOW_ANONYMOUS (FASE A3)
+    out.anonButtonVisible = await page.evaluate(() => {
+        const w = document.getElementById('auth-anonymous-wrap');
+        return !!w && w.style.display !== 'none';
+    });
     out.plantsCount = await page.evaluate(() => window.State?.plants?.length);
     out.kpiIrr = await page.evaluate(() => document.getElementById('kpi-irr')?.textContent);
     out.kpiNpv = await page.evaluate(() => document.getElementById('kpi-npv')?.textContent);

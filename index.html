@@ -228,8 +228,8 @@
                 <button onclick="signupUser()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[11px] transition-colors">
                     <i class="fa-solid fa-user-plus mr-1.5"></i> Registra nuovo utente
                 </button>
-                <div class="text-center pt-2 border-t border-slate-800/60">
-                    <button onclick="continueAnonymous()" class="text-slate-500 hover:text-slate-300 text-[10px] font-semibold transition-colors" title="Funziona solo se le policy RLS sono ancora permissive">
+                <div id="auth-anonymous-wrap" class="text-center pt-2 border-t border-slate-800/60">
+                    <button id="btn-continue-anonymous" onclick="continueAnonymous()" class="text-slate-500 hover:text-slate-300 text-[10px] font-semibold transition-colors" title="Disponibile solo in ambiente di sviluppo o se esplicitamente consentito (ALLOW_ANONYMOUS)">
                         Continua senza autenticazione (modalità sviluppo)
                     </button>
                 </div>
@@ -3116,7 +3116,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=4"></script>
+    <script src="./src/main.js?v=5"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {
