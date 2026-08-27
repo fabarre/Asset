@@ -5,12 +5,13 @@
 //  - CDN (tailwind, chart.js, librerie): cache-first con aggiornamento in background
 //  - API Supabase: MAI cachate (dati sempre live)
 // ─────────────────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'asset-shell-v4';
+const CACHE_NAME = 'asset-shell-v5'; // bump ad ogni modifica di index.html/sw.js: forza pulizia cache precedenti
 const APP_SHELL = [
     './',
     './index.html',
     './manifest.json',
     './icon.svg',
+    './vendor/tailwind-3.4.17.js',
     './src/main.js',
     './src/excelExport.js',
     './src/db.js',

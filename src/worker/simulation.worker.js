@@ -92,13 +92,15 @@ self.onmessage = async function(e) {
 // ─────────────────────────────────────────────────────────────────────────────
 let highsSolver = null;
 let highsLoadFailed = false;
+// HiGHS pinnato alla 1.15.2 (SRI non applicabile a importScripts; il pinning evita drift del CDN)
+const HIGHS_CDN_BASE = 'https://cdn.jsdelivr.net/npm/highs@1.15.2/build/';
 async function getHighs() {
     if (highsSolver || highsLoadFailed) return highsSolver;
     try {
-        importScripts('https://cdn.jsdelivr.net/npm/highs/build/highs.js');
+        importScripts(HIGHS_CDN_BASE + 'highs.js');
         const factory = self.highs || self.Module || self.HiGHS;
         if (typeof factory !== 'function') throw new Error('factory HiGHS non trovata dopo importScripts');
-        highsSolver = await factory({ locateFile: (f) => 'https://cdn.jsdelivr.net/npm/highs/build/' + f });
+        highsSolver = await factory({ locateFile: (f) => HIGHS_CDN_BASE + f });
         console.log('[Worker] HiGHS LP solver caricato da CDN.');
     } catch (err) {
         highsLoadFailed = true;
