@@ -7,7 +7,15 @@
 //  4. Grace period > 12 mesi non produce NaN né quota capitale negativa
 //  5. "Nessun Exit" (exitOption '0') produce 20 anni di risultati
 //  6. Project IRR usa orizzonte 20 anni (non loanTerm)
-// Uso: node scratch/test_worker.mjs
+//  7-13. PPA on-site, sculpting, MSD, Monte Carlo, DSRA, refi, tornado
+// 14. Quadratura multi-impianto (generazione e ricavi RID)
+// 15. BRP: fee dinamiche per anno (yr-aware) nella contabilizzazione annuale
+// 16. BRP: ricavi arbitraggio BESS con fee che si azzera dopo il periodo promo
+// 17. Decay personalizzati (degradeRidPct) applicati una sola volta + solare
+// 18. CER: incentivo GSE (TIAD+TIP) e ricavi PPA privato su energia condivisa
+// 19. Edge case: zero impianti / tutti disabilitati -> risultati zero, no crash
+// 20. Leva cappata a 95% anche con input > 100%
+// Uso: npm test
 // ─────────────────────────────────────────────────────────────────────────────
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -35,6 +43,17 @@ vm.runInContext(code, sandbox);
 function buildState(overrides = {}) {
     const profile = sandbox.generateDefaultSolarProfile(8, 1300); // 8 MW, 1300 kWh/kWp
     const zonal = new Float64Array(8760).fill(100); // PUN piatto 100 €/MWh
+    const defaultPlant = {
+        id: 'p1', name: 'Impianto Test', capacity: 8000, zone: 'CNOR',
+        capex: 700, opex: 120000, enabled: true,
+        generation: profile,
+        bessMw: 2, bessMwh: 4, bessType: 'lfp', bessEfficiency: 0.90,
+        bessDegradation: 0.018, bessCapexKwh: 300, bessConnection: 'ac',
+        bessDoD: 90, bessSocMin: 5, bessSocMax: 95,
+        gridVoltage: 'mt', gridConnectionKw: 8000,
+        marketType: 'rid', traderContractType: 'pun_orario',
+        traderSpread: 2, traderDisp: 1
+    };
     return {
         inputs: {
             keVal: 0.08, wacc: 0.06, inflation: 0.02,
@@ -49,20 +68,10 @@ function buildState(overrides = {}) {
             // NB: iresRate / irapRate volontariamente ASSENTI -> testa i default (bug #1)
             ...(overrides.inputs || {})
         },
-        plants: [{
-            id: 'p1', name: 'Impianto Test', capacity: 8000, zone: 'CNOR',
-            capex: 700, opex: 120000, enabled: true,
-            generation: profile,
-            bessMw: 2, bessMwh: 4, bessType: 'lfp', bessEfficiency: 0.90,
-            bessDegradation: 0.018, bessCapexKwh: 300, bessConnection: 'ac',
-            bessDoD: 90, bessSocMin: 5, bessSocMax: 95,
-            gridVoltage: 'mt', gridConnectionKw: 8000,
-            marketType: 'rid', traderContractType: 'pun_orario',
-            traderSpread: 2, traderDisp: 1,
-            ...(overrides.plant || {})
-        }],
+        // overrides.plants (array completo) ha priorità su overrides.plant (merge sul default)
+        plants: overrides.plants || [{ ...defaultPlant, ...(overrides.plant || {}) }],
         stabilimenti: overrides.stabilimenti || [],
-        zonalPun: { NORD: zonal, CNOR: zonal, CSUD: zonal, SUD: zonal, SICI: zonal, SARD: zonal },
+        zonalPun: overrides.zonalPun || { NORD: zonal, CNOR: zonal, CSUD: zonal, SUD: zonal, SICI: zonal, SARD: zonal },
         selectedBessPlantIds: null,
         previouslySeenPlantIds: null
     };
@@ -232,6 +241,119 @@ if (tornMsg && tornMsg.status === 'tornado_success') {
 }
 // Ripristina handler standard
 sandbox.self.postMessage = (m) => { lastMessage = m; };
+
+// ── Test 14: quadratura multi-impianto ──
+console.log('\n[Test 14] Quadratura multi-impianto (2 impianti, no BESS)');
+const gen14a = sandbox.generateDefaultSolarProfile(8, 1300);
+const gen14b = sandbox.generateDefaultSolarProfile(4, 1400);
+const sum14 = (a) => a.reduce((x, y) => x + y, 0);
+const totGenKwh14 = sum14(gen14a) + sum14(gen14b);
+const plantNoBess = { bessMw: 0, bessMwh: 0, bessType: 'none', traderSpread: 0, traderDisp: 0 };
+const r14 = run(buildState({
+    plants: [
+        { id: 'p1', name: 'Impianto A', capacity: 8000, zone: 'NORD', capex: 700, opex: 120000, enabled: true, generation: gen14a, gridVoltage: 'mt', gridConnectionKw: 8000, marketType: 'rid', traderContractType: 'pun_orario', ...plantNoBess },
+        { id: 'p2', name: 'Impianto B', capacity: 4000, zone: 'SUD', capex: 700, opex: 60000, enabled: true, generation: gen14b, gridVoltage: 'mt', gridConnectionKw: 4000, marketType: 'rid', traderContractType: 'pun_orario', ...plantNoBess }
+    ]
+}));
+check('Generazione consolidata = somma impianti (±1%)', Math.abs(r14.matrix.qtySolarGen[0] - totGenKwh14 / 1000) / (totGenKwh14 / 1000) < 0.01,
+    `cons=${r14.matrix.qtySolarGen[0].toFixed(1)} vs atteso=${(totGenKwh14 / 1000).toFixed(1)}`);
+const balance14 = r14.matrix.qtySolarPpa[0] + r14.matrix.qtySolarRid[0] + r14.matrix.qtySolarToBess[0];
+check('Conservazione portafoglio: gen = PPA+RID+toBESS (±1%)', Math.abs(balance14 - r14.matrix.qtySolarGen[0]) / r14.matrix.qtySolarGen[0] < 0.01,
+    `gen=${r14.matrix.qtySolarGen[0].toFixed(1)} somma=${balance14.toFixed(1)}`);
+check('Ricavi RID = gen × 100 €/MWh (±2%)', Math.abs(r14.matrix.revenueRid[0] - totGenKwh14 * 0.1) / (totGenKwh14 * 0.1) < 0.02,
+    `rev=${r14.matrix.revenueRid[0].toFixed(0)} atteso=${(totGenKwh14 * 0.1).toFixed(0)}`);
+check('plantsMetrics: 2 impianti con produzione coerente', r14.plantsMetrics.length === 2 &&
+    Math.abs((r14.plantsMetrics[0].annualSolarProductionMWh + r14.plantsMetrics[1].annualSolarProductionMWh) - totGenKwh14 / 1000) / (totGenKwh14 / 1000) < 0.005,
+    `metrics=${r14.plantsMetrics.map(m => m.annualSolarProductionMWh.toFixed(1)).join('+')}`);
+
+// ── Test 15: BRP fee dinamiche per anno (contabilizzazione yr-aware) ──
+console.log('\n[Test 15] BRP: fee dinamiche 2→1→0 €/MWh applicate per anno');
+const gen15 = sandbox.generateDefaultSolarProfile(8, 1300);
+const genKwh15 = sum14(gen15);
+const r15 = run(buildState({ plant: {
+    marketType: 'brp', brpFee1: 2, brpFee1Months: 18, brpFee2: 1, brpFee2Months: 6, brpFee3: 0,
+    degradeRidPct: 0, ...plantNoBess
+} }));
+check('Anno 1: ricavi RID con fee1=2 (±1%)', Math.abs(r15.matrix.revenueRid[0] - genKwh15 * 0.102) / (genKwh15 * 0.102) < 0.01,
+    `rev=${r15.matrix.revenueRid[0].toFixed(0)} atteso=${(genKwh15 * 0.102).toFixed(0)}`);
+const rev15y2 = r15.matrix.revenueRid[1], rev15y3 = r15.matrix.revenueRid[2];
+check('Anno 2: prezzo medio tra fee1 e fee2', rev15y2 / (genKwh15 * 0.9965) > 0.100 && rev15y2 / (genKwh15 * 0.9965) < 0.102,
+    `prezzoMedioY2=${(rev15y2 / (genKwh15 * 0.9965)).toFixed(4)}`);
+check('Anno 3: fee3=0 su tutti i mesi (±1%)', Math.abs(rev15y3 - genKwh15 * Math.pow(0.9965, 2) * 0.100) / (genKwh15 * Math.pow(0.9965, 2) * 0.100) < 0.01,
+    `rev=${rev15y3.toFixed(0)} atteso=${(genKwh15 * Math.pow(0.9965, 2) * 0.100).toFixed(0)}`);
+check('Dinamica fee oltre il solo degrado solare (Y3/Y2 < 0.9965)', rev15y3 / rev15y2 < 0.9965,
+    `rapporto=${(rev15y3 / rev15y2).toFixed(4)}`);
+
+// ── Test 16: BRP arbitraggio BESS con fee promozionale che scade ──
+console.log('\n[Test 16] BRP: arbitraggio BESS e fee che si azzera (anno 3)');
+const punVar = new Float64Array(8760);
+for (let t = 0; t < 8760; t++) punVar[t] = ((t % 24) >= 8 && (t % 24) < 20) ? 150 : 50;
+const r16 = run(buildState({
+    zonalPun: { NORD: punVar, CNOR: punVar, CSUD: punVar, SUD: punVar, SICI: punVar, SARD: punVar },
+    plant: {
+        marketType: 'brp', brpFee1: 2, brpFee1Months: 18, brpFee2: 1, brpFee2Months: 6, brpFee3: 0,
+        degradeRidPct: 0, degradeTimeshiftingPct: 0, degradeArbitragePct: 0,
+        bessDegradation: 0, traderSpread: 0, traderDisp: 0
+    }
+}));
+check('Arbitraggio anno 1 > 0 (PUN variabile 50/150)', r16.matrix.revenueArbitrage[0] > 0,
+    `arbY1=${r16.matrix.revenueArbitrage[0].toFixed(0)}`);
+check('Arbitraggio anno 3 < anno 1 (fee 2→0 riduce il prezzo)', r16.matrix.revenueArbitrage[2] < r16.matrix.revenueArbitrage[0],
+    `arbY1=${r16.matrix.revenueArbitrage[0].toFixed(0)} arbY3=${r16.matrix.revenueArbitrage[2].toFixed(0)}`);
+check('Nessun NaN nei ricavi con BRP+BESS', !anyNaN(r16.matrix.revenueRid) && !anyNaN(r16.matrix.revenueArbitrage));
+
+// ── Test 17: decay personalizzati (degradeRidPct 10%/anno) ──
+console.log('\n[Test 17] Decay RID 10%/anno applicato una volta (+ degrado solare)');
+const r17 = run(buildState({ plant: { degradeRidPct: 10, ...plantNoBess } }));
+const ratio17a = r17.matrix.revenueRid[1] / r17.matrix.revenueRid[0];
+const ratio17b = r17.matrix.revenueRid[2] / r17.matrix.revenueRid[1];
+const expected17 = 0.9965 * 0.9; // degrado solare 0.35% × decay RID 10%
+check('Y2/Y1 ≈ 0.9965 × 0.90 (±1%)', Math.abs(ratio17a - expected17) < 0.01 * expected17,
+    `rapporto=${ratio17a.toFixed(4)} atteso=${expected17.toFixed(4)}`);
+check('Progressione geometrica costante (Y3/Y2 ≈ Y2/Y1)', Math.abs(ratio17b - ratio17a) < 0.005,
+    `Y2/Y1=${ratio17a.toFixed(4)} Y3/Y2=${ratio17b.toFixed(4)}`);
+
+// ── Test 18: flussi CER (TIAD + tariffa premio su energia condivisa) ──
+console.log('\n[Test 18] CER: incentivo GSE (CACV+TIP) e PPA privato su energia condivisa');
+const gen18 = sandbox.generateDefaultSolarProfile(0.1, 1300); // 100 kWp (taglia media)
+const genMwh18 = sum14(gen18) / 1000;
+const load18 = new Float64Array(8760).fill(300); // carico sempre superiore alla generazione
+const r18 = run(buildState({
+    inputs: { cerTras: 5, cerFissaMedium: 50, cerCapMedium: 120, cerVarReferencePrice: 0, cerVarMax: 0, cerGeoNord: 0, cerGeoCentro: 0, cerGeoSud: 0, cerLossCprMt: 2.3 },
+    plant: { capacity: 100, generation: gen18, opex: 5000, gridVoltage: 'mt', capex: 700, ...plantNoBess },
+    stabilimenti: [{ id: 's1', name: 'CER Test', plantId: 'p1', ppaType: 'cer', ppaPrice: 80, ppaDuration: 15, annualConsumptionMwh: 2628, load: load18, enabled: true, loadSource: 'csv', cerShareType: 'shared_energy' }]
+}));
+const sim18 = r18.plantsMetrics[0].sim;
+const incentive18 = sim18.hourlyCerGseIncentive.reduce((a, b) => a + b, 0);
+const sharedMwh18 = incentive18 > 0 ? sim18.hourlyCerGseIncentive.reduce((a, b) => a + b, 0) / 57.3 : 0; // priceCER = 5 + 0.023×100 + 50
+check('Incentivo GSE anno 1 > 0', incentive18 > 0, `incentive=${incentive18.toFixed(0)}`);
+check('Energia condivisa ≈ intera generazione immessa', sharedMwh18 > 0.5 * genMwh18,
+    `shared=${sharedMwh18.toFixed(1)} gen=${genMwh18.toFixed(1)}`);
+check('Prezzo CER effettivo = CACV+TIP = 57.3 €/MWh (±0.5)', Math.abs(incentive18 / sharedMwh18 - 57.3) < 0.5,
+    `prezzo=${(incentive18 / sharedMwh18).toFixed(2)}`);
+check('PPA privato su energia condivisa = 80 €/MWh (±2%)', Math.abs(r18.matrix.revenuePpa[0] - sharedMwh18 * 80) / (sharedMwh18 * 80) < 0.02,
+    `revPpa=${r18.matrix.revenuePpa[0].toFixed(0)} atteso=${(sharedMwh18 * 80).toFixed(0)}`);
+check('Nessun NaN nei ricavi totali con CER', !anyNaN(r18.matrix.revenueTotal));
+
+// ── Test 19: edge case zero impianti / tutti disabilitati ──
+console.log('\n[Test 19] Edge case: nessun impianto attivo');
+const r19a = run(buildState({ plants: [] }));
+check('Zero impianti: risultati zero senza crash', r19a.calculatedIrr === 0 && r19a.avgDscr === 0 && !!r19a.matrix);
+const r19b = run(buildState({ plant: { enabled: false } }));
+check('Impianti tutti disabilitati: risultati zero senza crash', r19b.calculatedIrr === 0 && r19b.avgDscr === 0 && !!r19b.matrix);
+
+// ── Test 20: leva cappata al 95% ──
+console.log('\n[Test 20] Leva > 100% in input cappata a 95%');
+const r20 = run(buildState({ inputs: { leverage: 1.5 } }));
+check('Debito = 95% esatto del costo progetto (cap)', Math.abs(r20.debtAmount - 0.95 * r20.totalProjectCost) <= 1,
+    `debito=${r20.debtAmount.toFixed(0)} cap=${(0.95 * r20.totalProjectCost).toFixed(0)}`);
+// Il residuo 5% è coperto da equity cash + finanziamento soci (sociEquityPct 80%):
+// equityAmount è la sola quota cash al netto del soci.
+check('Equity cash positiva e ≥ capitale Holding iniziale', r20.equityAmount > 0 && r20.equityAmount >= 10000 - 1,
+    `equity=${r20.equityAmount.toFixed(0)}`);
+check('Nessun over-funding: debito+equity ≤ costo progetto', r20.debtAmount + r20.equityAmount <= r20.totalProjectCost + 1,
+    `debito+equity=${(r20.debtAmount + r20.equityAmount).toFixed(0)} costo=${r20.totalProjectCost.toFixed(0)}`);
+check('IRR finito con leva al cap', isFinite(r20.calculatedIrr));
 
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
