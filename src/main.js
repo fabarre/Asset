@@ -456,6 +456,13 @@
             return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
         }
 
+        // Formattazione decimale it-IT per KPI visualizzati (separatore virgola)
+        function fmtDec(val, decimals = 2) {
+            const n = Number(val);
+            if (!isFinite(n)) return '\u2014';
+            return n.toLocaleString('it-IT', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+        }
+
 
         function switchTab(tabId) {
             if (tabId === 'tab-stabilimenti') {
@@ -5047,11 +5054,11 @@
             
             const activePlants = State.plants.filter(p => p.enabled !== false);
             if (activePlants.length === 0) {
-                document.getElementById('gme-kpi-medione-fv').textContent = "€ 0.00";
-                document.getElementById('gme-kpi-imm-diretta').textContent = "€ 0.00";
-                document.getElementById('gme-kpi-cessione-stab').textContent = "€ 0.00";
-                document.getElementById('gme-kpi-uplift-ts').textContent = "€ 0.00";
-                document.getElementById('gme-kpi-margine-arb').textContent = "€ 0.00";
+                document.getElementById('gme-kpi-medione-fv').textContent = "€ 0,00";
+                document.getElementById('gme-kpi-imm-diretta').textContent = "€ 0,00";
+                document.getElementById('gme-kpi-cessione-stab').textContent = "€ 0,00";
+                document.getElementById('gme-kpi-uplift-ts').textContent = "€ 0,00";
+                document.getElementById('gme-kpi-margine-arb').textContent = "€ 0,00";
                 const tbody = document.getElementById('gme-performance-table-body');
                 if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-slate-500">Nessun impianto attivo.</td></tr>`;
                 return;
@@ -5086,7 +5093,7 @@
                 const el = document.getElementById(id);
                 if (el) {
                     const sign = isUplift && val > 0 ? '+' : '';
-                    el.textContent = `${sign}€ ${val.toFixed(2)}`;
+                    el.textContent = `${sign}€ ${fmtDec(val, 2)}`;
                 }
             };
             setVal('gme-kpi-medione-fv', metrics.medioneFv);
@@ -6001,10 +6008,10 @@
             const irrEl = document.getElementById('kpi-irr');
             if (irrEl) {
                 if (r.calculatedIrr > 0) {
-                    irrEl.textContent = `${r.calculatedIrr.toFixed(2)} %`;
+                    irrEl.textContent = `${fmtDec(r.calculatedIrr, 2)} %`;
                     irrEl.className = "text-xl font-black text-emerald-400 mt-1";
                 } else if (r.calculatedIrr < 0 && r.calculatedIrr > -99.9) {
-                    irrEl.textContent = `${r.calculatedIrr.toFixed(2)} %`;
+                    irrEl.textContent = `${fmtDec(r.calculatedIrr, 2)} %`;
                     irrEl.className = "text-xl font-black text-red-400 mt-1";
                 } else {
                     irrEl.textContent = "Rendimento Negativo";
@@ -6013,10 +6020,10 @@
             }
 
             setTxt('kpi-npv', formatEuro(r.holdcoNpv));
-            setTxt('kpi-moic', r.holdcoMoic.toFixed(2) + 'x');
+            setTxt('kpi-moic', fmtDec(r.holdcoMoic, 2) + 'x');
             setTxt('kpi-payback', r.paybackPeriod);
-            setTxt('kpi-lcoe', `€ ${r.calculatedLcoe.toFixed(2)} /MWh`);
-            setTxt('kpi-lcos', `€ ${r.calculatedLcos.toFixed(2)} /MWh`);
+            setTxt('kpi-lcoe', `€ ${fmtDec(r.calculatedLcoe, 2)} /MWh`);
+            setTxt('kpi-lcos', `€ ${fmtDec(r.calculatedLcos, 2)} /MWh`);
 
             // Populate Sources & Uses
             const spvAcquisition = r.totalSpvAcquisitionCapex || 0;
@@ -6072,8 +6079,8 @@
                 document.getElementById('card-dscr').className = "bg-slate-900 border border-slate-850 p-4 rounded-xl";
                 document.getElementById('dscr-breach-alert').classList.add('hidden');
             } else {
-                setTxt('kpi-dscr', `${r.avgDscr.toFixed(2)}x`);
-                setTxt('sub-kpi-dscr', `Minimo registrato: ${r.minDscr.toFixed(2)}x`);
+                setTxt('kpi-dscr', `${fmtDec(r.avgDscr, 2)}x`);
+                setTxt('sub-kpi-dscr', `Minimo registrato: ${fmtDec(r.minDscr, 2)}x`);
                 if (r.minDscr < 1.15) {
                     document.getElementById('card-dscr').className = "bg-red-950/20 border border-red-500/30 p-4 rounded-xl text-red-400";
                     document.getElementById('dscr-breach-alert').classList.remove('hidden');

@@ -1787,8 +1787,8 @@ function runSensitivityLoop(baseState, config) {
             } else {
                 scenarioText = `  |  Scenario: Base`;
             }
-            const medioneKpiText = `Medione Ponderato RID: € ${ridMedioneValue.toFixed(2)} /MWh` +
-                (ppaShare > 0 ? `  |  Quota PPA: ${ppaShare.toFixed(1)}%` : '') +
+            const medioneKpiText = `Medione Ponderato RID: € ${ridMedioneValue.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /MWh` +
+                (ppaShare > 0 ? `  |  Quota PPA: ${ppaShare.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : '') +
                 scenarioText;
 
             // Mock BESS consolidated simulation for downstream functions
