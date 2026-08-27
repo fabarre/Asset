@@ -464,6 +464,14 @@
         }
 
 
+        // Formatter condivisi per assi/tooltip Chart.js (C3)
+        const chartCompactEuro = (v) => new Intl.NumberFormat('it-IT', { notation: 'compact', maximumFractionDigits: 1 }).format(v) + ' €';
+        const chartEuroFull = (v) => new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 }).format(v) + ' €';
+        if (window.Chart) {
+            Chart.defaults.font.family = "'Outfit', sans-serif";
+            Chart.defaults.color = '#94a3b8';
+        }
+
         function switchTab(tabId) {
             if (tabId === 'tab-stabilimenti') {
                 // Refresh plant dropdown and list when entering the tab
@@ -5231,7 +5239,7 @@
                             type: 'linear',
                             title: { display: true, text: 'Valore (€/MWh)', color: '#94a3b8', font: { size: 10 } },
                             grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                            ticks: { color: '#cbd5e1', font: { size: 9 } }
+                            ticks: { color: '#cbd5e1', font: { size: 9 }, callback: v => fmtDec(v, 0) }
                         },
                         x: {
                             grid: { display: false },
@@ -5254,7 +5262,7 @@
                                         label += ': ';
                                     }
                                     if (context.parsed.y !== null) {
-                                        label += '€ ' + context.parsed.y.toFixed(2) + '/MWh';
+                                        label += '€ ' + fmtDec(context.parsed.y, 2) + '/MWh';
                                     }
                                     return label;
                                 }
@@ -6157,11 +6165,11 @@
                             y: {
                                 stacked: true,
                                 grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                                ticks: { color: '#94a3b8', callback: v => (v / 1000) + 'k' }
+                                ticks: { color: '#94a3b8', callback: v => chartCompactEuro(v) }
                             }
                         },
                         plugins: {
-                            legend: { 
+                            legend: {
                                 labels: { color: '#cbd5e1', boxWidth: 10, font: { size: 9 } },
                                 position: 'top'
                             },
@@ -6170,6 +6178,9 @@
                                 text: 'Composizione Ricavi Operativi SPV (€)',
                                 color: '#ffffff',
                                 font: { size: 10, weight: 'bold' }
+                            },
+                            tooltip: {
+                                callbacks: { label: (c) => ` ${c.dataset.label}: ${chartEuroFull(c.parsed.y)}` }
                             }
                         }
                     }
@@ -6223,7 +6234,7 @@
                                 type: 'linear',
                                 position: 'left',
                                 grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                                ticks: { color: '#94a3b8', callback: v => (v / 1000) + 'k' }
+                                ticks: { color: '#94a3b8', callback: v => chartCompactEuro(v) }
                             },
                             yDSCR: {
                                 type: 'linear',
@@ -6231,11 +6242,11 @@
                                 min: 0,
                                 max: 3.5,
                                 grid: { display: false },
-                                ticks: { color: '#c084fc', callback: v => v.toFixed(1) + 'x' }
+                                ticks: { color: '#c084fc', callback: v => fmtDec(v, 1) + 'x' }
                             }
                         },
                         plugins: {
-                            legend: { 
+                            legend: {
                                 labels: { color: '#cbd5e1', boxWidth: 10, font: { size: 9 } },
                                 position: 'top'
                             },
@@ -6244,6 +6255,13 @@
                                 text: 'Flussi di Cassa FCFE HoldCo & Covenant DSCR',
                                 color: '#ffffff',
                                 font: { size: 10, weight: 'bold' }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (c) => c.dataset.yAxisID === 'yDSCR'
+                                        ? ` ${c.dataset.label}: ${fmtDec(c.parsed.y, 2)}x`
+                                        : ` ${c.dataset.label}: ${chartEuroFull(c.parsed.y)}`
+                                }
                             }
                         }
                     }
@@ -7316,21 +7334,21 @@
                             max: 100,
                             title: { display: true, text: 'SoC (%)', color: '#22c55e', font: { size: 10 } },
                             grid: { display: false },
-                            ticks: { color: '#22c55e', callback: v => v + '%' }
+                            ticks: { color: '#22c55e', callback: v => fmtDec(v, 0) + '%' }
                         },
                         yPrice: {
                             type: 'linear',
                             position: 'right',
                             title: { display: true, text: 'Prezzo (€/MWh)', color: '#f43f5e', font: { size: 10 } },
                             grid: { display: false },
-                            ticks: { color: '#f43f5e', callback: v => '€' + v }
+                            ticks: { color: '#f43f5e', callback: v => '€ ' + fmtDec(v, 0) }
                         },
                         yRevenue: {
                             type: 'linear',
                             position: 'right',
                             title: { display: true, text: aggregation === 'orario' ? 'Ricavi (€/ora)' : 'Ricavi (€)', color: '#3b82f6', font: { size: 10 } },
                             grid: { display: false },
-                            ticks: { color: '#3b82f6', callback: v => '€' + v }
+                            ticks: { color: '#3b82f6', callback: v => chartCompactEuro(v) }
                         }
                     },
                     plugins: {
@@ -7365,11 +7383,11 @@
                                     }
                                     if (context.parsed.y !== null) {
                                         if (context.dataset.yAxisID === 'ySoC') {
-                                            label += context.parsed.y + '%';
+                                            label += fmtDec(context.parsed.y, 1) + '%';
                                         } else if (context.dataset.yAxisID === 'yPrice') {
-                                            label += '€' + context.parsed.y + '/MWh';
+                                            label += '€ ' + fmtDec(context.parsed.y, 1) + '/MWh';
                                         } else if (context.dataset.yAxisID === 'yRevenue') {
-                                            label += '€' + context.parsed.y.toLocaleString('it-IT');
+                                            label += '€ ' + context.parsed.y.toLocaleString('it-IT');
                                         } else {
                                             label += context.parsed.y.toLocaleString('it-IT') + ' kW';
                                         }
@@ -8624,11 +8642,11 @@
 
         function formatKpi(val, kpi) {
             if (val === null || val === undefined) return "N/A";
-            if (kpi === 'irr') return val.toFixed(2) + "%";
-            if (kpi === 'npv') return (val / 1e6).toFixed(2) + " M€";
-            if (kpi === 'dscr') return val.toFixed(2);
-            if (kpi === 'lcoe') return val.toFixed(2) + " €/MWh";
-            return val.toFixed(2);
+            if (kpi === 'irr') return fmtDec(val, 2) + "%";
+            if (kpi === 'npv') return fmtDec(val / 1e6, 2) + " M€";
+            if (kpi === 'dscr') return fmtDec(val, 2);
+            if (kpi === 'lcoe') return fmtDec(val, 2) + " €/MWh";
+            return fmtDec(val, 2);
         }
 
         function renderSensitivity1D(results, container) {
@@ -8673,7 +8691,7 @@
                     },
                     scales: {
                         x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' }, title: { display: true, text: xLabel, color: '#94a3b8' } },
-                        y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } }
+                        y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', callback: v => formatKpi(v, targetKpi) } }
                     }
                 }
             });
