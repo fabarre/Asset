@@ -15,6 +15,8 @@
 // 18. CER: incentivo GSE (TIAD+TIP) e ricavi PPA privato su energia condivisa
 // 19. Edge case: zero impianti / tutti disabilitati -> risultati zero, no crash
 // 20. Leva cappata a 95% anche con input > 100%
+// 21. Drift guard: funzioni duplicate main.js ↔ worker identiche (solare, mese/ora, perdite)
+// 22. Monte Carlo riproducibile con seed (stesso seed = stessi campioni)
 // Uso: npm test
 // ─────────────────────────────────────────────────────────────────────────────
 import fs from 'node:fs';
@@ -354,6 +356,92 @@ check('Equity cash positiva e ≥ capitale Holding iniziale', r20.equityAmount >
 check('Nessun over-funding: debito+equity ≤ costo progetto', r20.debtAmount + r20.equityAmount <= r20.totalProjectCost + 1,
     `debito+equity=${(r20.debtAmount + r20.equityAmount).toFixed(0)} costo=${r20.totalProjectCost.toFixed(0)}`);
 check('IRR finito con leva al cap', isFinite(r20.calculatedIrr));
+
+// ── Test 21: drift guard funzioni duplicate main↔worker ──
+console.log('\n[Test 21] Drift guard: funzioni duplicate main.js ↔ worker identiche');
+// Estrae il sorgente di "function name(...){...}" con brace-matching (gestisce nest).
+function extractFn(src, name) {
+    const start = src.indexOf('function ' + name + '(');
+    if (start < 0) return null;
+    const braceStart = src.indexOf('{', start);
+    if (braceStart < 0) return null;
+    let depth = 0;
+    for (let i = braceStart; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') { depth--; if (depth === 0) return src.slice(start, i + 1); }
+    }
+    return null;
+}
+const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+
+// 1) generateDefaultSolarProfile: main vs worker (entrambe pure)
+const mainSolarSrc = extractFn(mainSrc, 'generateDefaultSolarProfile');
+check('generateDefaultSolarProfile presente in main.js', !!mainSolarSrc);
+if (mainSolarSrc) {
+    const ctxSolar = vm.createContext({ Math, Float64Array });
+    const mainSolarFn = vm.runInContext('(' + mainSolarSrc + ')', ctxSolar);
+    const pMain = mainSolarFn(8, 1300);
+    const pWorker = sandbox.generateDefaultSolarProfile(8, 1300);
+    let eq = pMain.length === pWorker.length;
+    for (let i = 0; i < 8760 && eq; i++) if (pMain[i] !== pWorker[i]) eq = false;
+    check('generateDefaultSolarProfile main ≡ worker (8760 valori)', eq);
+}
+
+// 2) getMonthOfHour: main vs worker su tutte le ore
+const mainMonthSrc = extractFn(mainSrc, 'getMonthOfHour');
+check('getMonthOfHour presente in main.js', !!mainMonthSrc);
+if (mainMonthSrc) {
+    const ctxMonth = vm.createContext({});
+    const mainMonthFn = vm.runInContext('(' + mainMonthSrc + ')', ctxMonth);
+    let eq = true;
+    for (let t = 0; t < 8760 && eq; t++) if (mainMonthFn(t) !== sandbox.getMonthOfHour(t)) eq = false;
+    check('getMonthOfHour main ≡ worker (8760 ore)', eq);
+}
+
+// 3) resolveGridLosses: main vs worker con stessi input (shim State)
+const mainLossSrc = extractFn(mainSrc, 'resolveGridLosses');
+const workerLossSrc = extractFn(fs.readFileSync(workerPath, 'utf8'), 'resolveGridLosses');
+check('resolveGridLosses presente in main.js e worker', !!mainLossSrc && !!workerLossSrc);
+if (mainLossSrc && workerLossSrc) {
+    const shim = { inputs: {
+        ridLossInjectBt: 1.1, ridLossInjectMt: 2.2, ridLossInjectAt: 3.3,
+        ridLossWithdrawBt: 4.4, ridLossWithdrawMt: 5.5, ridLossWithdrawAt: 6.6,
+        cerLossCprBt: 7.7, cerLossCprMt: 8.8, cerLossCprAt: 9.9
+    } };
+    const ctxMainLoss = vm.createContext({ State: shim, String });
+    const ctxWorkerLoss = vm.createContext({ State: shim, String });
+    const mainLossFn = vm.runInContext('(' + mainLossSrc + ')', ctxMainLoss);
+    const workerLossFn = vm.runInContext('(' + workerLossSrc + ')', ctxWorkerLoss);
+    let eq = true; let detail = '';
+    for (const v of ['bt', 'mt', 'at', 'none']) {
+        for (const ty of ['inject', 'withdraw', 'cpr']) {
+            const a = mainLossFn(v, ty), b = workerLossFn(v, ty);
+            if (a !== b) { eq = false; detail = `${v}/${ty}: main=${a} worker=${b}`; }
+        }
+    }
+    check('resolveGridLosses main ≡ worker (tutte le combinazioni)', eq, detail);
+}
+
+// ── Test 22: Monte Carlo riproducibile con seed ──
+console.log('\n[Test 22] Monte Carlo: riproducibilità con seed');
+function runMonteCarlo(seed) {
+    lastMessage = null;
+    const st = buildState({ inputs: { priceScenarioType: 'base' } });
+    sandbox.self.onmessage({ data: { action: 'EXECUTE_MONTECARLO', payload: { State: st, mcConfig: { nSim: 12, sigmaPun: 15, sigmaGen: 5, seed } } } });
+    return lastMessage;
+}
+const mcA1 = runMonteCarlo(42);
+const mcA2 = runMonteCarlo(42);
+const mcB = runMonteCarlo(1337);
+check('Monte Carlo risponde montecarlo_success', mcA1 && mcA1.status === 'montecarlo_success');
+if (mcA1 && mcA1.status === 'montecarlo_success') {
+    const irrA1 = mcA1.results.irrSamples, irrA2 = mcA2.results.irrSamples, irrB = mcB.results.irrSamples;
+    const sameSeedEqual = irrA1.length === irrA2.length && irrA1.every((v, i) => v === irrA2[i]);
+    check('Stesso seed -> campioni identici (riproducibile)', sameSeedEqual);
+    const diffSeedDiffers = irrA1.some((v, i) => v !== irrB[i]);
+    check('Seed diverso -> campioni diversi', diffSeedDiffers);
+    check('Campioni IRR finiti e non NaN', irrA1.every(v => Number.isFinite(v)));
+}
 
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);

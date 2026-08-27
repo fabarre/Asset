@@ -8728,10 +8728,13 @@
             statusEl.className = "text-center mt-2 text-[10px] text-violet-400 font-medium h-4 animate-pulse";
             container.innerHTML = '<div class="text-center text-violet-400"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><p>Esecuzione simulazioni Monte Carlo, attendere...</p></div>';
 
+            const mcSeedRaw = document.getElementById('mc-seed') ? document.getElementById('mc-seed').value : '';
             const mcConfig = {
                 nSim: parseInt(document.getElementById('mc-n-sim').value) || 100,
                 sigmaPun: parseFloat(document.getElementById('mc-sigma-pun').value) || 0,
-                sigmaGen: parseFloat(document.getElementById('mc-sigma-gen').value) || 0
+                sigmaGen: parseFloat(document.getElementById('mc-sigma-gen').value) || 0,
+                // Seed opzionale: se vuoto il worker usa un default deterministico (riproducibile)
+                seed: mcSeedRaw !== '' ? parseInt(mcSeedRaw) : undefined
             };
 
             syncStateFromDOM();

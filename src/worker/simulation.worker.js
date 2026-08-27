@@ -18,6 +18,21 @@ function getBrpFeeForMonth(plant, yr, monthIndex) {
     return plant.brpFee3 !== undefined ? plant.brpFee3 : 0;
 }
 
+// Fee BRP rappresentativa per l'ottimizzazione del dispatch: il profilo orario
+// 8760h è calcolato UNA volta e riusato per tutti gli anni (volumi fissi,
+// prezzi ri-contabilizzati per anno), quindi la strategia di carica/scarica va
+// sagomata sulla fee MEDIA per mese di calendario lungo la vita utile (20 anni),
+// non sulla sola fee promozionale dell'anno 1 (che sovrastimava l'iniezione in
+// rete quando le fee scendono a 0 dal ~2° anno).
+const BRP_DISPATCH_HORIZON_YEARS = 20;
+function getBrpLifetimeAvgFeeForMonth(plant, monthIndex) {
+    let sum = 0;
+    for (let yr = 1; yr <= BRP_DISPATCH_HORIZON_YEARS; yr++) {
+        sum += getBrpFeeForMonth(plant, yr, monthIndex);
+    }
+    return sum / BRP_DISPATCH_HORIZON_YEARS;
+}
+
 // Festività italiane 2025 (indice giorno 0-based dal 1° gennaio) — usate dai generatori di curve di carico
 const IT_HOLIDAYS_2025 = new Set([0, 5, 109, 110, 114, 120, 152, 226, 304, 341, 358, 359]);
 
@@ -165,7 +180,7 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
         const month = getMonthOfHour(t);
         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
         const pricePPA = ppaPrice / 1000;
@@ -267,7 +282,7 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
         const month = getMonthOfHour(t);
         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
         const pricePPA = ppaPrice / 1000;
@@ -363,20 +378,36 @@ function runTornadoLoop(baseState) {
     return { type: 'tornado', baseIrr, rows };
 }
 
-// Box-Muller gaussian generator (N(0,1))
-function gaussianRandom() {
+// PRNG deterministico (mulberry32): rende il Monte Carlo riproducibile a parità
+// di seed. Restituisce una funzione () -> float in [0,1).
+function mulberry32(seed) {
+    let a = (seed >>> 0) || 1;
+    return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// Box-Muller gaussian generator (N(0,1)); rng è la fonte di casualità (seedata).
+function gaussianRandom(rng) {
     let u = 0, v = 0;
-    while (u === 0) u = Math.random();
-    while (v === 0) v = Math.random();
+    while (u === 0) u = rng();
+    while (v === 0) v = rng();
     return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
 
 // Monte Carlo: shock lognormale mean-preserving sul PUN + shock gaussiano sulla produzione FV.
 // Restituisce percentili P10/P50/P90 e media di IRR, NPV, DSCR min/avg.
+// mcConfig.seed (opzionale): seed per risultati riproducibili; default fisso.
 function runMonteCarloLoop(baseState, mcConfig) {
     const nSim = Math.min(500, Math.max(10, parseInt(mcConfig.nSim) || 100));
     const sigmaPun = Math.max(0, (mcConfig.sigmaPun || 0) / 100);
     const sigmaGen = Math.max(0, (mcConfig.sigmaGen || 0) / 100);
+    const seed = (mcConfig.seed !== undefined && mcConfig.seed !== null && mcConfig.seed !== '')
+        ? (parseInt(mcConfig.seed) || 0) : 20260101;
+    const rng = mulberry32(seed);
 
     const samples = { irr: [], npv: [], dscrMin: [], dscrAvg: [] };
 
@@ -385,7 +416,7 @@ function runMonteCarloLoop(baseState, mcConfig) {
 
         // Shock prezzi: fattore lognormale con media 1 (exp(-sigma^2/2) * exp(sigma*N))
         if (sigmaPun > 0 && stateClone.zonalPun) {
-            const punFactor = Math.exp(-0.5 * sigmaPun * sigmaPun + sigmaPun * gaussianRandom());
+            const punFactor = Math.exp(-0.5 * sigmaPun * sigmaPun + sigmaPun * gaussianRandom(rng));
             for (let zone in stateClone.zonalPun) {
                 const arr = stateClone.zonalPun[zone];
                 if (arr) for (let t = 0; t < arr.length; t++) arr[t] *= punFactor;
@@ -395,7 +426,7 @@ function runMonteCarloLoop(baseState, mcConfig) {
         if (sigmaGen > 0 && stateClone.plants) {
             stateClone.plants.forEach(pl => {
                 if (!pl.generation) return;
-                const genFactor = Math.max(0.5, 1 + sigmaGen * gaussianRandom());
+                const genFactor = Math.max(0.5, 1 + sigmaGen * gaussianRandom(rng));
                 for (let t = 0; t < pl.generation.length; t++) pl.generation[t] *= genFactor;
             });
         }
@@ -589,10 +620,10 @@ function runSensitivityLoop(baseState, config) {
                     const pricePUN = punProfile[t];
                     const month = getMonthOfHour(t);
                     const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
                     const pricePPA = ppaPrice / 1000;
-                    
+
                     hourlyGridFeed[t] = p_fed_pv;
                     hourlySelfCons[t] = selfCons;
                     hourlySelfConsSolar[t] = selfCons;
@@ -959,7 +990,7 @@ function runSensitivityLoop(baseState, config) {
                         
                         const pricePPA = ppaPrice / 1000;
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
                         
@@ -1087,7 +1118,7 @@ function runSensitivityLoop(baseState, config) {
                         const pricePUN = punProfile[h];
                         const month = getMonthOfHour(h);
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
                         const pricePPA = ppaPrice / 1000;
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;

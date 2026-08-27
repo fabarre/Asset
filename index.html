@@ -3064,6 +3064,10 @@
                                 <label class="block text-[11px] text-slate-400 mb-1">Volatilità Produzione FV (σ %)</label>
                                 <input type="number" id="mc-sigma-gen" value="5" min="0" max="50" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs">
                             </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">Seed (opzionale, per riproducibilità)</label>
+                                <input type="number" id="mc-seed" value="" placeholder="Es. 42" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs">
+                            </div>
                             <div class="pt-3 border-t border-slate-800">
                                 <button id="btn-run-montecarlo" class="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-2 px-4 rounded-xl shadow-lg shadow-violet-900/50 transition-all flex justify-center items-center space-x-2">
                                     <i class="fa-solid fa-dice"></i>
@@ -3116,7 +3120,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=6"></script>
+    <script src="./src/main.js?v=7"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {
