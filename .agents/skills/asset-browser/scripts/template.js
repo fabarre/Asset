@@ -3,11 +3,43 @@
 // Avvio: node .agents/skills/asset-browser/scripts/template.js
 
 'use strict';
-process.env.LD_LIBRARY_PATH = '/home/fabarre/pw-libs/extracted/usr/lib/x86_64-linux-gnu:' + (process.env.LD_LIBRARY_PATH || '');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
-const { chromium } = require('/mnt/c/Users/Utente/ASSET/node_modules/playwright-core');
+// Repo root: .../.agents/skills/asset-browser/scripts -> 4 livelli sopra
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
-const CHROMIUM = '/home/fabarre/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
+// Librerie system user-space opzionali (solo se presenti, es. setup WSL senza sudo)
+const EXTRA_LIBS = path.join(os.homedir(), 'pw-libs', 'extracted', 'usr', 'lib', 'x86_64-linux-gnu');
+if (fs.existsSync(EXTRA_LIBS)) {
+  process.env.LD_LIBRARY_PATH = EXTRA_LIBS + ':' + (process.env.LD_LIBRARY_PATH || '');
+}
+
+const { chromium } = require(path.join(REPO_ROOT, 'node_modules', 'playwright-core'));
+
+// Chromium for Testing: override env oppure auto-detect in ~/.cache/ms-playwright
+function resolveChromium() {
+  if (process.env.ASSET_BROWSER_PATH && fs.existsSync(process.env.ASSET_BROWSER_PATH)) {
+    return process.env.ASSET_BROWSER_PATH;
+  }
+  const pwCache = path.join(os.homedir(), '.cache', 'ms-playwright');
+  if (fs.existsSync(pwCache)) {
+    const dirs = fs.readdirSync(pwCache)
+      .filter((d) => /^chromium-\d+$/.test(d))
+      .sort()
+      .reverse();
+    for (const d of dirs) {
+      for (const sub of ['chrome-linux64', 'chrome-linux']) {
+        const bin = path.join(pwCache, d, sub, 'chrome');
+        if (fs.existsSync(bin)) return bin;
+      }
+    }
+  }
+  return null;
+}
+
+const CHROMIUM = resolveChromium();
 const URL = 'http://localhost:3000/';
 
 (async () => {

@@ -20,24 +20,24 @@ Skill custom per navigare l'SPA del progetto AntiGravity Hybrid FV + BESS Simula
 
 | Componente | Path | Note |
 |---|---|---|
-| Chromium for Testing v149 | `/home/fabarre/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` | Scaricato via `playwright install` |
-| Librerie system (nss/nspr/alsa) | `/home/fabarre/pw-libs/extracted/usr/lib/x86_64-linux-gnu/` | 12 .so estratte user-space da .deb (no sudo) |
-| `playwright-core` | `./node_modules/playwright-core` (project-local) | v1.61.0, installato in `ASSET/package.json` devDeps |
+| Chromium for Testing | `~/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome` | Auto-detect dallo script (cartella `chromium-*` più recente); override con `ASSET_BROWSER_PATH` |
+| Librerie system (nss/nspr/alsa) | librerie di sistema | Su questo VPS `ldd` non riporta dipendenze mancanti; il setup user-space `~/pw-libs` è usato solo se presente (retaggio WSL) |
+| `playwright-core` | `./node_modules/playwright-core` (project-local) | v1.61.0, installato in `package.json` devDeps (`npm install`) |
 
 Se un path non esiste più (es. chromium cancellato), vedi la sezione "Ripristino dipendenze" in fondo.
 
 ## Avviare l'app (prerequisito runtime)
 
-L'app è una SPA statica: serve un web server su `http://localhost:3000/`. Avviarlo in background prima di navigare:
+L'app è una SPA statica. Sul VPS di produzione è già servita h24 da **PM2** (`asset-app`, porta `3000`, static server con cwd `/home/ubuntu/Asset`): verifica con `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/` (deve rispondere 200). Solo se PM2 non è attivo, avvio manuale:
 
 ```bash
-cd /mnt/c/Users/Utente/ASSET
+cd /home/ubuntu/Asset
 (python3 -m http.server 3000 --bind 127.0.0.1 >/tmp/httpserver.log 2>&1 &)
 sleep 2
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/   # deve rispondere 200
 ```
 
-Per fermarlo: `pkill -f "http.server 3000"`
+Per fermare l'istanza manuale: `pkill -f "http.server 3000"`
 
 ## Uso rapido — script helper `scripts/browse.js`
 
@@ -68,13 +68,12 @@ L'helper gestisce automaticamente: `LD_LIBRARY_PATH`, `executablePath`, `--no-sa
 Per interazioni complesse (es. compilare form, sequenza di click, estrarre tabelle), scrivere uno script Node dedicato che richiede `playwright-core` locale:
 
 ```js
-// template: .agents/skills/asset-browser/scripts/template.js
-process.env.LD_LIBRARY_PATH = '/home/fabarre/pw-libs/extracted/usr/lib/x86_64-linux-gnu:' + (process.env.LD_LIBRARY_PATH || '');
-const { chromium } = require('/mnt/c/Users/Utente/ASSET/node_modules/playwright-core');
+// template: .agents/skills/asset-browser/scripts/template.js (path portabili: auto-detect Chromium)
+const { chromium } = require('/home/ubuntu/Asset/node_modules/playwright-core');
 
 (async () => {
   const browser = await chromium.launch({
-    executablePath: '/home/fabarre/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome',
+    executablePath: '/home/ubuntu/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome',
     headless: true,
     args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
   });
@@ -89,6 +88,8 @@ const { chromium } = require('/mnt/c/Users/Utente/ASSET/node_modules/playwright-
   await browser.close();
 })().catch(e => { console.error('FAIL:', e.message); process.exit(1); });
 ```
+
+> Preferire sempre `scripts/template.js` già pronto: risolve Chromium e `playwright-core` automaticamente (override: `ASSET_BROWSER_PATH`).
 
 API Playwright utili (vedi anche `references/`): `page.$()`, `page.$$()`, `page.$eval()`, `page.$$eval()`, `page.click()`, `page.fill()`, `page.selectOption()`, `page.evaluate()`, `page.screenshot()`, `page.waitForSelector()`, `page.waitForTimeout()`.
 
@@ -128,10 +129,11 @@ console.log('Downloaded:', fs.readdirSync('/tmp/dl'));
 ## Risoluzione problemi comuni
 
 - **"Chromium distribution 'chrome' is not found"**: si verifica solo se si usa `playwright-cli` directly. Usare invece `playwright-core` con `executablePath` come negli script di questa skill.
-- **Exit code 127 / "shared libraries not found"**: le `LD_LIBRARY_PATH` non è impostata. Verificare `~/pw-libs/extracted/usr/lib/x86_64-linux-gnu/*.so` esistano (12 file).
-- **Pagina bianca / Supabase non carica**: l'app richiede origine http(s), non `file://`. Avviare sempre via `http.server` come sopra.
+- **Exit code 127 / "shared libraries not found"**: verificare con `ldd <binario chrome> | grep "not found"`. Su questo VPS le librerie di sistema sono già complete; in ambienti senza sudo estrarre le .so in `~/pw-libs` (vedi sotto) — gli script la aggiungono a `LD_LIBRARY_PATH` solo se presente.
+- **Pagina bianca / Supabase non carica**: l'app richiede origine http(s), non `file://`. Verificare che il server sia attivo (PM2 `asset-app` o `http.server` come sopra).
 - **`page.select is not a function`**: usare `page.selectOption()`.
 - **Timeout su goto**: aumentare `waitForTimeout` dopo `domcontentloaded` (Supabase fetch asincrono).
+- **Login richiesto**: l'ambiente di produzione ha RLS restrittive; per flussi autenticati usare le credenziali da `scratch/.e2e_auth.json` (gitignored) come fa `tests/e2e_validate.js`.
 
 ## Ripristino dipendenze (se un path manca)
 
@@ -140,13 +142,13 @@ console.log('Downloaded:', fs.readdirSync('/tmp/dl'));
 npx playwright install chromium
 # o specifico: npx playwright install chrome-for-testing
 
-# Librerie system user-space (no sudo)
+# Librerie system user-space (solo se ldd riporta .so mancanti e non si ha sudo)
 mkdir -p ~/pw-libs && cd ~/pw-libs
 apt-get download libnss3 libnspr4 libasound2t64
 mkdir -p extracted && for d in *.deb; do dpkg-deb -x "$d" extracted/; done
 
 # playwright-core (già in package.json)
-cd /mnt/c/Users/Utente/ASSET && npm install
+cd /home/ubuntu/Asset && npm install
 ```
 
 ## Note

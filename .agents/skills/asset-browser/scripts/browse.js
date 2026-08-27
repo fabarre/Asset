@@ -9,13 +9,43 @@
 //   node browse.js text      --url http://localhost:3000/ --sel "#kpi-irr"
 
 'use strict';
-process.env.LD_LIBRARY_PATH = '/home/fabarre/pw-libs/extracted/usr/lib/x86_64-linux-gnu:' + (process.env.LD_LIBRARY_PATH || '');
-
-const { chromium } = require('/mnt/c/Users/Utente/ASSET/node_modules/playwright-core');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
-const CHROMIUM = '/home/fabarre/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
+// Repo root: .../.agents/skills/asset-browser/scripts -> 4 livelli sopra
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+
+// Librerie system user-space opzionali (solo se presenti, es. setup WSL senza sudo)
+const EXTRA_LIBS = path.join(os.homedir(), 'pw-libs', 'extracted', 'usr', 'lib', 'x86_64-linux-gnu');
+if (fs.existsSync(EXTRA_LIBS)) {
+  process.env.LD_LIBRARY_PATH = EXTRA_LIBS + ':' + (process.env.LD_LIBRARY_PATH || '');
+}
+
+const { chromium } = require(path.join(REPO_ROOT, 'node_modules', 'playwright-core'));
+
+// Chromium for Testing: override env oppure auto-detect in ~/.cache/ms-playwright
+function resolveChromium() {
+  if (process.env.ASSET_BROWSER_PATH && fs.existsSync(process.env.ASSET_BROWSER_PATH)) {
+    return process.env.ASSET_BROWSER_PATH;
+  }
+  const pwCache = path.join(os.homedir(), '.cache', 'ms-playwright');
+  if (fs.existsSync(pwCache)) {
+    const dirs = fs.readdirSync(pwCache)
+      .filter((d) => /^chromium-\d+$/.test(d))
+      .sort()
+      .reverse();
+    for (const d of dirs) {
+      for (const sub of ['chrome-linux64', 'chrome-linux']) {
+        const bin = path.join(pwCache, d, sub, 'chrome');
+        if (fs.existsSync(bin)) return bin;
+      }
+    }
+  }
+  return null;
+}
+
+const CHROMIUM = resolveChromium();
 const DEFAULT_WAIT = 4000; // ms dopo domcontentloaded (Supabase init + primo calcolo)
 
 function parseArgs(argv) {
@@ -34,8 +64,8 @@ function parseArgs(argv) {
 }
 
 async function launch() {
-  if (!fs.existsSync(CHROMIUM)) {
-    console.error('ERRORE: Chromium non trovato in', CHROMIUM);
+  if (!CHROMIUM || !fs.existsSync(CHROMIUM)) {
+    console.error('ERRORE: Chromium for Testing non trovato (override con ASSET_BROWSER_PATH).');
     console.error('Ripristinalo con: npx playwright install chromium');
     process.exit(1);
   }
