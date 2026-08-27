@@ -117,6 +117,22 @@ function loadCredentials() {
         const w = document.getElementById('auth-anonymous-wrap');
         return !!w && w.style.display !== 'none';
     });
+    // FASE C1: sistema di notifiche corporate (toast + modali)
+    out.notifyAvailable = await page.evaluate(() =>
+        typeof window.showToast === 'function' && typeof window.showConfirm === 'function' && typeof window.showPrompt === 'function');
+    out.notifyToastRendered = await page.evaluate(async () => {
+        window.showToast('E2E toast test', 'success', { duration: 600 });
+        await new Promise(r => setTimeout(r, 150));
+        return document.querySelectorAll('#toast-container .toast-card').length > 0;
+    });
+    out.notifyConfirmCancel = await page.evaluate(async () => {
+        const p = window.showConfirm({ title: 'E2E', message: 'test' });
+        await new Promise(r => setTimeout(r, 150));
+        const btn = document.querySelector('[data-role="cancel"]');
+        if (!btn) return false;
+        btn.click();
+        return (await p) === false;
+    });
     out.plantsCount = await page.evaluate(() => window.State?.plants?.length);
     out.kpiIrr = await page.evaluate(() => document.getElementById('kpi-irr')?.textContent);
     out.kpiNpv = await page.evaluate(() => document.getElementById('kpi-npv')?.textContent);

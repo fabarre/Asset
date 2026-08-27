@@ -1135,13 +1135,13 @@
             if (!editingPlantId) return;
             
             if (!supabaseClient) {
-                alert("Database non connesso. Impossibile salvare le modifiche.");
+                showToast("Database non connesso. Impossibile salvare le modifiche.", 'error');
                 return;
             }
             
             const plantIdx = State.plants.findIndex(p => p.id === editingPlantId);
             if (plantIdx < 0) {
-                alert("Impianto non trovato.");
+                showToast("Impianto non trovato.", 'error');
                 return;
             }
             const plant = State.plants[plantIdx];
@@ -1150,11 +1150,11 @@
             const editZone = document.getElementById('plant-zone').value;
             const editLandType = document.getElementById('plant-land-type').value;
             if (editZone === 'none') {
-                alert("Seleziona una Zona Geografica valida prima di salvare.");
+                showToast("Seleziona una Zona Geografica valida prima di salvare.", 'warning');
                 return;
             }
             if (editLandType === 'none') {
-                alert("Seleziona una Tipologia Terreno valida prima di salvare.");
+                showToast("Seleziona una Tipologia Terreno valida prima di salvare.", 'warning');
                 return;
             }
             
@@ -2292,7 +2292,7 @@
 
         async function submitStabilimentoForm() {
             if (!supabaseClient) {
-                alert("Database non connesso. Impossibile salvare lo stabilimento.");
+                showToast("Database non connesso. Impossibile salvare lo stabilimento.", 'error');
                 return;
             }
 
@@ -2382,11 +2382,16 @@
 
         async function deleteStabilimento(id) {
             if (!supabaseClient) {
-                alert("Database non connesso. Impossibile eliminare il profilo consumo.");
+                showToast("Database non connesso. Impossibile eliminare il profilo consumo.", 'error');
                 return;
             }
-            if (!confirm('Eliminare questo profilo consumo e il relativo contratto PPA?')) return;
-            
+            const okDelete = await showConfirm({
+                title: 'Elimina profilo consumo',
+                message: 'Eliminare questo profilo consumo e il relativo contratto PPA?',
+                confirmLabel: 'Elimina'
+            });
+            if (!okDelete) return;
+
             const stabFound = State.stabilimenti.find(s => s.id === id);
             const stabBackupClone = stabFound ? structuredClone(stabFound) : null;
             const success = await deleteStabilimentoFromSupabase(id);
@@ -2463,12 +2468,12 @@
         // ── Supabase CRUD ────────────────────────────────────────────────────
         async function saveStabilimentoToSupabase(stab) {
             if (!supabaseClient) {
-                alert("Database non connesso. Impossibile salvare il profilo consumi.");
+                showToast("Database non connesso. Impossibile salvare il profilo consumi.", 'error');
                 return false;
             }
              try {
                 if (!currentUserId()) {
-                    alert("Autenticazione richiesta per salvare i dati.");
+                    showToast("Autenticazione richiesta per salvare i dati.", 'error');
                     return false;
                 }
                 const stabPayload = {
@@ -2514,7 +2519,7 @@
                 }
                 if (error) {
                     console.error('Errore salvataggio profilo consumo:', error);
-                    alert(`Errore nel salvataggio del profilo consumo su Supabase: ${error.message}\nVerifica i permessi/RLS della tabella.`);
+                    showToast(`Errore nel salvataggio del profilo consumo su Supabase: ${error.message}\nVerifica i permessi/RLS della tabella.`, 'error');
                     return false;
                 }
 
@@ -2534,7 +2539,7 @@
                         const { error: le } = await supabaseClient.from('stabilimento_load').insert(chunk);
                         if (le) {
                             console.error('Errore salvataggio curva carico:', le);
-                            alert(`Errore nel salvataggio della curva di consumo del profilo: ${le.message}\nVerifica i permessi/RLS della tabella.`);
+                            showToast(`Errore nel salvataggio della curva di consumo del profilo: ${le.message}\nVerifica i permessi/RLS della tabella.`, 'error');
                             return false;
                         }
                     }
@@ -2542,33 +2547,33 @@
                 return true;
             } catch (err) {
                 console.error("Errore imprevisto salvataggio profilo consumo:", err);
-                alert(`Errore imprevisto nel salvataggio del profilo consumo: ${err.message}`);
+                showToast(`Errore imprevisto nel salvataggio del profilo consumo: ${err.message}`, 'error');
                 return false;
             }
         }
 
         async function deleteStabilimentoFromSupabase(id) {
             if (!supabaseClient) {
-                alert("Database non connesso. Impossibile eliminare il profilo dal database.");
+                showToast("Database non connesso. Impossibile eliminare il profilo dal database.", 'error');
                 return false;
             }
             try {
                 const { error: le } = await supabaseClient.from('stabilimento_load').delete().eq('stabilimento_id', id);
                 if (le) {
                     console.error('Errore rimozione curva consumo:', le);
-                    alert(`Errore nella rimozione della curva di consumo: ${le.message}`);
+                    showToast(`Errore nella rimozione della curva di consumo: ${le.message}`, 'error');
                     return false;
                 }
                 const { error: se } = await supabaseClient.from('stabilimenti').delete().eq('id', id);
                 if (se) {
                     console.error('Errore rimozione profilo consumo:', se);
-                    alert(`Errore nella rimozione del profilo consumo da Supabase: ${se.message}\nVerifica i permessi/RLS della tabella.`);
+                    showToast(`Errore nella rimozione del profilo consumo da Supabase: ${se.message}\nVerifica i permessi/RLS della tabella.`, 'error');
                     return false;
                 }
                 return true;
             } catch (err) {
                 console.error("Errore imprevisto rimozione profilo consumo:", err);
-                alert(`Errore imprevisto nella rimozione del profilo consumo: ${err.message}`);
+                showToast(`Errore imprevisto nella rimozione del profilo consumo: ${err.message}`, 'error');
                 return false;
             }
         }
@@ -2946,7 +2951,7 @@
                 URL.revokeObjectURL(url);
             } catch (err) {
                 console.error("Errore durante l'esportazione del CSV:", err);
-                alert("Errore durante l'esportazione della configurazione.");
+                showToast("Errore durante l'esportazione della configurazione.", 'error');
             }
         }
 
@@ -3119,10 +3124,10 @@
                     triggerRecalculate();
                     
                     Audit.log('config.csv_import', keysFound + ' parametri importati da CSV');
-                    alert("Configurazione importata con successo e sincronizzata con il database!");
+                    showToast("Configurazione importata con successo e sincronizzata con il database!", 'success');
                 } catch (err) {
                     console.error("Errore durante l'importazione del CSV:", err);
-                    alert("Errore nell'importazione: " + err.message);
+                    showToast("Errore nell'importazione: " + err.message, 'error');
                 } finally {
                     showCalcIndicator(false);
                     // Reset file input so same file can be uploaded again
@@ -3131,7 +3136,7 @@
             };
             reader.onerror = function() {
                 console.error("Errore di lettura del file FileReader");
-                alert("Errore di lettura del file.");
+                showToast("Errore di lettura del file.", 'error');
                 showCalcIndicator(false);
                 event.target.value = '';
             };
@@ -3689,10 +3694,10 @@
         }
 
         window.saveCurrentScenario = async function() {
-            if (!supabaseClient) { alert('Database non connesso.'); return; }
+            if (!supabaseClient) { showToast('Database non connesso.', 'error'); return; }
             const nameEl = document.getElementById('scenario-name-input');
             const name = (nameEl.value || '').trim();
-            if (!name) { alert('Inserisci un nome per lo scenario.'); return; }
+            if (!name) { showToast('Inserisci un nome per lo scenario.', 'warning'); return; }
             syncStateFromDOM();
             const id = 'sc_' + Date.now();
             const payload = JSON.parse(JSON.stringify(State.inputs));
@@ -3704,15 +3709,15 @@
                 Audit.log('scenario.save', name);
             } catch (err) {
                 console.error('Errore salvataggio scenario:', err);
-                alert('Errore nel salvataggio dello scenario: ' + err.message);
+                showToast('Errore nel salvataggio dello scenario: ' + err.message, 'error');
             }
         };
 
         window.applySelectedScenario = async function() {
             const id = document.getElementById('scenario-select').value;
-            if (!id) { alert('Seleziona uno scenario da applicare.'); return; }
+            if (!id) { showToast('Seleziona uno scenario da applicare.', 'warning'); return; }
             const scen = State.scenarios.find(s => s.id === id);
-            if (!scen) { alert('Scenario non trovato.'); return; }
+            if (!scen) { showToast('Scenario non trovato.', 'error'); return; }
             State.inputs = JSON.parse(JSON.stringify(scen.payload));
             initDOMFromState();
             await saveConfigToSupabase();
@@ -3721,11 +3726,16 @@
         };
 
         window.deleteSelectedScenario = async function() {
-            if (!supabaseClient) { alert('Database non connesso.'); return; }
+            if (!supabaseClient) { showToast('Database non connesso.', 'error'); return; }
             const id = document.getElementById('scenario-select').value;
-            if (!id) { alert('Seleziona uno scenario da eliminare.'); return; }
+            if (!id) { showToast('Seleziona uno scenario da eliminare.', 'warning'); return; }
             const scen = State.scenarios.find(s => s.id === id);
-            if (!confirm(`Eliminare lo scenario "${scen ? scen.name : id}"?`)) return;
+            const okDelete = await showConfirm({
+                title: 'Elimina scenario',
+                message: `Eliminare lo scenario "${scen ? scen.name : id}"?`,
+                confirmLabel: 'Elimina'
+            });
+            if (!okDelete) return;
             const scenBackup = scen ? { id: scen.id, name: scen.name, payload: JSON.parse(JSON.stringify(scen.payload)) } : null;
             try {
                 const { error } = await supabaseClient.from('simulation_config').delete()
@@ -3743,14 +3753,14 @@
                 }
             } catch (err) {
                 console.error('Errore eliminazione scenario:', err);
-                alert('Errore nell\'eliminazione dello scenario: ' + err.message);
+                showToast('Errore nell\'eliminazione dello scenario: ' + err.message, 'error');
             }
         };
 
         window.runScenarioCompare = function() {
             const ids = Array.from(State.selectedCompareIds);
-            if (ids.length === 0) { alert('Seleziona almeno uno scenario dai checkbox.'); return; }
-            if (ids.length > 3) { alert('Confronto limitato a 3 scenari alla volta.'); return; }
+            if (ids.length === 0) { showToast('Seleziona almeno uno scenario dai checkbox.', 'warning'); return; }
+            if (ids.length > 3) { showToast('Confronto limitato a 3 scenari alla volta.', 'warning'); return; }
             const selected = ids.map(id => State.scenarios.find(s => s.id === id)).filter(Boolean);
             if (selected.length === 0) return;
 
@@ -3820,11 +3830,11 @@
 
         async function savePlantToSupabase(plant) {
             if (!supabaseClient) {
-                alert("Database non connesso. Impossibile salvare l'impianto nel database.");
+                showToast("Database non connesso. Impossibile salvare l'impianto nel database.", 'error');
                 return false;
             }
             if (!currentUserId()) {
-                alert("Autenticazione richiesta per salvare i dati.");
+                showToast("Autenticazione richiesta per salvare i dati.", 'error');
                 return false;
             }
             const statusEl = document.getElementById('sync-status');
@@ -3980,7 +3990,7 @@
                 console.error("Errore salvataggio impianto su Supabase:", err);
                 statusEl.textContent = "Errore salvataggio impianto.";
                 statusEl.className = "text-xs text-red-400 font-medium";
-                alert(`Errore di salvataggio dell'impianto nel database: ${err.message}`);
+                showToast(`Errore di salvataggio dell'impianto nel database: ${err.message}`, 'error');
                 return false;
             }
         }
@@ -3988,7 +3998,7 @@
         // Parser for PVGIS CSV - now also extracts all metadata from header
         window.importPvgisCsv = async function(fileContent, plantName, plantCapacityKwp, plantZone, capex, opex, connectionCost, landType, landCost, developmentCost, spvAcquisitionCost, bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax, bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears, bessType, bessConnection, gridConnectionKw, gridVoltage, inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV, opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement, earnoutType, earnoutVal, earnoutYears, serviceType, serviceVal, serviceYears, traderContractType, traderSpread, traderDisp, pnrrContributionPct, degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct, marketType, ferxTariff) {
             if (!supabaseClient) {
-                alert("Database non connesso. Impossibile importare l'impianto.");
+                showToast("Database non connesso. Impossibile importare l'impianto.", 'error');
                 return;
             }
             const lines = fileContent.split(/\r?\n/);
@@ -4065,7 +4075,7 @@
             });
             
             if (count < 100) {
-                alert("Formato PVGIS CSV non standard. Verr\u00E0 generata una curva di produzione di default basata sulla capacit\u00E0 nominale.");
+                showToast("Formato PVGIS CSV non standard. Verr\u00E0 generata una curva di produzione di default basata sulla capacit\u00E0 nominale.", 'warning');
                 const defaultGen = generateDefaultSolarProfile(plantCapacityKwp / 1000, 1690);
                 for(let i=0; i<8760; i++) generation[i] = defaultGen[i];
             }
@@ -4246,7 +4256,7 @@
                     });
                     
                     State._punVersion = (State._punVersion || 0) + 1;
-                    alert(`Importazione GME completata! Aggiornati ${count} valori di prezzo zonale.`);
+                    showToast(`Importazione GME completata! Aggiornati ${count} valori di prezzo zonale.`, 'success');
                     renderZonalAverages();
                     triggerRecalculate();
                     
@@ -4265,7 +4275,7 @@
                     }
                 } catch(err) {
                     console.error(err);
-                    alert("Errore nel parsing del file GME. Assicurati che sia un listino XLSX valido.");
+                    showToast("Errore nel parsing del file GME. Assicurati che sia un listino XLSX valido.", 'error');
                 }
             };
             reader.readAsArrayBuffer(file);
@@ -4277,7 +4287,7 @@
             const bessMwhCheck = parseFloat(document.getElementById('plant-bess-mwh').value) || 0;
             const isBessOnlyCheck = bessTypeCheck !== 'none' && bessMwhCheck > 0;
             if (fileInput.files.length === 0 && !window._pvgisApiText && !isBessOnlyCheck) {
-                alert("Seleziona un file PVGIS (o scarica i dati da PVGIS API) prima di aggiungere l'impianto.\n\nPer un impianto BESS standalone (senza FV) configura il BESS e premi di nuovo Aggiungi.");
+                showToast("Seleziona un file PVGIS (o scarica i dati da PVGIS API) prima di aggiungere l'impianto.\n\nPer un impianto BESS standalone (senza FV) configura il BESS e premi di nuovo Aggiungi.", 'warning');
                 return;
             }
             
@@ -4286,11 +4296,11 @@
             
             // Validate mandatory dropdowns
             if (zone === 'none') {
-                alert("Seleziona una Zona Geografica valida prima di aggiungere l'impianto.");
+                showToast("Seleziona una Zona Geografica valida prima di aggiungere l'impianto.", 'warning');
                 return;
             }
             if (landType === 'none') {
-                alert("Seleziona una Tipologia Terreno valida prima di aggiungere l'impianto.");
+                showToast("Seleziona una Tipologia Terreno valida prima di aggiungere l'impianto.", 'warning');
                 return;
             }
             
@@ -4404,11 +4414,16 @@
 
         window.deletePlant = async function(plantId) {
             if (!supabaseClient) {
-                alert("Database non connesso. Impossibile eliminare l'impianto.");
+                showToast("Database non connesso. Impossibile eliminare l'impianto.", 'error');
                 return;
             }
-            if (!confirm('Eliminare questo impianto e tutti i relativi dati (inclusi stabilimenti e contratti PPA)?')) return;
-            
+            const okDelete = await showConfirm({
+                title: 'Elimina impianto',
+                message: 'Eliminare questo impianto e tutti i relativi dati (inclusi stabilimenti e contratti PPA)?',
+                confirmLabel: 'Elimina'
+            });
+            if (!okDelete) return;
+
             // Backup per undo (incluse curve 8760h)
             const plantFound = State.plants.find(p => p.id === plantId);
             const plantBackupClone = plantFound ? structuredClone(plantFound) : null;
@@ -4476,7 +4491,7 @@
                 console.error("Errore eliminazione impianto su Supabase:", err);
                 statusEl.textContent = "Errore rimozione impianto.";
                 statusEl.className = "text-xs text-red-400 font-medium";
-                alert(`Errore durante l'eliminazione dell'impianto dal database: ${err.message}`);
+                showToast(`Errore durante l'eliminazione dell'impianto dal database: ${err.message}`, 'error');
             }
         };
 
@@ -7647,7 +7662,7 @@
         function downloadProfileCSV() {
             const activeData = State.activeProfileData;
             if (!activeData || !activeData.labels || activeData.labels.length === 0) {
-                alert("Nessun dato disponibile da esportare.");
+                showToast("Nessun dato disponibile da esportare.", 'warning');
                 return;
             }
 
@@ -7770,7 +7785,7 @@
         function downloadProfileExcel() {
             const activeData = State.activeProfileData;
             if (!activeData || !activeData.labels || activeData.labels.length === 0) {
-                alert("Nessun dato disponibile da esportare.");
+                showToast("Nessun dato disponibile da esportare.", 'warning');
                 return;
             }
 
@@ -7918,7 +7933,7 @@
                 XLSX.writeFile(workbook, filename);
             } catch (err) {
                 console.error("Errore durante l'esportazione Excel:", err);
-                alert("Si è verificato un errore durante la generazione del file Excel.");
+                showToast("Si è verificato un errore durante la generazione del file Excel.", 'error');
             }
         }
 
@@ -8136,7 +8151,7 @@
             const statusEl = document.getElementById('sync-status');
             
             if (!url || !key) {
-                alert("Inserisci l'URL di Supabase e la Anon API Key per procedere con la sincronizzazione.");
+                showToast("Inserisci l'URL di Supabase e la Anon API Key per procedere con la sincronizzazione.", 'warning');
                 return;
             }
             
@@ -8194,12 +8209,12 @@
                 
                 statusEl.textContent = "Sincronizzazione completata!";
                 statusEl.className = "text-xs text-emerald-400 font-medium";
-                alert("Tutti gli 8760 record orari sono stati inseriti ed allineati con successo sul database Supabase.");
+                showToast("Tutti gli 8760 record orari sono stati inseriti ed allineati con successo sul database Supabase.", 'success');
             } catch (err) {
                 console.error(err);
                 statusEl.textContent = "Errore di connessione.";
                 statusEl.className = "text-xs text-red-400 font-medium";
-                alert("Errore durante l'invio batch dei dati. Verifica le credenziali Supabase.");
+                showToast("Errore durante l'invio batch dei dati. Verifica le credenziali Supabase.", 'error');
             }
         }
 
@@ -8396,11 +8411,11 @@
         // Scarica la curva oraria direttamente dalle API PVGIS 5.2 (JRC) dato lat/lon/picco/perdite
         window.importPvgisFromApi = async function() {
             if (editingPlantId) {
-                alert("Termina prima la modifica dell'impianto in corso.");
+                showToast("Termina prima la modifica dell'impianto in corso.", 'warning');
                 return;
             }
-            const readNum = (msg, def, min, max) => {
-                const raw = prompt(msg, def);
+            const readNum = async (msg, def, min, max) => {
+                const raw = await showPrompt({ title: 'Dati PVGIS', message: msg, defaultValue: def });
                 if (raw === null) return null;
                 const v = parseFloat(String(raw).replace(',', '.'));
                 if (isNaN(v) || v < min || v > max) return undefined;
@@ -8410,18 +8425,18 @@
             const curLon = document.getElementById('pvgis-longitude')?.value;
             const curCap = document.getElementById('plant-capacity')?.value;
 
-            const lat = readNum('Latitudine (es. 43.55):', (curLat && curLat !== '-' && curLat !== '\u2014') ? curLat : '43.55', -90, 90);
+            const lat = await readNum('Latitudine (es. 43.55):', (curLat && curLat !== '-' && curLat !== '\u2014') ? curLat : '43.55', -90, 90);
             if (lat === null) return;
-            if (lat === undefined) { alert('Latitudine non valida.'); return; }
-            const lon = readNum('Longitudine (es. 10.31):', (curLon && curLon !== '-' && curLon !== '\u2014') ? curLon : '10.31', -180, 180);
+            if (lat === undefined) { showToast('Latitudine non valida.', 'warning'); return; }
+            const lon = await readNum('Longitudine (es. 10.31):', (curLon && curLon !== '-' && curLon !== '\u2014') ? curLon : '10.31', -180, 180);
             if (lon === null) return;
-            if (lon === undefined) { alert('Longitudine non valida.'); return; }
-            const peak = readNum('Potenza di picco (kWp):', curCap || '1000', 0.001, 1000000);
+            if (lon === undefined) { showToast('Longitudine non valida.', 'warning'); return; }
+            const peak = await readNum('Potenza di picco (kWp):', curCap || '1000', 0.001, 1000000);
             if (peak === null) return;
-            if (peak === undefined) { alert('Potenza non valida.'); return; }
-            const loss = readNum('Perdite di sistema (%):', '14', 0, 100);
+            if (peak === undefined) { showToast('Potenza non valida.', 'warning'); return; }
+            const loss = await readNum('Perdite di sistema (%):', '14', 0, 100);
             if (loss === null) return;
-            if (loss === undefined) { alert('Perdite di sistema non valide.'); return; }
+            if (loss === undefined) { showToast('Perdite di sistema non valide.', 'warning'); return; }
 
             showCalcIndicator(true);
             try {
@@ -8435,7 +8450,7 @@
                 updateFormSubmitButtonState();
             } catch (err) {
                 console.error('Errore download PVGIS API:', err);
-                alert('Impossibile scaricare i dati da PVGIS API:\n' + err.message + '\n\nVerifica la connessione o usa il caricamento CSV manuale.');
+                showToast('Impossibile scaricare i dati da PVGIS API:\n' + err.message + '\n\nVerifica la connessione o usa il caricamento CSV manuale.', 'error');
             } finally {
                 showCalcIndicator(false);
             }
@@ -9133,16 +9148,21 @@ function _ctx() {
 // ═══════════════════════════════════════════════════════════════════
 window.generateReport = async function(reportType) {
     if (!window.jspdf || !window.jspdf.jsPDF) {
-        alert('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+        showToast('Libreria PDF non caricata. Ricarica la pagina e riprova.', 'error');
         return;
     }
-    const projName = prompt("Inserisci il nome del progetto da stampare nel PDF:", window._currentProjectName || "Progetto New Green Deal");
+    const projName = await showPrompt({
+        title: 'Nome progetto',
+        message: 'Inserisci il nome del progetto da stampare nel PDF:',
+        defaultValue: window._currentProjectName || 'Progetto New Green Deal',
+        confirmLabel: 'Genera'
+    });
     if (projName === null) return;
     window._currentProjectName = projName;
     const { jsPDF } = window.jspdf;
     const { r } = _ctx();
     if (!r.matrix || !r.matrix.years || r.matrix.years.length === 0) {
-        alert('Nessun risultato di simulazione disponibile. Esegui prima un calcolo (Ricalcola Scenario).');
+        showToast('Nessun risultato di simulazione disponibile. Esegui prima un calcolo (Ricalcola Scenario).', 'warning');
         return;
     }
     // Per il report Sensibilità: assicura dati tornado reali (calcolati al volo se mai eseguito)
@@ -9168,14 +9188,14 @@ window.generateReport = async function(reportType) {
             case 'exit_valutazione':        _repExitValutazione(doc); filename = 'Exit_Valutazione.pdf'; break;
             case 'sensibilita':             _repSensibilita(doc); filename = 'Analisi_Sensibilita.pdf'; break;
             case 'full_due_diligence':      _repFullDueDiligence(doc); filename = 'Due_Diligence_Completa.pdf'; break;
-            default: alert('Tipo report non riconosciuto: ' + reportType); return;
+            default: showToast('Tipo report non riconosciuto: ' + reportType, 'error'); return;
         }
         _pdfFooter(doc);
         doc.save(filename);
         Audit.log('report.pdf', reportType);
     } catch (err) {
         console.error('Errore generazione PDF:', err);
-        alert('Errore durante la generazione del PDF:\n' + err.message);
+        showToast('Errore durante la generazione del PDF:\n' + err.message, 'error');
     }
 };
 

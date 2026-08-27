@@ -118,7 +118,7 @@ const UndoManager = {
             await action.undo();
         } catch (e) {
             console.error('Undo fallito:', e);
-            alert('Annullamento fallito: ' + e.message);
+            showToast('Annullamento fallito: ' + e.message, 'error');
         }
     },
 
@@ -170,8 +170,13 @@ window.closeAuditLog = function() {
     if (modal) modal.style.display = 'none';
 };
 
-window.clearAuditLog = function() {
-    if (!confirm('Svuotare tutto il registro audit?')) return;
+window.clearAuditLog = async function() {
+    const ok = await showConfirm({
+        title: 'Svuota registro audit',
+        message: 'Svuotare tutto il registro audit?',
+        confirmLabel: 'Svuota'
+    });
+    if (!ok) return;
     Audit.clear();
 };
 

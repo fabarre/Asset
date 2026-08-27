@@ -2,7 +2,7 @@ async function exportPnlToExcel() {
     console.log("ESPORTAZIONE AVVIATA CON VERSIONE AGGIORNATA (includeEmpty: true)");
     try {
     if (!window.State || !window.State.results) {
-        alert("Nessun dato da esportare. Esegui prima la simulazione.");
+        showToast("Nessun dato da esportare. Esegui prima la simulazione.", 'warning');
         return;
     }
 
@@ -1846,7 +1846,7 @@ async function exportPnlToExcel() {
     }, 100);
 
     } catch(err) {
-        alert("Si è verificato un errore durante l'esportazione in Excel:\n\n" + err.message);
+        showToast("Si è verificato un errore durante l'esportazione in Excel:\n\n" + err.message, 'error');
         console.error("Excel export error:", err);
     }
 }
