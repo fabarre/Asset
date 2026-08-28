@@ -421,6 +421,33 @@
                 </div>
             </div>
 
+            <!-- D4: Qualità Dati & Copertura -->
+            <div class="bg-[#0b0f19] border border-slate-850 p-5 rounded-2xl shadow-xl">
+                <div class="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
+                    <h4 class="font-bold text-white text-xs tracking-wide uppercase"><i class="fa-solid fa-clipboard-check text-emerald-400 mr-1.5"></i>Qualità Dati & Copertura</h4>
+                    <div class="flex items-center space-x-2">
+                        <span id="dq-score" class="hidden text-[10px] font-bold rounded-full px-2.5 py-1 border">—</span>
+                        <button onclick="downloadDataQualityCSV()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition-colors" title="Esporta report qualità dati in CSV">
+                            <i class="fa-solid fa-file-csv mr-1"></i> Export CSV
+                        </button>
+                    </div>
+                </div>
+                <div id="dq-summary" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+                <div class="overflow-auto max-h-[260px] rounded-xl border border-slate-850">
+                    <table class="w-full text-[10px]">
+                        <thead class="sticky top-0 bg-[#0b0f19] z-10">
+                            <tr class="text-slate-400 uppercase tracking-wider">
+                                <th class="px-2 py-2 text-left">Sezione</th>
+                                <th class="px-2 py-2 text-left">Check</th>
+                                <th class="px-2 py-2 text-center">Stato</th>
+                                <th class="px-2 py-2 text-left">Dettaglio</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dq-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Double-Column Dashboard Main Section -->
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 <!-- Left: Chart Card (Widened to lg:col-span-8) -->
@@ -3199,7 +3226,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=13"></script>
+    <script src="./src/main.js?v=14"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

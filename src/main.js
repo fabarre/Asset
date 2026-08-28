@@ -5361,6 +5361,7 @@
             // Re-render table skeletons with dynamic labels based on active inputs
             initializeTableSkeletons();
             renderMonthlyCashflow(null);
+            renderDataQuality();
 
             const p = State.inputs;
             const setTxt = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
@@ -6185,9 +6186,126 @@
             renderPlantsList(); // Update the plants table (including PUN Zonale Ponderato) when calculations are run
             renderDealValueBreakdownTable();
             renderGmeDashboard();
+            renderDataQuality();
         }
 
         // Render main 20-year charts (operational revenues composition & cashflow/DSCR)
+        // ── D4: Qualità Dati & Copertura ──
+        function computeDataQuality() {
+            const checks = [];
+            const add = (section, name, status, detail) => checks.push({ section, name, status, detail });
+
+            // 1. Listini PUN zonali: copertura 8760, NaN/negativi/zeri
+            ['NORD', 'CNOR', 'CSUD', 'SUD', 'SICI', 'SARD'].forEach(z => {
+                const arr = State.zonalPun && State.zonalPun[z];
+                if (!arr || arr.length !== 8760) { add('Listini PUN', `Copertura oraria ${z}`, 'error', arr ? `${arr.length}/8760 ore` : 'listino assente'); return; }
+                let zero = 0, neg = 0, nan = 0;
+                for (let t = 0; t < 8760; t++) { const v = arr[t]; if (Number.isNaN(v)) nan++; else if (v < 0) neg++; else if (v === 0) zero++; }
+                if (nan > 0 || neg > 0) add('Listini PUN', `Valori anomali ${z}`, 'error', `${nan} NaN, ${neg} negativi`);
+                else if (zero > 24) add('Listini PUN', `Ore a prezzo zero ${z}`, 'warn', `${zero} ore > soglia 24`);
+                else add('Listini PUN', `Copertura ${z}`, 'ok', `8760/8760 ore, ${zero} zeri`);
+            });
+
+            // 2. Curve di produzione impianti attivi
+            (State.plants || []).filter(p => p.enabled !== false).forEach(p => {
+                const g = p.generation;
+                if (!g || g.length !== 8760) { add('Impianti', `Curva ${p.name}`, 'error', g ? `${g.length}/8760 ore` : 'curva assente'); return; }
+                let nan = 0, neg = 0, tot = 0;
+                for (let t = 0; t < 8760; t++) { const v = g[t]; if (Number.isNaN(v)) nan++; else { if (v < 0) neg++; tot += v; } }
+                if (nan > 0 || neg > 0) { add('Impianti', `Curva ${p.name}`, 'error', `${nan} NaN, ${neg} negativi`); return; }
+                const yieldKwhKwp = p.capacity > 0 ? tot / p.capacity : 0;
+                if (tot <= 0) add('Impianti', `Produzione ${p.name}`, 'error', 'produzione annua nulla');
+                else if (yieldKwhKwp < 700 || yieldKwhKwp > 2300) add('Impianti', `Yield ${p.name}`, 'warn', `${Math.round(yieldKwhKwp)} kWh/kWp fuori range 700-2300`);
+                else add('Impianti', `Curva ${p.name}`, 'ok', `${Math.round(tot / 1000).toLocaleString('it-IT')} MWh/a · ${Math.round(yieldKwhKwp)} kWh/kWp`);
+            });
+
+            // 3. Carichi stabilimenti
+            (State.stabilimenti || []).forEach(s => {
+                const l = s.load;
+                if (!l || l.length !== 8760) { add('Stabilimenti', `Carico ${s.name}`, 'error', l ? `${l.length}/8760 ore` : 'curva assente'); return; }
+                let nan = 0, neg = 0, tot = 0, peak = 0;
+                for (let t = 0; t < 8760; t++) { const v = l[t]; if (Number.isNaN(v)) nan++; else { if (v < 0) neg++; tot += v; if (v > peak) peak = v; } }
+                if (nan > 0 || neg > 0) add('Stabilimenti', `Carico ${s.name}`, 'error', `${nan} NaN, ${neg} negativi`);
+                else if (tot <= 0) add('Stabilimenti', `Carico ${s.name}`, 'warn', 'consumo annuo nullo');
+                else add('Stabilimenti', `Carico ${s.name}`, 'ok', `${Math.round(tot / 1000).toLocaleString('it-IT')} MWh/a · picco ${Math.round(peak)} kW`);
+            });
+
+            // 4. Quadratura energetica anno 1 (se disponibili risultati)
+            const m = State.results && State.results.matrix;
+            if (m && m.qtySolarGen && m.qtySolarGen.length) {
+                const gen = m.qtySolarGen[0] || 0;
+                const bal = (m.qtySolarPpa[0] || 0) + (m.qtySolarRid[0] || 0) + (m.qtySolarToBess[0] || 0);
+                const dev = gen > 0 ? Math.abs(gen - bal) / gen : 0;
+                add('Quadrature', 'Gen = PPA+RID+toBESS (Y1)', dev < 0.01 ? 'ok' : 'error', `${fmtDec(gen, 0)} vs ${fmtDec(bal, 0)} MWh (Δ ${fmtDec(dev * 100, 2)}%)`);
+            } else {
+                add('Quadrature', 'Gen = PPA+RID+toBESS (Y1)', 'warn', 'nessun risultato di calcolo disponibile');
+            }
+
+            // 5. Sanity configurazione
+            const p = State.inputs || {};
+            if (p.leverage !== undefined && (p.leverage < 0 || p.leverage > 0.95)) add('Config', 'Leva finanziaria', 'warn', `${fmtDec(p.leverage * 100, 0)}% fuori range 0-95%`);
+            else add('Config', 'Leva finanziaria', 'ok', p.leverage !== undefined ? `${fmtDec(p.leverage * 100, 0)}%` : 'default');
+
+            const errors = checks.filter(c => c.status === 'error').length;
+            const warnings = checks.filter(c => c.status === 'warn').length;
+            const score = checks.length ? Math.max(0, Math.round(100 * (checks.length - errors - warnings * 0.5) / checks.length)) : 100;
+            return { checks, score, errors, warnings };
+        }
+
+        function renderDataQuality() {
+            const scoreEl = document.getElementById('dq-score');
+            const sumEl = document.getElementById('dq-summary');
+            const body = document.getElementById('dq-body');
+            const dq = computeDataQuality();
+            State.lastDataQuality = dq;
+            if (scoreEl) {
+                scoreEl.classList.remove('hidden');
+                scoreEl.textContent = `Score ${dq.score}/100`;
+                scoreEl.className = 'text-[10px] font-bold rounded-full px-2.5 py-1 border ' +
+                    (dq.errors > 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                        : dq.warnings > 0 ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30');
+            }
+            if (sumEl) {
+                const ok = dq.checks.length - dq.errors - dq.warnings;
+                sumEl.innerHTML = `
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-emerald-400">${ok}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Check OK</div></div>
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-amber-400">${dq.warnings}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Warning</div></div>
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-rose-400">${dq.errors}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Errori</div></div>
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-sky-400">${dq.checks.length}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Totale</div></div>`;
+            }
+            if (body) {
+                const icon = { ok: '<span class="text-emerald-400">✓</span>', warn: '<span class="text-amber-400">⚠</span>', error: '<span class="text-rose-400">✗</span>' };
+                body.innerHTML = dq.checks.map(c => `
+                    <tr class="border-t border-slate-850/60 ${c.status === 'error' ? 'bg-rose-950/10' : ''}">
+                        <td class="px-2 py-1.5 text-slate-400 font-bold uppercase text-[9px] whitespace-nowrap">${escapeHtml(c.section)}</td>
+                        <td class="px-2 py-1.5 text-slate-200">${escapeHtml(c.name)}</td>
+                        <td class="px-2 py-1.5 text-center">${icon[c.status]}</td>
+                        <td class="px-2 py-1.5 text-slate-400">${escapeHtml(c.detail)}</td>
+                    </tr>`).join('');
+            }
+        }
+
+        window.downloadDataQualityCSV = function() {
+            const dq = State.lastDataQuality || computeDataQuality();
+            const esc = (v) => `"${String(v === null || v === undefined ? '' : v).replace(/"/g, '""')}"`;
+            let csv = 'Report Qualità Dati - ' + new Date().toLocaleString('it-IT') + '\n';
+            csv += `Score;${dq.score}/100;Errori;${dq.errors};Warning;${dq.warnings}\n`;
+            csv += 'Sezione;Check;Stato;Dettaglio\n';
+            dq.checks.forEach(c => { csv += [esc(c.section), esc(c.name), esc(c.status), esc(c.detail)].join(';') + '\n'; });
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'Report_Qualita_Dati.csv';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            Audit.log('dataquality.export', `score ${dq.score}`);
+            showToast('Report qualità dati esportato.', 'success');
+        };
+
         // D2: tabella + grafico cash flow mensile (anni 1-5) con evidenza mesi negativi
         function renderMonthlyCashflow(mc) {
             const kMin = document.getElementById('mc-kpi-min-cash');
