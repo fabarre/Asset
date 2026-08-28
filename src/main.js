@@ -989,6 +989,7 @@
             document.getElementById('plant-name').value = plant.name;
             document.getElementById('plant-capacity').value = Math.round(plant.capacity);
             document.getElementById('plant-zone').value = plant.zone;
+            document.getElementById('plant-cod-date').value = plant.codDate || '';
             document.getElementById('plant-capex').value = plant.capex;
             document.getElementById('plant-opex').value = plant.opex;
             document.getElementById('plant-opex-om-bess').value = plant.opexOmBess || 0;
@@ -1124,6 +1125,7 @@
             document.getElementById('plant-name').value = "";
             document.getElementById('plant-capacity').value = "";
             document.getElementById('plant-zone').value = "none";
+            document.getElementById('plant-cod-date').value = "";
             document.getElementById('plant-capex').value = 0;
             document.getElementById('plant-opex').value = 0;
             document.getElementById('plant-opex-om-bess').value = 0;
@@ -1245,6 +1247,7 @@
                 ...plant,
                 name: document.getElementById('plant-name').value,
                 zone: editZone,
+                codDate: document.getElementById('plant-cod-date').value || null,
                 capex: parseFloat(document.getElementById('plant-capex').value) || 0,
                 opex: parseFloat(document.getElementById('plant-opex').value) || 0,
                 opexOmBess: parseFloat(document.getElementById('plant-opex-om-bess').value) || 0,
@@ -2851,6 +2854,12 @@
             p.exitEnterpriseValue = getNum('input-exit-ev', 0);
 
             p.priceScenarioType = getVal('select-price-scenario-type') || 'base';
+
+            // CF2: lag di incasso per regime di mercato (mesi)
+            p.collectionLagRid = Math.max(0, parseInt(getVal('mc-lag-rid'), 10) || 0);
+            p.collectionLagBrp = Math.max(0, parseInt(getVal('mc-lag-brp'), 10) || 0);
+            p.collectionLagCer = Math.max(0, parseInt(getVal('mc-lag-cer'), 10) || 0);
+            p.collectionLagFerx = Math.max(0, parseInt(getVal('mc-lag-ferx'), 10) || 0);
             p.bessOptimizer = getVal('select-bess-optimizer') || 'dp';
             p.punZonalFloor = getNum('input-pun-zonal-floor', 60.0);
             p.punBearishDecayRate = getNum('input-pun-bearish-decay-rate', 5) / 100;
@@ -3178,6 +3187,10 @@
                         'exitValuePerMwp': { id: 'input-exit-value-mwp', mult: 1 },
                         'exitEnterpriseValue': { id: 'input-exit-ev', mult: 1 },
                         'priceScenarioType': { id: 'select-price-scenario-type', mult: 1 },
+                        'collectionLagRid': { id: 'mc-lag-rid', mult: 1 },
+                        'collectionLagBrp': { id: 'mc-lag-brp', mult: 1 },
+                        'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
+                        'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
                         'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
                         'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                         'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
@@ -3373,6 +3386,7 @@
                                 name: p.name,
                                 capacity: p.capacity_kwp,
                                 zone: p.zone,
+                                codDate: p.cod_date || null,
                                 capex: p.capex_kwp,
                                 opex: p.opex_eur,
                                 enabled: true, // default: included in simulation
@@ -3587,6 +3601,10 @@
                         'exitValuePerMwp': { id: 'input-exit-value-mwp', mult: 1 },
                         'exitEnterpriseValue': { id: 'input-exit-ev', mult: 1 },
                                 'priceScenarioType': { id: 'select-price-scenario-type', mult: 1 },
+                                'collectionLagRid': { id: 'mc-lag-rid', mult: 1 },
+                                'collectionLagBrp': { id: 'mc-lag-brp', mult: 1 },
+                                'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
+                                'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
                                 'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
                                 'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                                 'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
@@ -3946,6 +3964,7 @@
                     name: plant.name,
                     capacity_kwp: plant.capacity,
                     zone: plant.zone,
+                    cod_date: plant.codDate || null,
                     capex_kwp: plant.capex,
                     opex_eur: plant.opex,
                     opex_om_bess: plant.opexOmBess || 0,

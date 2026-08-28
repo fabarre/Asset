@@ -476,6 +476,27 @@
                             <h4 class="font-bold text-white text-xs tracking-wide uppercase"><i class="fa-solid fa-calendar-days text-emerald-400 mr-1.5"></i>Cash Flow Mensile & Disponibilità di Cassa</h4>
                             <span class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Anni 1-5 (60 mesi)</span>
                         </div>
+                        <div class="mb-3">
+                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Ritardo di incasso per regime di mercato: i ricavi maturati nel mese N dell'impianto sono incassati al mese N+lag. Ogni impianto segue il lag del proprio regime.">Lag di incasso per regime (mesi) <i class="fa-solid fa-circle-info"></i></div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <div>
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">RID</label>
+                                    <input type="number" id="mc-lag-rid" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">BRP</label>
+                                    <input type="number" id="mc-lag-brp" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">CER</label>
+                                    <input type="number" id="mc-lag-cer" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">FER X</label>
+                                    <input type="number" id="mc-lag-ferx" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                            </div>
+                        </div>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                             <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Valore minimo della cassa finale cumulata sull'orizzonte">
                                 <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Cassa Minima</div>
@@ -1518,6 +1539,15 @@
                                         <option value="SICI">SICILIA (SICI)</option>
                                         <option value="SARD">SARDEGNA (SARD)</option>
                                     </select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1">Data COD <span class="text-[9px] text-slate-500">(entrata in esercizio)</span></label>
+                                    <input type="date" id="plant-cod-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                </div>
+                                <div class="flex items-end pb-1">
+                                    <p class="text-[9px] text-slate-500 leading-snug">Vuoto = produzione piena da gennaio dell'anno 1. Con data: produzione dal giorno di COD e calendario finanziario ancorato al COD più antico.</p>
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-3">
@@ -3232,7 +3262,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=15"></script>
+    <script src="./src/main.js?v=16"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {
