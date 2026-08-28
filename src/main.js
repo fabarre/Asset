@@ -206,6 +206,7 @@
         function onUserAuthenticated(user) {
             State.currentUser = user || null;
             updateAdminTabVisibility();
+            updateRoleBadge();
             const badge = document.getElementById('auth-user-badge');
             const logoutBtn = document.getElementById('btn-logout');
             if (badge && user && user.email) {
@@ -219,6 +220,59 @@
             return !!(State.currentUser && State.currentUser.app_metadata && State.currentUser.app_metadata.role === 'admin');
         }
 
+        // ── D3: ruoli utente (claim JWT app_metadata.role: admin/editor/viewer) ──
+        function currentUserRole() {
+            return (State.currentUser && State.currentUser.app_metadata && State.currentUser.app_metadata.role) || 'editor';
+        }
+        function isCurrentUserViewer() {
+            return currentUserRole() === 'viewer';
+        }
+        // Gate scritture lato app (il vero vincolo è nelle policy RLS)
+        function canWrite(notify) {
+            if (isCurrentUserViewer()) {
+                if (notify !== false) showToast('Ruolo viewer: sessione in sola lettura, scrittura non consentita.', 'warning');
+                return false;
+            }
+            return true;
+        }
+        function updateRoleBadge() {
+            const badge = document.getElementById('role-badge');
+            if (!badge) return;
+            if (!State.currentUser) { badge.classList.add('hidden'); return; }
+            const role = currentUserRole();
+            badge.classList.remove('hidden');
+            if (role === 'viewer') {
+                badge.textContent = 'Viewer · sola lettura';
+                badge.className = 'text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 border bg-amber-500/10 text-amber-400 border-amber-500/30';
+            } else if (role === 'admin') {
+                badge.textContent = 'Admin';
+                badge.className = 'text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 border bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+            } else {
+                badge.textContent = 'Editor';
+                badge.className = 'text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 border bg-sky-500/10 text-sky-400 border-sky-500/30';
+            }
+        }
+
+        // D3: gestione ruoli dalla scheda Utenti (riservata admin, lato DB admin_set_role)
+        window.adminSetRole = async function(userId, email, role) {
+            if (!isCurrentUserAdmin()) { showToast('Accesso riservato al ruolo admin.', 'error'); return; }
+            const ok = await showConfirm({
+                title: 'Modifica ruolo',
+                message: `Impostare il ruolo "${role}" per ${email}? L'effetto è attivo dal prossimo login/refresh dell'utente.`,
+                confirmLabel: 'Imposta'
+            });
+            if (!ok) return;
+            try {
+                const { error } = await supabaseClient.rpc('admin_set_role', { target: userId, new_role: role });
+                if (error) throw error;
+                Audit.log('admin.set_role', `${email} -> ${role}`);
+                showToast(`Ruolo di ${email} impostato a "${role}".`, 'success');
+                await window.fetchAdminUsers();
+            } catch (err) {
+                showToast('Errore modifica ruolo: ' + err.message, 'error');
+            }
+        };
+
         function updateAdminTabVisibility() {
             const btn = document.getElementById('btn-tab-users');
             if (!btn) return;
@@ -231,17 +285,17 @@
             const body = document.getElementById('users-table-body');
             if (!body) return;
             if (!isCurrentUserAdmin()) {
-                body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-rose-400">Accesso riservato al ruolo admin.</td></tr>';
+                body.innerHTML = '<tr><td colspan="8" class="py-4 text-center text-rose-400">Accesso riservato al ruolo admin.</td></tr>';
                 return;
             }
-            body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-500"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Caricamento utenti...</td></tr>';
+            body.innerHTML = '<tr><td colspan="8" class="py-4 text-center text-slate-500"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Caricamento utenti...</td></tr>';
             try {
                 const { data, error } = await supabaseClient.rpc('admin_list_users');
                 if (error) throw error;
                 renderAdminUsers(data || []);
             } catch (err) {
                 console.error('admin_list_users error:', err);
-                body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-rose-400">Errore: ' + escapeHtml(err.message) + '</td></tr>';
+                body.innerHTML = '<tr><td colspan="8" class="py-4 text-center text-rose-400">Errore: ' + escapeHtml(err.message) + '</td></tr>';
             }
         };
 
@@ -249,7 +303,7 @@
             const body = document.getElementById('users-table-body');
             if (!body) return;
             if (!users.length) {
-                body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-500">Nessun utente registrato.</td></tr>';
+                body.innerHTML = '<tr><td colspan="8" class="py-4 text-center text-slate-500">Nessun utente registrato.</td></tr>';
                 return;
             }
             const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -266,10 +320,20 @@
                     semaforo = '\u26AB'; semaforoLabel = 'Offline';
                 }
                 const isAdminUser = u.email === (State.currentUser && State.currentUser.email);
+                const uRole = u.role || 'editor';
+                const roleBadge = (role) => {
+                    if (role === 'admin') return '<span class="text-[9px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded px-1.5 py-0.5 font-bold uppercase">admin</span>';
+                    if (role === 'viewer') return '<span class="text-[9px] bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded px-1.5 py-0.5 font-bold uppercase">viewer</span>';
+                    return '<span class="text-[9px] bg-sky-500/10 border border-sky-500/30 text-sky-400 rounded px-1.5 py-0.5 font-bold uppercase">editor</span>';
+                };
+                const roleActions = (uRole === 'viewer')
+                    ? `<button onclick="adminSetRole('${escapeJs(u.id)}','${escapeJs(u.email)}','editor')" class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 font-bold ml-1" title="Rendi editor">→ editor</button>`
+                    : `<button onclick="adminSetRole('${escapeJs(u.id)}','${escapeJs(u.email)}','viewer')" class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold ml-1" title="Rendi viewer (sola lettura)">→ viewer</button>`;
                 html += `
                     <tr class="hover:bg-slate-900/40 border-b border-slate-850 transition-colors">
                         <td class="py-2.5 pr-4 whitespace-nowrap" title="${semaforoLabel}">${semaforo} <span class="text-[9px] text-slate-500">${semaforoLabel}</span></td>
-                        <td class="py-2.5 pr-4 font-semibold ${isAdminUser ? 'text-emerald-400' : 'text-slate-200'}">${escapeHtml(u.email)}${isAdminUser ? ' <span class="text-[9px] bg-emerald-500/10 border border-emerald-500/30 rounded px-1 py-0.5 ml-1">ADMIN</span>' : ''}</td>
+                        <td class="py-2.5 pr-4 font-semibold ${isAdminUser ? 'text-emerald-400' : 'text-slate-200'}">${escapeHtml(u.email)}${isAdminUser ? ' <span class="text-[9px] bg-emerald-500/10 border border-emerald-500/30 rounded px-1 py-0.5 ml-1">YOU</span>' : ''}</td>
+                        <td class="py-2.5 pr-4 whitespace-nowrap">${roleBadge(uRole)}${roleActions}</td>
                         <td class="py-2.5 pr-4 text-slate-400 whitespace-nowrap">${fmtDate(u.created_at)}</td>
                         <td class="py-2.5 pr-4">${u.confirmed ? '<span class="text-emerald-400">\u2713 S\u00EC</span>' : '<span class="text-amber-400">In attesa</span>'}</td>
                         <td class="py-2.5 pr-4 text-slate-400 whitespace-nowrap">${fmtDate(u.last_sign_in_at)}</td>
@@ -2482,6 +2546,7 @@
 
         // ── Supabase CRUD ────────────────────────────────────────────────────
         async function saveStabilimentoToSupabase(stab) {
+            if (!canWrite()) return false;
             if (!supabaseClient) {
                 showToast("Database non connesso. Impossibile salvare il profilo consumi.", 'error');
                 return false;
@@ -2568,6 +2633,7 @@
         }
 
         async function deleteStabilimentoFromSupabase(id) {
+            if (!canWrite()) return false;
             if (!supabaseClient) {
                 showToast("Database non connesso. Impossibile eliminare il profilo dal database.", 'error');
                 return false;
@@ -2972,6 +3038,7 @@
 
         // Upload simulation config from CSV
         function uploadConfigCSV(event) {
+            if (!canWrite()) { event.target.value = ''; return; }
             const file = event.target.files[0];
             if (!file) return;
             
@@ -3174,6 +3241,7 @@
 
         async function saveConfigToSupabase() {
             if (!supabaseClient) return;
+            if (isCurrentUserViewer()) return; // viewer: nessuna persistenza (silenzioso, evitati toast ripetuti dal debounce)
             try {
                 const rows = [];
                 const p = State.inputs;
@@ -3580,6 +3648,10 @@
 
         // Save zonal prices to Supabase
         async function saveZonalPunToSupabase() {
+            if (!isCurrentUserAdmin()) {
+                showToast('Aggiornamento dei listini zonali riservato al ruolo admin.', 'warning');
+                return;
+            }
             if (!supabaseClient) return;
             const statusEl = document.getElementById('sync-status');
             statusEl.textContent = "Salvataggio PUN su DB...";
@@ -3714,6 +3786,7 @@
         }
 
         window.saveCurrentScenario = async function() {
+            if (!canWrite()) return;
             if (!supabaseClient) { showToast('Database non connesso.', 'error'); return; }
             const nameEl = document.getElementById('scenario-name-input');
             const name = (nameEl.value || '').trim();
@@ -3746,6 +3819,7 @@
         };
 
         window.deleteSelectedScenario = async function() {
+            if (!canWrite()) return;
             if (!supabaseClient) { showToast('Database non connesso.', 'error'); return; }
             const id = document.getElementById('scenario-select').value;
             if (!id) { showToast('Seleziona uno scenario da eliminare.', 'warning'); return; }
@@ -3849,6 +3923,7 @@
         }
 
         async function savePlantToSupabase(plant) {
+            if (!canWrite()) return false;
             if (!supabaseClient) {
                 showToast("Database non connesso. Impossibile salvare l'impianto nel database.", 'error');
                 return false;
@@ -9358,6 +9433,7 @@ window.clearBrandLogo = function() {
 };
 
 window.saveBranding = async function() {
+    if (!canWrite()) return;
     const b = State.branding;
     const cEl = document.getElementById('brand-company');
     const tEl = document.getElementById('brand-tagline');

@@ -656,6 +656,7 @@
                             <span id="sync-status" class="text-[10px] text-slate-400 font-medium">Offline</span>
                             <div class="flex items-center space-x-2">
                                 <span id="auth-user-badge" class="hidden text-[10px] text-sky-400 font-semibold" title="Utente autenticato"></span>
+                                <span id="role-badge" class="hidden text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 border" title="Ruolo utente"></span>
                                 <button id="btn-logout" onclick="logoutUser()" class="hidden px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition-colors" title="Esci dall'account">
                                     <i class="fa-solid fa-right-from-bracket"></i>
                                 </button>
@@ -2998,6 +2999,7 @@
                             <tr class="text-slate-400 uppercase font-bold text-[9px] tracking-wider border-b border-slate-800">
                                 <th class="py-2 pr-4">Stato</th>
                                 <th class="py-2 pr-4">Email</th>
+                                <th class="py-2 pr-4">Ruolo</th>
                                 <th class="py-2 pr-4">Registrato il</th>
                                 <th class="py-2 pr-4">Confermato</th>
                                 <th class="py-2 pr-4">Ultimo accesso</th>
@@ -3006,7 +3008,7 @@
                             </tr>
                         </thead>
                         <tbody id="users-table-body">
-                            <tr><td colspan="7" class="py-4 text-center text-slate-500">Caricamento...</td></tr>
+                            <tr><td colspan="8" class="py-4 text-center text-slate-500">Caricamento...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -3197,7 +3199,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=12"></script>
+    <script src="./src/main.js?v=13"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {
