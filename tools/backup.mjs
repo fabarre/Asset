@@ -187,6 +187,46 @@ function list() {
 }
 
 // ── CLI ────────────────────────────────────────────────────────────────────
+// ── VERIFY (restore drill non distruttivo) ─────────────────────────────────
+// 1. Re-hash locale dei JSONL vs manifest (integrità file)
+// 2. Conteggio righe file vs manifest
+// 3. Confronto conteggi attuali sul target vs manifest (delta informativo)
+async function verify(dir, target) {
+    const ref = PROJECTS[target];
+    if (!ref) throw new Error('Target sconosciuto: ' + target);
+    const manifestPath = path.join(dir, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) throw new Error('manifest.json non trovato in ' + dir);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    console.log(`Verify backup ${path.basename(dir)} (${manifest.created_at}) vs ${target} [${ref}]`);
+    let failures = 0;
+    for (const t of TABLES) {
+        const meta = manifest.tables[t.name];
+        const file = path.join(dir, t.name + '.jsonl');
+        if (!meta || !fs.existsSync(file)) {
+            console.log(`  ✗ ${t.name}: file o manifest mancante`);
+            failures++;
+            continue;
+        }
+        const buf = fs.readFileSync(file);
+        const sha = crypto.createHash('sha256').update(buf).digest('hex');
+        const lines = buf.length ? buf.toString('utf8').split('\n').filter(Boolean).length : 0;
+        const shaOk = sha === meta.sha256;
+        const cntOk = lines === meta.rows_dumped;
+        if (!shaOk || !cntOk) failures++;
+        let liveNote = '';
+        try {
+            const live = await runSql(ref, `SELECT count(*)::int AS n FROM public.${t.name}`);
+            const delta = live[0].n - meta.rows_expected;
+            liveNote = ` | live=${live[0].n} (Δ ${delta >= 0 ? '+' : ''}${delta} dal dump)`;
+        } catch (e) {
+            liveNote = ' | live: n/d';
+        }
+        console.log(`  ${shaOk && cntOk ? '✓' : '✗'} ${t.name}: sha256 ${shaOk ? 'OK' : 'MISMATCH'} · righe ${lines}/${meta.rows_dumped}${liveNote}`);
+    }
+    if (failures > 0) throw new Error(`Verify fallita: ${failures} tabelle con problemi di integrità`);
+    console.log('Verify completata: backup integro e ripristinabile (restore <dir> <target>).');
+}
+
 const [cmd, arg1, arg2, ...rest] = process.argv.slice(2);
 try {
     if (cmd === 'run') {
@@ -200,10 +240,14 @@ try {
         const dryRun = rest.includes('--dry-run');
         const dir = fs.existsSync(arg1) ? arg1 : path.join(BACKUP_ROOT, arg1);
         await restore(dir, arg2, only, dryRun);
+    } else if (cmd === 'verify') {
+        if (!arg1 || !arg2) throw new Error('Uso: backup.mjs verify <dir> <dev|prod>');
+        const dir = fs.existsSync(arg1) ? arg1 : path.join(BACKUP_ROOT, arg1);
+        await verify(dir, arg2);
     } else if (cmd === 'list') {
         list();
     } else {
-        console.error('Uso: node tools/backup.mjs <run|restore|list> ...');
+        console.error('Uso: node tools/backup.mjs <run|restore|verify|list> ...');
         process.exit(1);
     }
 } catch (e) {
