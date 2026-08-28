@@ -6349,7 +6349,7 @@
                 kMin.textContent = _fmtE(mc.minCashClosing);
                 kMin.className = 'text-sm font-black mt-1 ' + (mc.minCashClosing < 0 ? 'text-rose-400' : 'text-emerald-400');
             }
-            if (kMinM) kMinM.textContent = mc.minCashMonth > 0 ? 'Mese ' + mc.minCashMonth : '—';
+            if (kMinM) kMinM.textContent = mc.minCashMonth > 0 ? (mc.labels[mc.minCashMonth - 1] || ('Mese ' + mc.minCashMonth)) : '—';
             if (kNegNet) {
                 const negNet = mc.negativeNetMonths || 0;
                 kNegNet.textContent = String(negNet);
@@ -6359,13 +6359,34 @@
                 kNeg.textContent = String(mc.negativeMonths);
                 kNeg.className = 'text-sm font-black mt-1 ' + (mc.negativeMonths > 0 ? 'text-rose-400' : 'text-emerald-400');
             }
+            const dated = mc.mode === 'dated';
+            const periodEl = document.getElementById('mc-period-label');
+            if (periodEl) {
+                periodEl.textContent = dated
+                    ? `Anno 0 + Anni 1-5 (72 mesi) · Àncora ${mc.anchorYear}`
+                    : 'Anni 1-5 (60 mesi)';
+            }
+            const thead = document.getElementById('mc-thead');
+            if (thead) {
+                thead.innerHTML = `<tr class="text-slate-400 uppercase tracking-wider">
+                    <th class="px-2 py-2 text-left">Mese</th>
+                    ${dated ? '<th class="px-2 py-2 text-right" title="Ricavi di competenza del mese">Ricavi Maturati</th>' : ''}
+                    <th class="px-2 py-2 text-right">${dated ? 'Ricavi Incassati' : 'Ricavi Tot.'}</th>
+                    <th class="px-2 py-2 text-right">OPEX</th>
+                    <th class="px-2 py-2 text-right">Imposte</th>
+                    <th class="px-2 py-2 text-right">Serv. Debito</th>
+                    <th class="px-2 py-2 text-right">Net Cashflow</th>
+                    <th class="px-2 py-2 text-right">Cassa Finale</th>
+                </tr>`;
+            }
             if (tbody) {
                 let html = '';
                 for (let i = 0; i < mc.months.length; i++) {
                     const negRow = mc.cashClosing[i] < 0;
                     const rowCls = negRow ? 'bg-rose-950/20' : (i % 2 === 1 ? 'bg-slate-900/30' : '');
                     html += `<tr class="${rowCls} border-t border-slate-850/60">
-                        <td class="px-2 py-1.5 text-slate-300 font-bold">${mc.labels[i]}</td>
+                        <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
+                        ${dated ? `<td class="px-2 py-1.5 text-right font-mono text-slate-500">${fmtDec(mc.revenueAccrued[i], 0)}</td>` : ''}
                         <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
                         <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.opex[i], 0)}</td>
                         <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.taxes[i], 0)}</td>

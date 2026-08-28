@@ -493,6 +493,45 @@ if (mc23 && mc23.months.length === 60) {
         `negCash=${mcNeg.negativeMonths} min=${mcNeg.minCashClosing.toFixed(0)}`);
 }
 
+// ── Test 24: schedule date-aware con COD dinamici e lag di incasso (CF3) ──
+console.log('\n[Test 24] Cashflow date-aware: COD 15/05/2027 e 15/02/2028, lag RID 2 mesi');
+const gen24a = sandbox.generateDefaultSolarProfile(8, 1300);
+const gen24b = sandbox.generateDefaultSolarProfile(4, 1400);
+const plantNoBess24 = { bessMw: 0, bessMwh: 0, bessType: 'none', traderSpread: 0, traderDisp: 0, marketType: 'rid', gridVoltage: 'mt', gridConnectionKw: 8000, capex: 700 };
+const r24 = run(buildState({
+    inputs: { collectionLagRid: 2 },
+    plants: [
+        { id: 'pA', name: 'Impianto A', capacity: 8000, zone: 'NORD', opex: 120000, enabled: true, generation: gen24a, codDate: '2027-05-15', ...plantNoBess24 },
+        { id: 'pB', name: 'Impianto B', capacity: 4000, zone: 'SUD', opex: 60000, enabled: true, generation: gen24b, codDate: '2028-02-15', ...plantNoBess24 }
+    ]
+}));
+const mc24 = r24.monthlyCashflow;
+check('Modalità dated con anno àncora 2027 e 72 mesi', mc24.mode === 'dated' && mc24.anchorYear === 2027 && mc24.months.length === 72);
+check('Etichette di calendario: Gen 2026 (Y0) come primo mese', mc24.labels[0] === 'Gen 2026 (Y0)' && mc24.labels[12] === 'Gen 2027');
+check('Anno 0 senza ricavi maturati', mc24.revenueAccrued.slice(0, 12).every(v => v === 0));
+// Quadratura: somma accrual per anno di calendario = somma stream annuali del matrix (già riproporzionati COD)
+const sumRange24 = (arr, from, len) => arr.slice(from, from + len).reduce((a, b) => a + b, 0);
+let quad24 = true; let det24 = '';
+for (let y = 1; y <= 5; y++) {
+    const accruedYear = sumRange24(mc24.revenueAccrued, 12 + (y - 1) * 12, 12);
+    const annual = (r24.matrix.revenueRid[y - 1] || 0) + (r24.matrix.revenuePpa[y - 1] || 0) +
+        (r24.matrix.revenueArbitrage[y - 1] || 0) + (r24.matrix.revenueTimeshifting[y - 1] || 0);
+    const tol = Math.max(1e-6, Math.abs(annual) * 1e-9);
+    if (Math.abs(accruedYear - annual) > tol) { quad24 = false; det24 = `Y${y}: ${accruedYear.toFixed(2)} vs ${annual.toFixed(2)}`; break; }
+}
+check('Quadratura accrual annuo = matrix (con riproporzionamento COD)', quad24, det24);
+check('Impianto A produce da mag 2027 (parziale), nulla prima', mc24.revenueAccrued.slice(12, 16).every(v => v === 0) && mc24.revenueAccrued[16] > 0);
+check('Lag RID 2 mesi: incasso mag-2027 slitta a lug-2027', mc24.revenueCollected[16] === 0 && Math.abs(mc24.revenueCollected[18] - mc24.revenueAccrued[16]) < 1e-6,
+    `coll[16]=${mc24.revenueCollected[16].toFixed(2)} coll[18]=${mc24.revenueCollected[18].toFixed(2)} accr[16]=${mc24.revenueAccrued[16].toFixed(2)}`);
+check('Identità di cassa valida sui 72 mesi', (() => {
+    for (let i = 0; i < 72; i++) {
+        if (Math.abs((mc24.cashOpening[i] + mc24.netCashflow[i]) - mc24.cashClosing[i]) > 1e-6) return false;
+        if (i > 0 && Math.abs(mc24.cashOpening[i] - mc24.cashClosing[i - 1]) > 1e-6) return false;
+    }
+    return true;
+})());
+check('Nessun NaN/Inf nello schedule dated', mc24.netCashflow.every(v => Number.isFinite(v)) && mc24.cashClosing.every(v => Number.isFinite(v)));
+
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);

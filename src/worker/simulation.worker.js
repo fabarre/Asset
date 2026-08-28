@@ -33,6 +33,54 @@ function getBrpLifetimeAvgFeeForMonth(plant, monthIndex) {
     return sum / BRP_DISPATCH_HORIZON_YEARS;
 }
 
+// ═══ CF3: COD dinamico e lag di incasso per regime ═══
+// Data COD 'YYYY-MM-DD' -> {y,m,d} oppure null
+function parseCodDate(codDate) {
+    if (!codDate) return null;
+    const s = String(codDate).slice(0, 10);
+    const parts = s.split('-');
+    if (parts.length !== 3) return null;
+    const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10), d = parseInt(parts[2], 10);
+    if (!y || !m || !d || m < 1 || m > 12 || d < 1 || d > 31) return null;
+    return { y, m, d };
+}
+function codDaysInMonth(y, m) {
+    const dim = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (m === 2 && ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0)) return 29;
+    return dim[m - 1];
+}
+// Frazione dell'anno di calendario in cui l'impianto è in esercizio (1 = anno intero, legacy)
+function codYearAvailability(cod, calYear) {
+    if (!cod) return 1;
+    if (calYear < cod.y) return 0;
+    if (calYear > cod.y) return 1;
+    let days = 0;
+    for (let m = cod.m; m <= 12; m++) {
+        days += (m === cod.m) ? (codDaysInMonth(calYear, m) - cod.d + 1) : codDaysInMonth(calYear, m);
+    }
+    const totalDays = Math.round((Date.UTC(calYear, 11, 31) - Date.UTC(calYear, 0, 1)) / 86400000) + 1;
+    return days / totalDays;
+}
+// Frazione del mese (1-12) in cui l'impianto è in esercizio
+function codMonthActiveFraction(cod, calYear, m) {
+    if (!cod) return 1;
+    if (calYear < cod.y) return 0;
+    if (calYear > cod.y) return 1;
+    if (m < cod.m) return 0;
+    if (m > cod.m) return 1;
+    const dim = codDaysInMonth(calYear, m);
+    return (dim - cod.d + 1) / dim;
+}
+// Lag di incasso (mesi) per l'impianto in base al regime di mercato
+function collectionLagForPlant(plant, inputs, plantHasCer) {
+    if (plantHasCer) return Math.max(0, parseInt(inputs.collectionLagCer, 10) || 0);
+    switch (plant.marketType) {
+        case 'brp': return Math.max(0, parseInt(inputs.collectionLagBrp, 10) || 0);
+        case 'fer_x': return Math.max(0, parseInt(inputs.collectionLagFerx, 10) || 0);
+        default: return Math.max(0, parseInt(inputs.collectionLagRid, 10) || 0);
+    }
+}
+
 // Festività italiane 2025 (indice giorno 0-based dal 1° gennaio) — usate dai generatori di curve di carico
 const IT_HOLIDAYS_2025 = new Set([0, 5, 109, 110, 114, 120, 152, 226, 304, 341, 358, 359]);
 
@@ -2021,7 +2069,15 @@ function runSensitivityLoop(baseState, config) {
             const exitOptionYear = (p.exitOption && p.exitOption !== 'none') ? parseInt(p.exitOption) : 0;
             const exitYear = 20;
             let spvLockedDividends = 0;
-            
+
+            // ═══ CF3: anno àncora = anno del COD più antico (null = legacy: anno 1 = gen-dic pieno) ═══
+            let anchorYear = null;
+            activePlants.forEach(pl => {
+                const cod = parseCodDate(pl.codDate);
+                pl._codParsed = cod;
+                if (cod && (anchorYear === null || cod.y < anchorYear)) anchorYear = cod.y;
+            });
+
             for (let yr = 1; yr <= exitYear; yr++) {
                 const inflationMultiplier = Math.pow(1 + p.inflation, yr - 1);
                 
@@ -2087,9 +2143,12 @@ function runSensitivityLoop(baseState, config) {
                     // Rule thermal_degradation_vs_revenue_arbitrage: Cap excessive degradation to preserve battery safety
                     const effectiveBessDegradation = Math.min(0.035, plantBessDegradation);
                     const bessDegradationMult = plantBessType === 'graphene' ? 1.0 : Math.max(0.50, 1 - effectiveBessDegradation * (yr - 1));
-                    
-                    const pSolarMwh = (plant.annualSolarProductionMWh || 0) * solarDegradation;
-                    const pShiftedMwh = (plant.sim ? plant.sim.annualShifted : 0) * bessDegradationMult;
+
+                    // CF3: frazione dell'anno di calendario con impianto in esercizio (COD)
+                    const codAvail = (plant._codParsed && anchorYear !== null) ? codYearAvailability(plant._codParsed, anchorYear + yr - 1) : 1;
+
+                    const pSolarMwh = (plant.annualSolarProductionMWh || 0) * solarDegradation * codAvail;
+                    const pShiftedMwh = (plant.sim ? plant.sim.annualShifted : 0) * bessDegradationMult * codAvail;
 
                     // Decoupled revenues with plant-specific custom decays
                     const degradeRidFactor = 1 - (plant.degradeRidPct !== undefined ? plant.degradeRidPct : 2.0) / 100;
@@ -2132,8 +2191,8 @@ function runSensitivityLoop(baseState, config) {
                     let arbitrageRev = 0;
                     let pBessGridChargingCost = 0;
 
-                    const pPhysSolarGen = (plant._physSolarGenMwhY1 || 0) * solarDegradation;
-                    const pPhysSolarToBess = (plant._physSolarToBessMwhY1 || 0) * bessDegradationMult;
+                    const pPhysSolarGen = (plant._physSolarGenMwhY1 || 0) * solarDegradation * codAvail;
+                    const pPhysSolarToBess = (plant._physSolarToBessMwhY1 || 0) * bessDegradationMult * codAvail;
                     let pPhysSolarPpa = 0;
                     let pPhysSolarRid = 0;
                     let pPhysBessSelfCons = 0;
@@ -2389,6 +2448,27 @@ function runSensitivityLoop(baseState, config) {
                         }
                     }
                     const pMaintReserve = (plantBessMw > 0 && plantBessType !== 'graphene') ? (4000 * (plant.capacity / 1000) * inflationMultiplier) : 0;
+
+                    // CF3: COD — scala ricavi e quantità per la frazione di anno in esercizio
+                    // (a monte di service/earnout percentuali per coerenza dei contratti)
+                    if (codAvail !== 1) {
+                        solarRidRev *= codAvail;
+                        solarPpaRev *= codAvail;
+                        bessPpaRev *= codAvail;
+                        bessPpaRevArb *= codAvail;
+                        bessPpaRevTs *= codAvail;
+                        timeshiftingRev *= codAvail;
+                        arbitrageRev *= codAvail;
+                        pBessGridChargingCost *= codAvail;
+                        pPhysSolarPpa *= codAvail;
+                        pPhysSolarRid *= codAvail;
+                        pPhysBessSelfCons *= codAvail;
+                        pPhysBessSelfConsArb *= codAvail;
+                        pPhysBessSelfConsTs *= codAvail;
+                        pPhysBessGridFeed *= codAvail;
+                        pPhysBessGridFeedArb *= codAvail;
+                        pPhysBessGridFeedTs *= codAvail;
+                    }
 
                     // Calculate PPA Service Contract for this plant in year yr (if within duration)
                     let pOpexServiceContract = 0;
@@ -3357,12 +3437,135 @@ function runSensitivityLoop(baseState, config) {
                 return out;
             }
 
+            // ═══ CF3: schedule mensile date-aware (COD dinamici + lag di incasso per regime) ═══
+            // Orizzonte: anno 0 (àncora-1) + anni 1-5 (72 mesi) con etichette di calendario.
+            // Quadratura: per ogni anno e stream, la somma dei mesi = valore annuo del matrix.
+            function buildMonthlyCashflowDated(plantsList, mtx, ds, inputs, anchorYearIn) {
+                const YEARS = 5;
+                const MONTHS_IT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+                const totalMonths = (YEARS + 1) * 12;
+                const out = {
+                    mode: 'dated', anchorYear: anchorYearIn, hasYear0: true,
+                    months: [], labels: [], calendarYears: [],
+                    revenueAccrued: [], revenueCollected: [], revenueTotal: [],
+                    opex: [], taxes: [], interest: [], principal: [], debtService: [],
+                    netCashflow: [], cashOpening: [], cashClosing: [],
+                    lagResidual: 0
+                };
+                const accrued = new Float64Array(totalMonths);
+                const collected = new Float64Array(totalMonths);
+
+                // Forme orarie anno 1 per impianto e per stream di ricavo
+                const plantShapes = plantsList.map(pl => {
+                    const s = pl.sim;
+                    const shapes = { ppa: new Float64Array(12), rid: new Float64Array(12), arb: new Float64Array(12), ts: new Float64Array(12) };
+                    if (s) {
+                        for (let t = 0; t < 8760; t++) {
+                            const m = getMonthOfHour(t);
+                            if (s.hourlyRevenuePpaPv) shapes.ppa[m] += s.hourlyRevenuePpaPv[t] + (s.hourlyRevenuePpaBess ? s.hourlyRevenuePpaBess[t] : 0);
+                            if (s.hourlyRevenueRidActual) shapes.rid[m] += s.hourlyRevenueRidActual[t];
+                            if (s.hourlyRevenueArbitrageGrid) shapes.arb[m] += s.hourlyRevenueArbitrageGrid[t];
+                            if (s.hourlyRevenueTimeshifting) shapes.ts[m] += s.hourlyRevenueTimeshifting[t];
+                        }
+                    }
+                    const totals = {
+                        ppa: shapes.ppa.reduce((a, b) => a + b, 0),
+                        rid: shapes.rid.reduce((a, b) => a + b, 0),
+                        arb: shapes.arb.reduce((a, b) => a + b, 0),
+                        ts: shapes.ts.reduce((a, b) => a + b, 0)
+                    };
+                    const hasCer = !!(pl._stab && pl._stab.ppaType === 'cer');
+                    return { shapes, totals, lag: collectionLagForPlant(pl, inputs, hasCer), cod: pl._codParsed || null };
+                });
+
+                const STREAMS = ['ppa', 'rid', 'arb', 'ts'];
+                const annualByStream = { ppa: mtx.revenuePpa, rid: mtx.revenueRid, arb: mtx.revenueArbitrage, ts: mtx.revenueTimeshifting };
+
+                for (let y = 1; y <= YEARS; y++) {
+                    const yi = y - 1;
+                    const calYear = anchorYearIn + y - 1;
+                    STREAMS.forEach(sName => {
+                        const annual = (annualByStream[sName] && annualByStream[sName][yi]) || 0;
+                        if (annual === 0) return;
+                        let wSum = 0;
+                        const weights = plantShapes.map(ps => {
+                            const w = ps.totals[sName] * codYearAvailability(ps.cod, calYear);
+                            wSum += w;
+                            return w;
+                        });
+                        if (wSum <= 1e-9) return;
+                        plantShapes.forEach((ps, pi) => {
+                            if (weights[pi] <= 0) return;
+                            const plantAnnual = annual * weights[pi] / wSum;
+                            const mShares = new Float64Array(12);
+                            let mSum = 0;
+                            for (let m = 0; m < 12; m++) {
+                                const v = ps.shapes[sName][m] * codMonthActiveFraction(ps.cod, calYear, m + 1);
+                                mShares[m] = v;
+                                mSum += v;
+                            }
+                            if (mSum <= 1e-9) return;
+                            for (let m = 0; m < 12; m++) {
+                                const val = plantAnnual * mShares[m] / mSum;
+                                const gi = 12 + yi * 12 + m; // l'anno 0 occupa i primi 12 slot
+                                accrued[gi] += val;
+                                const ci = gi + ps.lag;
+                                if (ci < totalMonths) collected[ci] += val;
+                                else out.lagResidual += val;
+                            }
+                        });
+                    });
+                }
+
+                let cash = 0;
+                for (let i = 0; i < totalMonths; i++) {
+                    const isYear0 = i < 12;
+                    const yi = isYear0 ? -1 : Math.floor((i - 12) / 12);
+                    const m = i % 12;
+                    const calYear = anchorYearIn - 1 + Math.floor(i / 12);
+                    const opex = isYear0 ? 0 : (mtx.opexTotal[yi] || 0) / 12;
+                    const taxes = isYear0 ? 0 : (mtx.currentTaxesSpv[yi] || 0) / 12;
+                    const interest = isYear0 ? 0 : (ds.interestAccrued[yi] || 0) / 12;
+                    const principal = isYear0 ? 0 : ((ds.principalScheduled[yi] || 0) + (ds.principalVoluntary[yi] || 0)) / 12;
+                    const debtSvc = interest + principal;
+                    const net = collected[i] - opex - taxes - debtSvc;
+                    out.months.push(i + 1);
+                    out.labels.push(MONTHS_IT[m] + ' ' + calYear + (isYear0 ? ' (Y0)' : ''));
+                    out.calendarYears.push(calYear);
+                    out.revenueAccrued.push(accrued[i]);
+                    out.revenueCollected.push(collected[i]);
+                    out.revenueTotal.push(collected[i]);
+                    out.opex.push(opex);
+                    out.taxes.push(taxes);
+                    out.interest.push(interest);
+                    out.principal.push(principal);
+                    out.debtService.push(debtSvc);
+                    out.netCashflow.push(net);
+                    out.cashOpening.push(cash);
+                    cash += net;
+                    out.cashClosing.push(cash);
+                }
+                let minClosing = Infinity, minMonth = 0, negCount = 0, negNetCount = 0;
+                out.cashClosing.forEach((c, i) => {
+                    if (c < minClosing) { minClosing = c; minMonth = out.months[i]; }
+                    if (c < 0) negCount++;
+                });
+                out.netCashflow.forEach(v => { if (v < 0) negNetCount++; });
+                out.minCashClosing = isFinite(minClosing) ? minClosing : 0;
+                out.minCashMonth = minMonth;
+                out.negativeMonths = negCount;
+                out.negativeNetMonths = negNetCount;
+                return out;
+            }
+
             const finalResults = {
                 medioneKpiText: medioneKpiText,
                 totalProjectCost, debtAmount, equityAmount,
                 calculatedIrr, calculatedProjectIrr, holdcoNpv, holdcoMoic, paybackPeriod, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
                 matrix, debtSchedule, combinedSolarProfile, generalMedionePrices, bessSimulation,
-                monthlyCashflow: buildMonthlyCashflow(activePlants, matrix, debtSchedule),
+                monthlyCashflow: anchorYear !== null
+                    ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear)
+                    : buildMonthlyCashflow(activePlants, matrix, debtSchedule),
                 totalBessMw, totalBessMwh,
                 totalSelfConsMwh, totalPpaRev_y1, totalStabLoadMwh,
                 stabCoverage: totalStabLoadMwh > 0 ? (totalSelfConsMwh / totalStabLoadMwh * 100) : 0,
