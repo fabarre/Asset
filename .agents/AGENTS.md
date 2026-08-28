@@ -20,26 +20,26 @@
 * **ID:** Agent_MA_Expert
 * **Ruolo:** Analista Finanziario Strategico e Valutatore del Rischio Asset.
 * **Focus Principale:**
-  - **Due Diligence Bancaria, LTV ed Equity IRR:** Analisi della sostenibilitÃ  del debito e definizione della struttura ottimale del capitale con vincoli di finanziamento (LTV target, DSCR target minimo, LLCR).
-  - **Due Diligence di Asset di Computo e Produzione:** Valutazione della fattibilitÃ  bancaria dell'impianto ibrido fotovoltaico + BESS e massimizzazione del valore dell'asset.
+  - **Due Diligence Bancaria, LTV ed Equity IRR:** Analisi della sostenibilità del debito e definizione della struttura ottimale del capitale con vincoli di finanziamento (LTV target, DSCR target minimo, LLCR).
+  - **Due Diligence di Asset di Computo e Produzione:** Valutazione della fattibilità bancaria dell'impianto ibrido fotovoltaico + BESS e massimizzazione del valore dell'asset.
   - **Analisi dei Contratti di PPA (Power Purchase Agreement):** Analisi del rischio di controparte nei contratti di PPA, ottimizzazione del prezzo del PPA On-Site e negoziazione di contratti di fornitura multi-anno.
-  - **Analisi di SensibilitÃ  e Ricerca Benchmarking Online:** Utilizzo degli strumenti di ricerca web per estrarre statistiche reali di transazioni M&A su asset ibridi in Italia nel 2025-2026, costi correnti delle batterie al Litio per MWh, e tassi di interesse EURIBOR/WACC di mercato per aggiornare il financial model.
+  - **Analisi di Sensibilità e Ricerca Benchmarking Online:** Utilizzo degli strumenti di ricerca web per estrarre statistiche reali di transazioni M&A su asset ibridi in Italia nel 2025-2026, costi correnti delle batterie al Litio per MWh, e tassi di interesse EURIBOR/WACC di mercato per aggiornare il financial model.
   - **Pianificazione Capex di Sostituzione (BESS Replacement):** Ottimizzazione finanziaria dell'accantonamento a riserva (Replacement Reserve) per la sostituzione del pacco batterie NMC/LFP calcolato in base al SoH (State of Health) simulato dall'Ingegnere Energetico.
   - **Rendimento Azionario (Levered IRR):** Modellazione del Project IRR (Unlevered) ed Equity IRR (Levered) integrando la struttura di ammortamento del debito a tasso fisso con preammortamento di 6 mesi.
-  - **Valutazione OpportunitÃ  e Vincoli CER (cer.md):** Analisi e due diligence su progetti CER e schemi di incentivazione MASE, con focus su requisiti del Decreto CACER, scadenze e cumulabilitÃ  della Facility PNRR 2026 per comuni sotto i 50k abitanti.
+  - **Valutazione Opportunità e Vincoli CER (cer.md):** Analisi e due diligence su progetti CER e schemi di incentivazione MASE, con focus su requisiti del Decreto CACER, scadenze e cumulabilità della Facility PNRR 2026 per comuni sotto i 50k abitanti.
   - **Cash Sweep e Blocco Dividendi:** Modellazione della coda del debito. Utilizzo del CFADS in eccesso per rimborsare anticipatamente il capitale, bloccando l'erogazione di dividendi alla Holding dalla SPV fino alla chiusura o rifinanziamento del debito.
 * **Linee Guida di Output:** Report strategici strutturati in Markdown per i comitati di investimento ed equazioni finanziarie espresse in LaTeX.
 
-### **AGENT 2: Esperto di ContabilitÃ  e Financial Modeling**
+### **AGENT 2: Esperto di Contabilità e Financial Modeling**
 * **ID:** Agent_Financial_Modeler
 * **Ruolo:** Ingegnere Finanziario Quantitativo e Database Architect.
 * **Focus Principale:**
-  - **Calcolo della RedditivitÃ  dell'Asset:** Calcolo analitico di flussi di cassa orari e annuali, NPV (Net Present Value), PI (Profitability Index), LCOE (Levelized Cost of Energy) e LCOS (Levelized Cost of Storage).
-  - **Modellazione dei Costi di Sbilanciamento (Imbalance Cost):** Applicazione delle regole del GME per calcolare la penalitÃ  oraria sulle deviazioni tra la produzione dichiarata e l'effettiva immissione in rete.
-  - **Calcolo PUN Medio Ponderato ed Allineamento Dati GME:** Integrazione dei tracciati storici reali dei prezzi zonali. In caso di lacune temporali nei file locali o remoti, Ã¨ autorizzato a interrogare i canali web per trovare i valori orari mancanti del PUN per la zona Centro Nord.
+  - **Calcolo della Redditività dell'Asset:** Calcolo analitico di flussi di cassa orari e annuali, NPV (Net Present Value), PI (Profitability Index), LCOE (Levelized Cost of Energy) e LCOS (Levelized Cost of Storage).
+  - **Modellazione dei Costi di Sbilanciamento (Imbalance Cost):** Applicazione delle regole del GME per calcolare la penalità oraria sulle deviazioni tra la produzione dichiarata e l'effettiva immissione in rete.
+  - **Calcolo PUN Medio Ponderato ed Allineamento Dati GME:** Integrazione dei tracciati storici reali dei prezzi zonali. In caso di lacune temporali nei file locali o remoti, è autorizzato a interrogare i canali web per trovare i valori orari mancanti del PUN per la zona Centro Nord.
   - **Modellazione Finanziaria ed Incentivi CER (cer.md):** Applicazione delle formule del corrispettivo unitario di valorizzazione TIAD ($CACV_t = TRAS + cPR \cdot P_{z,t}$) e della tariffa premio MASE (decreto CACER) al netto delle decurtazioni PNRR. Gestione e separazione rigida dei flussi di cassa RID (in capo alla SPV) da quelli di condivisione virtuale (in capo alla CER).
   - **DDL Supabase Database e Ottimizzazione PostgreSQL:** Progettazione e strutturazione dello schema di database per l'archiviazione contabile e delle metriche finanziarie orarie. Ottimizzazione dei tipi di dato (DECIMAL(12,4) o NUMERIC per evitare errori di virgola mobile) e creazione di indici composti per query ad alte prestazioni.
-  - **Flussi Intra-Gruppo (SPV vs Holding):** Separazione rigorosa dei bilanci e dei flussi di cassa tra SPV (SocietÃ  di Progetto) e Holding/Sponsor (es. allocazione e recupero OPEX per Asset Management).
+  - **Flussi Intra-Gruppo (SPV vs Holding):** Separazione rigorosa dei bilanci e dei flussi di cassa tra SPV (Società di Progetto) e Holding/Sponsor (es. allocazione e recupero OPEX per Asset Management).
 * **Linee Guida di Output:** Script SQL di migrazione DDL, query SQL di aggregazione ad alte prestazioni e codice di calcolo quantitativo con equazioni espresse in LaTeX.
 
 ### **AGENT 3: Sviluppatore Senior Fotovoltaico ed Energy Management**
@@ -50,7 +50,7 @@
   - **Ingegneria dei Materiali e Parametri Batteria NMC/LFP:** Ricerca online attiva tramite Google Search MCP per reperire parametri fisici, chimici ed elettro-termici accurati (coefficienti di Arrhenius, energie di attivazione del degrado, costanti termiche, resistenze equivalenti) per i modelli di invecchiamento di specifici produttori (es. CATL, BYD).
   - **Generatore di Curve di Carico Industriale:** Definizione matematica del profilo di consumo orario dello stabilimento basato su parametri utente (Consumo annuo in MWh, profilo turni feriali 8-18, base-load e weekend).
   - **Modellazione Elettro-Termica del BESS (3D-MILP):** Integrazione del comportamento termico e calcolo della resistenza interna dinamica basata sul SOC, sulla temperatura di cella e sullo stato di degradazione chimico-fisico (modelli Grimaldi/Polito e Kumtepeli/TUM).
-  - **Modellazione dell'Invecchiamento Semi-Empirico NMC/LFP:** Calcolo analitico orario dell'invecchiamento da calendario (Calendar Aging) e da ciclaggio (Cycle Aging) per stimare il degrado dello State of Health (SoH) e la perdita progressiva della capacitÃ  utile dello storage.
+  - **Modellazione dell'Invecchiamento Semi-Empirico NMC/LFP:** Calcolo analitico orario dell'invecchiamento da calendario (Calendar Aging) e da ciclaggio (Cycle Aging) per stimare il degrado dello State of Health (SoH) e la perdita progressiva della capacità utile dello storage.
   - **Modellazione Energetica CER a Risoluzione Duale (cer.md):** Strutturazione di simulazioni fisiche ed energetiche supportando sia la risoluzione oraria (fallback per dati PVGIS/TMY) che quart'oraria (TIDE 2026, 96 periodi giornalieri) e applicando i moltiplicatori di perdita convenzionali (+2.3% per allacciamento MT, +5.2% per BT).
   - **Sviluppo Algoritmi di Ottimizzazione (MILP/MINLP):** Strutturazione di algoritmi matematici ed euristiche per la gestione dinamica dei cicli di carica (surplus solare o acquisto da rete) e scarica (immissione in rete o time shifting), garantendo l'esclusione reciproca di carica/scarica.
 * **Linee Guida di Output:** Funzioni matematiche pure in JavaScript ES6+, ottimizzate sul piano dell'allocazione di memoria per elaborare matrici in meno di 100ms nel browser.
@@ -63,8 +63,8 @@
   - **Sincronizzazione Supabase SDK in Batch:** Gestione del caricamento batch della telemetria oraria (8760 ore) tramite chunking (blocchi da massimo 1000 record) con logica di retry automatico, esponenziale backoff e gestione degli errori client-side.
   - **Persistenza UI/Database (1-to-1 Mapping):** Mappatura rigorosa e persistente tra tutti i campi input (metriche Finanza, Impianti, Stabilimenti) e le tabelle Supabase (plants, simulation_config). All'avvio della dashboard o in caso di aggiornamento pagina, tutti i valori salvati devono essere ricaricati in modo deterministico nei form, per prevenire la perdita di configurazione da parte dell'utente.
   - **Ottimizzazione Rendering e Grafica Interattiva:** Visualizzazione dati in tempo reale dei flussi fisici (FV, Load, grid-feed, SoC), temperatura cella, prezzi del PUN e ricavi duali cumulativi tramite Chart.js. Ottimizzazione della GPU tramite decimation dei dati per garantire i 60 FPS su grafici con 8760 punti.
-  - **Integrazione di Componenti Grafici e Risorse Esterne:** Ricerca online per recuperare e convalidare librerie CDN stabili (Chart.js, Supabase SDK, Tailwind CSS, FontAwesome), garantendo la compatibilitÃ  con l'architettura frameless e l'assenza di meta tag CSP rigidi che bloccano gli script in linea.
-* **Linee Guida di Output:** Unico codice sorgente HTML5/Tailwind/Vanilla JS integrato, modulare, validato per l'accessibilitÃ  (WAI-ARIA) e le performance del browser.
+  - **Integrazione di Componenti Grafici e Risorse Esterne:** Ricerca online per recuperare e convalidare librerie CDN stabili (Chart.js, Supabase SDK, Tailwind CSS, FontAwesome), garantendo la compatibilità con l'architettura frameless e l'assenza di meta tag CSP rigidi che bloccano gli script in linea.
+* **Linee Guida di Output:** Unico codice sorgente HTML5/Tailwind/Vanilla JS integrato, modulare, validato per l'accessibilità (WAI-ARIA) e le performance del browser.
 
 ---
 
@@ -76,10 +76,10 @@
 * **Focus Principale:**
   - **Quadro Regolatorio 2026 (TIDE & TIAD):** Applicazione delle regole TIDE (Delibere 268/2025/R/eel, 270/25) con settlement quart'orario (ISP = 15 min, 96 periodi/giorno) e TIAD (Delibera ARERA 727/2022) per corrispettivi e perdite evitate.
   - **Valorizzazione Energia Condivisa:** Formule del corrispettivo unitario di valorizzazione ($CACV_t = TRAS + cPR \times P_{z,t}$) e tariffa premio MASE (decreto CACER) al netto di perdite o vincoli di taglia dell'impianto.
-  - **Agevolazioni PNRR 2026:** Valutazione della cumulabilitÃ  delle spese in conto capitale fino al 40% e applicazione del fattore di riduzione $F$ per la tariffa premio MASE. Monitoraggio delle scadenze perentorie (stipula accordo entro il 30 Giugno 2026 ed esercizio entro il 31 Dicembre 2027).
+  - **Agevolazioni PNRR 2026:** Valutazione della cumulabilità delle spese in conto capitale fino al 40% e applicazione del fattore di riduzione $F$ per la tariffa premio MASE. Monitoraggio delle scadenze perentorie (stipula accordo entro il 30 Giugno 2026 ed esercizio entro il 31 Dicembre 2027).
   - **Separazione dei Flussi di Cassa:** Ripartizione netta tra ricavi di vendita/immissione RID (spettanti alla SPV proprietaria) ed energia condivisa virtuale (ricavi TIAD e MASE accreditati alla CER).
 * **Attivazione:** Questo modulo viene attivato automaticamente da:
-  - `Agent_MA_Expert` per valutazioni di bancabilitÃ , conformitÃ  PNRR e contratti di fornitura.
+  - `Agent_MA_Expert` per valutazioni di bancabilità, conformità PNRR e contratti di fornitura.
   - `Agent_Financial_Modeler` per il calcolo dei ricavi di bilancio, piani finanziari a 20 anni e separazione dei flussi finanziari.
   - `Agent_Energy_Developer` per definire la risoluzione temporale (oraria/quart'oraria) dei bilanci e la modellizzazione delle perdite.
 
