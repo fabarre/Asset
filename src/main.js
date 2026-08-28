@@ -3475,6 +3475,9 @@
 
                 // C4: ripristina branding (ragione sociale/tagline/logo) dalle chiavi brand::*
                 applyBrandRows(configData || []);
+
+                // CF4: ripristina esborsi CAPEX datati per impianto (chiavi capexpay::<plantId>::<chunk>)
+                loadCapexPaymentsFromRows(configData || []);
                 
                 if (!configData || configData.length === 0) {
                     // Nuovo utente senza configurazione: semina i default letti dalla UI
@@ -3491,6 +3494,8 @@
                     if (key.startsWith('scenario::') || key.startsWith('audit::')) return;
                     // Le chiavi brand:: sono gestite da applyBrandRows (non devono finire in inputs)
                     if (key.startsWith('brand::')) return;
+                    // Le chiavi capexpay:: sono gestite da loadCapexPaymentsFromRows (CF4)
+                    if (key.startsWith('capexpay::')) return;
                     
                     // Ripristino Selezioni speciali
                     if (key === 'selectedBessPlantIds') {
@@ -6375,6 +6380,7 @@
                     <th class="px-2 py-2 text-right">OPEX</th>
                     <th class="px-2 py-2 text-right">Imposte</th>
                     <th class="px-2 py-2 text-right">Serv. Debito</th>
+                    ${dated ? '<th class="px-2 py-2 text-right" title="Esborsi CAPEX datati">CAPEX</th>' : ''}
                     <th class="px-2 py-2 text-right">Net Cashflow</th>
                     <th class="px-2 py-2 text-right">Cassa Finale</th>
                 </tr>`;
@@ -6391,6 +6397,7 @@
                         <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.opex[i], 0)}</td>
                         <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.taxes[i], 0)}</td>
                         <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.debtService[i], 0)}</td>
+                        ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(mc.capexOutflow[i], 0)}</td>` : ''}
                         <td class="px-2 py-1.5 text-right font-mono ${mc.netCashflow[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(mc.netCashflow[i], 0)}</td>
                         <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(mc.cashClosing[i], 0)}</td>
                     </tr>`;
@@ -9624,6 +9631,113 @@ window.saveBranding = async function() {
         showToast('Branding salvato: applicato a PDF ed Excel.', 'success');
     } catch (err) {
         showToast('Errore salvataggio branding: ' + err.message, 'error');
+    }
+};
+
+// ═══ CF4: Esborsi CAPEX datati per impianto ═══
+// State.capexPayments: { plantId: [{ date: 'YYYY-MM-DD', amount: n, label: '' }] }
+// Persistenza: chiavi chunkate capexpay::<plantId>::<i> in simulation_config.
+function loadCapexPaymentsFromRows(rows) {
+    const capexRows = rows.filter(r => r.parameter_key && r.parameter_key.startsWith('capexpay::'));
+    State.capexPayments = State.capexPayments || {};
+    if (!capexRows.length) { renderCapexPaymentOptions(); return; }
+    const byPlant = {};
+    capexRows.forEach(r => {
+        const parts = r.parameter_key.split('::');
+        const pid = parts[1];
+        const idx = parseInt(parts[2], 10);
+        if (!pid || isNaN(idx)) return;
+        if (!byPlant[pid]) byPlant[pid] = [];
+        byPlant[pid][idx] = r.parameter_value || '';
+    });
+    Object.keys(byPlant).forEach(pid => {
+        try {
+            const parsed = JSON.parse(byPlant[pid].join(''));
+            if (Array.isArray(parsed)) State.capexPayments[pid] = parsed;
+        } catch (e) {
+            console.warn('[CF4] parse capexpay fallito per', pid, e.message);
+        }
+    });
+    renderCapexPaymentOptions();
+}
+
+window.renderCapexPaymentOptions = function() {
+    const sel = document.getElementById('capex-plant-select');
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = (State.plants || []).map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+    if (prev && (State.plants || []).some(p => p.id === prev)) sel.value = prev;
+    renderCapexPaymentRows();
+};
+
+window.renderCapexPaymentRows = function() {
+    const box = document.getElementById('capex-pay-rows');
+    if (!box) return;
+    const sel = document.getElementById('capex-plant-select');
+    const pid = sel ? sel.value : null;
+    const list = (pid && State.capexPayments && State.capexPayments[pid]) || [];
+    if (!pid) { box.innerHTML = ''; return; }
+    if (!list.length) {
+        box.innerHTML = '<div class="text-[10px] text-slate-500 italic py-1">Nessun esborso configurato: default = 100% del CAPEX impianto alla data COD.</div>';
+        return;
+    }
+    const sorted = list.map((pm, i) => ({ ...pm, _i: i })).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    box.innerHTML = sorted.map(pm => `
+        <div class="flex items-center gap-2 text-[10px] bg-slate-900/50 border border-slate-850 rounded-lg px-2 py-1">
+            <span class="font-mono text-sky-300 whitespace-nowrap">${escapeHtml(pm.date)}</span>
+            <span class="font-mono text-white flex-1 text-right">${new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(pm.amount || 0)}</span>
+            <span class="text-slate-400 truncate max-w-[120px]">${escapeHtml(pm.label || '')}</span>
+            <button onclick="removeCapexPayment(${pm._i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi esborso"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('');
+};
+
+window.addCapexPayment = function() {
+    const sel = document.getElementById('capex-plant-select');
+    const dateEl = document.getElementById('capex-pay-date');
+    const amountEl = document.getElementById('capex-pay-amount');
+    const labelEl = document.getElementById('capex-pay-label');
+    if (!sel || !sel.value) { showToast('Seleziona un impianto.', 'warning'); return; }
+    const date = dateEl ? dateEl.value : '';
+    const amount = amountEl ? parseFloat(amountEl.value) : NaN;
+    if (!date) { showToast('Inserisci la data dell\'esborso.', 'warning'); return; }
+    if (!isFinite(amount) || amount <= 0) { showToast('Importo non valido.', 'warning'); return; }
+    State.capexPayments = State.capexPayments || {};
+    if (!State.capexPayments[sel.value]) State.capexPayments[sel.value] = [];
+    State.capexPayments[sel.value].push({ date, amount, label: labelEl ? labelEl.value.trim().substring(0, 60) : '' });
+    if (amountEl) amountEl.value = '';
+    if (labelEl) labelEl.value = '';
+    renderCapexPaymentRows();
+    showToast('Esborso aggiunto: salva per persistere e ricalcola per applicarlo al cash flow.', 'info');
+};
+
+window.removeCapexPayment = function(idx) {
+    const sel = document.getElementById('capex-plant-select');
+    const pid = sel ? sel.value : null;
+    if (!pid || !State.capexPayments || !State.capexPayments[pid]) return;
+    State.capexPayments[pid].splice(idx, 1);
+    renderCapexPaymentRows();
+};
+
+window.saveCapexPayments = async function() {
+    if (!canWrite()) return;
+    if (!supabaseClient) { showToast('Database non connesso.', 'warning'); return; }
+    try {
+        await supabaseClient.from('simulation_config').delete().like('parameter_key', 'capexpay::%');
+        const rows = [];
+        Object.keys(State.capexPayments || {}).forEach(pid => {
+            const json = JSON.stringify(State.capexPayments[pid] || []);
+            for (let i = 0; i * 200 < json.length; i++) {
+                rows.push({ parameter_key: 'capexpay::' + pid + '::' + i, parameter_value: json.substring(i * 200, (i + 1) * 200), user_id: currentUserId() });
+            }
+        });
+        if (rows.length) {
+            const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key,user_id' });
+            if (error) throw error;
+        }
+        Audit.log('capex.payments.save', Object.keys(State.capexPayments || {}).length + ' impianti');
+        showToast('Esborsi CAPEX salvati.', 'success');
+    } catch (err) {
+        showToast('Errore salvataggio esborsi CAPEX: ' + err.message, 'error');
     }
 };
 

@@ -3440,7 +3440,8 @@ function runSensitivityLoop(baseState, config) {
             // ═══ CF3: schedule mensile date-aware (COD dinamici + lag di incasso per regime) ═══
             // Orizzonte: anno 0 (àncora-1) + anni 1-5 (72 mesi) con etichette di calendario.
             // Quadratura: per ogni anno e stream, la somma dei mesi = valore annuo del matrix.
-            function buildMonthlyCashflowDated(plantsList, mtx, ds, inputs, anchorYearIn) {
+            // CF4: esborsi CAPEX datati per impianto (capexPayments), con default 100% al COD.
+            function buildMonthlyCashflowDated(plantsList, mtx, ds, inputs, anchorYearIn, capexPayments) {
                 const YEARS = 5;
                 const MONTHS_IT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
                 const totalMonths = (YEARS + 1) * 12;
@@ -3449,8 +3450,9 @@ function runSensitivityLoop(baseState, config) {
                     months: [], labels: [], calendarYears: [],
                     revenueAccrued: [], revenueCollected: [], revenueTotal: [],
                     opex: [], taxes: [], interest: [], principal: [], debtService: [],
+                    capexOutflow: [],
                     netCashflow: [], cashOpening: [], cashClosing: [],
-                    lagResidual: 0
+                    lagResidual: 0, capexBeforeHorizon: 0
                 };
                 const accrued = new Float64Array(totalMonths);
                 const collected = new Float64Array(totalMonths);
@@ -3517,6 +3519,32 @@ function runSensitivityLoop(baseState, config) {
                     });
                 }
 
+                // CF4: esborsi CAPEX datati per impianto
+                const capexOut = new Float64Array(totalMonths);
+                const firstYear = anchorYearIn - 1; // anno 0
+                plantsList.forEach(pl => {
+                    const list = (capexPayments && capexPayments[pl.id]) || null;
+                    if (list && list.length) {
+                        list.forEach(pm => {
+                            const d = parseCodDate(pm.date);
+                            const amt = parseFloat(pm.amount) || 0;
+                            if (!d || amt <= 0) return;
+                            const idx = (d.y - firstYear) * 12 + (d.m - 1);
+                            if (idx < 0) out.capexBeforeHorizon += amt;
+                            else if (idx < totalMonths) capexOut[idx] += amt;
+                        });
+                    } else {
+                        // Default: 100% del CAPEX impianto (FV + BESS) alla data COD
+                        const capexTot = (pl.capacity || 0) * (pl.capex || 0) + ((pl.bessMwh || 0) * 1000) * (pl.bessCapexKwh || 0);
+                        if (capexTot > 0) {
+                            const cod = pl._codParsed;
+                            const idx = cod ? (cod.y - firstYear) * 12 + (cod.m - 1) : 12; // senza COD: gen anno 1
+                            if (idx >= 0 && idx < totalMonths) capexOut[idx] += capexTot;
+                            else if (idx < 0) out.capexBeforeHorizon += capexTot;
+                        }
+                    }
+                });
+
                 let cash = 0;
                 for (let i = 0; i < totalMonths; i++) {
                     const isYear0 = i < 12;
@@ -3528,7 +3556,7 @@ function runSensitivityLoop(baseState, config) {
                     const interest = isYear0 ? 0 : (ds.interestAccrued[yi] || 0) / 12;
                     const principal = isYear0 ? 0 : ((ds.principalScheduled[yi] || 0) + (ds.principalVoluntary[yi] || 0)) / 12;
                     const debtSvc = interest + principal;
-                    const net = collected[i] - opex - taxes - debtSvc;
+                    const net = collected[i] - opex - taxes - debtSvc - capexOut[i];
                     out.months.push(i + 1);
                     out.labels.push(MONTHS_IT[m] + ' ' + calYear + (isYear0 ? ' (Y0)' : ''));
                     out.calendarYears.push(calYear);
@@ -3540,6 +3568,7 @@ function runSensitivityLoop(baseState, config) {
                     out.interest.push(interest);
                     out.principal.push(principal);
                     out.debtService.push(debtSvc);
+                    out.capexOutflow.push(capexOut[i]);
                     out.netCashflow.push(net);
                     out.cashOpening.push(cash);
                     cash += net;
@@ -3564,7 +3593,7 @@ function runSensitivityLoop(baseState, config) {
                 calculatedIrr, calculatedProjectIrr, holdcoNpv, holdcoMoic, paybackPeriod, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
                 matrix, debtSchedule, combinedSolarProfile, generalMedionePrices, bessSimulation,
                 monthlyCashflow: anchorYear !== null
-                    ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear)
+                    ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear, State.capexPayments || null)
                     : buildMonthlyCashflow(activePlants, matrix, debtSchedule),
                 totalBessMw, totalBessMwh,
                 totalSelfConsMwh, totalPpaRev_y1, totalStabLoadMwh,

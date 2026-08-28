@@ -79,8 +79,9 @@ function buildState(overrides = {}) {
     };
 }
 
-function run(state) {
+function run(state, capexPayments) {
     lastMessage = null;
+    if (capexPayments) state.capexPayments = capexPayments;
     sandbox.self.onmessage({ data: { action: 'EXECUTE_CALCULATION', payload: { State: state } } });
     if (!lastMessage) throw new Error('Nessuna risposta dal worker');
     if (lastMessage.status !== 'success') {
@@ -531,6 +532,32 @@ check('Identità di cassa valida sui 72 mesi', (() => {
     return true;
 })());
 check('Nessun NaN/Inf nello schedule dated', mc24.netCashflow.every(v => Number.isFinite(v)) && mc24.cashClosing.every(v => Number.isFinite(v)));
+
+// ── Test 25: esborsi CAPEX datati per impianto (CF4) ──
+console.log('\n[Test 25] CAPEX datati: esborsi espliciti e default 100% al COD');
+const capexPay25 = {
+    pA: [
+        { date: '2026-10-15', amount: 500000, label: 'Acquisto SPV' },
+        { date: '2027-02-15', amount: 2000000, label: 'EPC 50%' },
+        { date: '2027-05-01', amount: 2000000, label: 'EPC saldo' }
+    ]
+    // pB: nessun pagamento -> default 100% del CAPEX alla data COD
+};
+const r25 = run(buildState({
+    inputs: { collectionLagRid: 0 },
+    plants: [
+        { id: 'pA', name: 'Impianto A', capacity: 8000, zone: 'NORD', opex: 120000, enabled: true, generation: gen24a, codDate: '2027-05-15', ...plantNoBess24, capex: 700 },
+        { id: 'pB', name: 'Impianto B', capacity: 4000, zone: 'SUD', opex: 60000, enabled: true, generation: gen24b, codDate: '2028-02-15', ...plantNoBess24, capex: 750 }
+    ]
+}), capexPay25);
+const mc25 = r25.monthlyCashflow;
+// indici: anno0=2026 -> ott-2026 = mese 9; feb-2027 = 12+1=13; mag-2027 = 12+4=16; feb-2028 = 24+1=25
+check('Esborso SPV ott-2026 (anno 0) = 500.000', mc25.capexOutflow[9] === 500000, `got=${mc25.capexOutflow[9]}`);
+check('Esborso EPC 50% feb-2027 = 2.000.000', mc25.capexOutflow[13] === 2000000, `got=${mc25.capexOutflow[13]}`);
+check('Esborso EPC saldo mag-2027 = 2.000.000', mc25.capexOutflow[16] === 2000000, `got=${mc25.capexOutflow[16]}`);
+check('Default pB: 100% CAPEX (4000*750) al COD feb-2028', mc25.capexOutflow[25] === 4000 * 750, `got=${mc25.capexOutflow[25]}`);
+check('Il net del mese include gli esborsi CAPEX', Math.abs((mc25.revenueTotal[9] - mc25.opex[9] - mc25.taxes[9] - mc25.debtService[9] - 500000) - mc25.netCashflow[9]) < 1e-6);
+check('Nessun CAPEX prima dell\'orizzonte', mc25.capexBeforeHorizon === 0);
 
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
