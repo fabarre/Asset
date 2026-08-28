@@ -547,6 +547,9 @@
             }
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
+
+            // Ogni cambio scheda riparte dall'inizio della pagina
+            window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
             
             // Highlight nav buttons
             const navMap = {
