@@ -3441,7 +3441,9 @@ function runSensitivityLoop(baseState, config) {
             // Orizzonte: anno 0 (àncora-1) + anni 1-5 (72 mesi) con etichette di calendario.
             // Quadratura: per ogni anno e stream, la somma dei mesi = valore annuo del matrix.
             // CF4: esborsi CAPEX datati per impianto (capexPayments), con default 100% al COD.
-            function buildMonthlyCashflowDated(plantsList, mtx, ds, inputs, anchorYearIn, capexPayments) {
+            // CF5: OPEX con scadenze (eventi ricorrenti per impianto + IMU giu/dic) e
+            //      imposte IRES/IRAP dal P&L pagate l'anno successivo (taxPaymentMonth).
+            function buildMonthlyCashflowDated(plantsList, mtx, ds, inputs, anchorYearIn, capexPayments, opexEvents) {
                 const YEARS = 5;
                 const MONTHS_IT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
                 const totalMonths = (YEARS + 1) * 12;
@@ -3452,7 +3454,7 @@ function runSensitivityLoop(baseState, config) {
                     opex: [], taxes: [], interest: [], principal: [], debtService: [],
                     capexOutflow: [],
                     netCashflow: [], cashOpening: [], cashClosing: [],
-                    lagResidual: 0, capexBeforeHorizon: 0
+                    lagResidual: 0, capexBeforeHorizon: 0, taxesAfterHorizon: 0
                 };
                 const accrued = new Float64Array(totalMonths);
                 const collected = new Float64Array(totalMonths);
@@ -3519,6 +3521,46 @@ function runSensitivityLoop(baseState, config) {
                     });
                 }
 
+                // ═══ CF5: OPEX con scadenze ═══
+                // 1) Eventi ricorrenti per impianto (mese specifico, ogni anno dal COD)
+                // 2) IMU da opex_taxes: acconto giugno + saldo dicembre
+                // 3) Residuo OPEX non scadenzato (opexTotal annuo - OPEX fissi impianto) ripartito /12
+                // 4) Imposte dal P&L pagate a taxPaymentMonth dell'anno successivo
+                const taxPayMonth = Math.min(12, Math.max(1, parseInt(inputs.taxPaymentMonth, 10) || 6));
+                const opexScheduled = new Float64Array(totalMonths);
+                plantsList.forEach(pl => {
+                    const cod = pl._codParsed;
+                    const evs = (opexEvents && opexEvents[pl.id]) || [];
+                    for (let y = 1; y <= YEARS; y++) {
+                        const calYear = anchorYearIn + y - 1;
+                        if (cod && calYear < cod.y) continue;
+                        const mStart = (cod && calYear === cod.y) ? cod.m : 1;
+                        evs.forEach(ev => {
+                            const m = parseInt(ev.month, 10);
+                            const amt = parseFloat(ev.amount) || 0;
+                            if (m >= 1 && m <= 12 && m >= mStart && amt !== 0) {
+                                opexScheduled[12 + (y - 1) * 12 + (m - 1)] += amt;
+                            }
+                        });
+                        const imu = parseFloat(pl.opexTaxes) || 0;
+                        if (imu > 0) {
+                            if (6 >= mStart) opexScheduled[12 + (y - 1) * 12 + 5] += imu / 2;
+                            if (12 >= mStart) opexScheduled[12 + (y - 1) * 12 + 11] += imu / 2;
+                        }
+                    }
+                });
+                const fixedOpexAnnual = plantsList.reduce((a, pl) => a +
+                    (pl.opex || 0) + (pl.opexOmBess || 0) + (pl.opexInsurance || 0) +
+                    (pl.opexTaxes || 0) + (pl.opexSecurity || 0) + (pl.opexAssetManagement || 0), 0);
+                const taxesOut = new Float64Array(totalMonths);
+                for (let y = 1; y <= YEARS; y++) {
+                    const tax = (mtx.currentTaxesSpv && mtx.currentTaxesSpv[y - 1]) || 0;
+                    if (tax === 0) continue;
+                    const payIdx = 12 + y * 12 + (taxPayMonth - 1); // mese scelto dell'anno y+1
+                    if (payIdx < totalMonths) taxesOut[payIdx] += tax;
+                    else out.taxesAfterHorizon += tax;
+                }
+
                 // CF4: esborsi CAPEX datati per impianto
                 const capexOut = new Float64Array(totalMonths);
                 const firstYear = anchorYearIn - 1; // anno 0
@@ -3551,8 +3593,9 @@ function runSensitivityLoop(baseState, config) {
                     const yi = isYear0 ? -1 : Math.floor((i - 12) / 12);
                     const m = i % 12;
                     const calYear = anchorYearIn - 1 + Math.floor(i / 12);
-                    const opex = isYear0 ? 0 : (mtx.opexTotal[yi] || 0) / 12;
-                    const taxes = isYear0 ? 0 : (mtx.currentTaxesSpv[yi] || 0) / 12;
+                    const flatOpex = isYear0 ? 0 : Math.max(0, ((mtx.opexTotal[yi] || 0) - fixedOpexAnnual)) / 12;
+                    const opex = flatOpex + (isYear0 ? 0 : opexScheduled[i]);
+                    const taxes = taxesOut[i];
                     const interest = isYear0 ? 0 : (ds.interestAccrued[yi] || 0) / 12;
                     const principal = isYear0 ? 0 : ((ds.principalScheduled[yi] || 0) + (ds.principalVoluntary[yi] || 0)) / 12;
                     const debtSvc = interest + principal;
@@ -3593,7 +3636,7 @@ function runSensitivityLoop(baseState, config) {
                 calculatedIrr, calculatedProjectIrr, holdcoNpv, holdcoMoic, paybackPeriod, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
                 matrix, debtSchedule, combinedSolarProfile, generalMedionePrices, bessSimulation,
                 monthlyCashflow: anchorYear !== null
-                    ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear, State.capexPayments || null)
+                    ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear, State.capexPayments || null, State.opexEvents || null)
                     : buildMonthlyCashflow(activePlants, matrix, debtSchedule),
                 totalBessMw, totalBessMwh,
                 totalSelfConsMwh, totalPpaRev_y1, totalStabLoadMwh,

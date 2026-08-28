@@ -2860,6 +2860,8 @@
             p.collectionLagBrp = Math.max(0, parseInt(getVal('mc-lag-brp'), 10) || 0);
             p.collectionLagCer = Math.max(0, parseInt(getVal('mc-lag-cer'), 10) || 0);
             p.collectionLagFerx = Math.max(0, parseInt(getVal('mc-lag-ferx'), 10) || 0);
+            // CF5: mese di pagamento imposte (IRES/IRAP) dell'anno successivo
+            p.taxPaymentMonth = Math.min(12, Math.max(1, parseInt(getVal('mc-tax-pay-month'), 10) || 6));
             p.bessOptimizer = getVal('select-bess-optimizer') || 'dp';
             p.punZonalFloor = getNum('input-pun-zonal-floor', 60.0);
             p.punBearishDecayRate = getNum('input-pun-bearish-decay-rate', 5) / 100;
@@ -3191,6 +3193,7 @@
                         'collectionLagBrp': { id: 'mc-lag-brp', mult: 1 },
                         'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
                         'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
+                        'taxPaymentMonth': { id: 'mc-tax-pay-month', mult: 1 },
                         'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
                         'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                         'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
@@ -3478,6 +3481,8 @@
 
                 // CF4: ripristina esborsi CAPEX datati per impianto (chiavi capexpay::<plantId>::<chunk>)
                 loadCapexPaymentsFromRows(configData || []);
+                // CF5: ripristina eventi OPEX ricorrenti per impianto (chiavi opexev::<plantId>::<chunk>)
+                loadOpexEventsFromRows(configData || []);
                 
                 if (!configData || configData.length === 0) {
                     // Nuovo utente senza configurazione: semina i default letti dalla UI
@@ -3496,6 +3501,8 @@
                     if (key.startsWith('brand::')) return;
                     // Le chiavi capexpay:: sono gestite da loadCapexPaymentsFromRows (CF4)
                     if (key.startsWith('capexpay::')) return;
+                    // Le chiavi opexev:: sono gestite da loadOpexEventsFromRows (CF5)
+                    if (key.startsWith('opexev::')) return;
                     
                     // Ripristino Selezioni speciali
                     if (key === 'selectedBessPlantIds') {
@@ -3610,6 +3617,7 @@
                                 'collectionLagBrp': { id: 'mc-lag-brp', mult: 1 },
                                 'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
                                 'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
+                                'taxPaymentMonth': { id: 'mc-tax-pay-month', mult: 1 },
                                 'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
                                 'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                                 'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
@@ -9738,6 +9746,115 @@ window.saveCapexPayments = async function() {
         showToast('Esborsi CAPEX salvati.', 'success');
     } catch (err) {
         showToast('Errore salvataggio esborsi CAPEX: ' + err.message, 'error');
+    }
+};
+
+// ═══ CF5: Eventi OPEX ricorrenti per impianto (mese specifico, ogni anno) ═══
+// State.opexEvents: { plantId: [{ month: 1-12, amount: n, label: '' }] }
+// Persistenza: chiavi chunkate opexev::<plantId>::<i> in simulation_config.
+const MONTHS_IT_SHORT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+
+function loadOpexEventsFromRows(rows) {
+    const opexRows = rows.filter(r => r.parameter_key && r.parameter_key.startsWith('opexev::'));
+    State.opexEvents = State.opexEvents || {};
+    if (!opexRows.length) { renderOpexEventOptions(); return; }
+    const byPlant = {};
+    opexRows.forEach(r => {
+        const parts = r.parameter_key.split('::');
+        const pid = parts[1];
+        const idx = parseInt(parts[2], 10);
+        if (!pid || isNaN(idx)) return;
+        if (!byPlant[pid]) byPlant[pid] = [];
+        byPlant[pid][idx] = r.parameter_value || '';
+    });
+    Object.keys(byPlant).forEach(pid => {
+        try {
+            const parsed = JSON.parse(byPlant[pid].join(''));
+            if (Array.isArray(parsed)) State.opexEvents[pid] = parsed;
+        } catch (e) {
+            console.warn('[CF5] parse opexev fallito per', pid, e.message);
+        }
+    });
+    renderOpexEventOptions();
+}
+
+window.renderOpexEventOptions = function() {
+    const sel = document.getElementById('opexev-plant-select');
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = (State.plants || []).map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+    if (prev && (State.plants || []).some(p => p.id === prev)) sel.value = prev;
+    renderOpexEventRows();
+};
+
+window.renderOpexEventRows = function() {
+    const box = document.getElementById('opexev-rows');
+    if (!box) return;
+    const sel = document.getElementById('opexev-plant-select');
+    const pid = sel ? sel.value : null;
+    const list = (pid && State.opexEvents && State.opexEvents[pid]) || [];
+    if (!pid) { box.innerHTML = ''; return; }
+    if (!list.length) {
+        box.innerHTML = '<div class="text-[10px] text-slate-500 italic py-1">Nessun evento OPEX ricorrente configurato per questo impianto.</div>';
+        return;
+    }
+    const sorted = list.map((ev, i) => ({ ...ev, _i: i })).sort((a, b) => (a.month || 0) - (b.month || 0));
+    box.innerHTML = sorted.map(ev => `
+        <div class="flex items-center gap-2 text-[10px] bg-slate-900/50 border border-slate-850 rounded-lg px-2 py-1">
+            <span class="font-mono text-emerald-300 whitespace-nowrap">${MONTHS_IT_SHORT[(ev.month || 1) - 1] || ev.month}</span>
+            <span class="font-mono text-white flex-1 text-right">${new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(ev.amount || 0)}</span>
+            <span class="text-slate-400 truncate max-w-[120px]">${escapeHtml(ev.label || '')}</span>
+            <button onclick="removeOpexEvent(${ev._i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi evento"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('');
+};
+
+window.addOpexEvent = function() {
+    const sel = document.getElementById('opexev-plant-select');
+    const monthEl = document.getElementById('opexev-month');
+    const amountEl = document.getElementById('opexev-amount');
+    const labelEl = document.getElementById('opexev-label');
+    if (!sel || !sel.value) { showToast('Seleziona un impianto.', 'warning'); return; }
+    const month = monthEl ? parseInt(monthEl.value, 10) : NaN;
+    const amount = amountEl ? parseFloat(amountEl.value) : NaN;
+    if (!isFinite(month) || month < 1 || month > 12) { showToast('Seleziona il mese di scadenza.', 'warning'); return; }
+    if (!isFinite(amount) || amount <= 0) { showToast('Importo non valido.', 'warning'); return; }
+    State.opexEvents = State.opexEvents || {};
+    if (!State.opexEvents[sel.value]) State.opexEvents[sel.value] = [];
+    State.opexEvents[sel.value].push({ month, amount, label: labelEl ? labelEl.value.trim().substring(0, 60) : '' });
+    if (amountEl) amountEl.value = '';
+    if (labelEl) labelEl.value = '';
+    renderOpexEventRows();
+    showToast('Evento OPEX aggiunto: salva per persistere e ricalcola per applicarlo.', 'info');
+};
+
+window.removeOpexEvent = function(idx) {
+    const sel = document.getElementById('opexev-plant-select');
+    const pid = sel ? sel.value : null;
+    if (!pid || !State.opexEvents || !State.opexEvents[pid]) return;
+    State.opexEvents[pid].splice(idx, 1);
+    renderOpexEventRows();
+};
+
+window.saveOpexEvents = async function() {
+    if (!canWrite()) return;
+    if (!supabaseClient) { showToast('Database non connesso.', 'warning'); return; }
+    try {
+        await supabaseClient.from('simulation_config').delete().like('parameter_key', 'opexev::%');
+        const rows = [];
+        Object.keys(State.opexEvents || {}).forEach(pid => {
+            const json = JSON.stringify(State.opexEvents[pid] || []);
+            for (let i = 0; i * 200 < json.length; i++) {
+                rows.push({ parameter_key: 'opexev::' + pid + '::' + i, parameter_value: json.substring(i * 200, (i + 1) * 200), user_id: currentUserId() });
+            }
+        });
+        if (rows.length) {
+            const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key,user_id' });
+            if (error) throw error;
+        }
+        Audit.log('opex.events.save', Object.keys(State.opexEvents || {}).length + ' impianti');
+        showToast('Eventi OPEX salvati.', 'success');
+    } catch (err) {
+        showToast('Errore salvataggio eventi OPEX: ' + err.message, 'error');
     }
 };
 

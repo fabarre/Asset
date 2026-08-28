@@ -79,9 +79,10 @@ function buildState(overrides = {}) {
     };
 }
 
-function run(state, capexPayments) {
+function run(state, capexPayments, opexEvents) {
     lastMessage = null;
     if (capexPayments) state.capexPayments = capexPayments;
+    if (opexEvents) state.opexEvents = opexEvents;
     sandbox.self.onmessage({ data: { action: 'EXECUTE_CALCULATION', payload: { State: state } } });
     if (!lastMessage) throw new Error('Nessuna risposta dal worker');
     if (lastMessage.status !== 'success') {
@@ -558,6 +559,28 @@ check('Esborso EPC saldo mag-2027 = 2.000.000', mc25.capexOutflow[16] === 200000
 check('Default pB: 100% CAPEX (4000*750) al COD feb-2028', mc25.capexOutflow[25] === 4000 * 750, `got=${mc25.capexOutflow[25]}`);
 check('Il net del mese include gli esborsi CAPEX', Math.abs((mc25.revenueTotal[9] - mc25.opex[9] - mc25.taxes[9] - mc25.debtService[9] - 500000) - mc25.netCashflow[9]) < 1e-6);
 check('Nessun CAPEX prima dell\'orizzonte', mc25.capexBeforeHorizon === 0);
+
+// ── Test 26: OPEX con scadenze — eventi ricorrenti, IMU giu/dic, imposte Y+1 (CF5) ──
+console.log('\n[Test 26] OPEX scadenzati: manutenzione mar, IMU giu/dic, imposte a giu Y+1');
+const opexEv26 = { pA: [{ month: 3, amount: 30000, label: 'Manutenzione' }] };
+const r26 = run(buildState({
+    inputs: { collectionLagRid: 0, taxPaymentMonth: 6 },
+    plants: [
+        { id: 'pA', name: 'Impianto A', capacity: 8000, zone: 'NORD', opex: 120000, opexTaxes: 12000, enabled: true, generation: gen24a, codDate: '2027-05-15', ...plantNoBess24 }
+    ]
+}), null, opexEv26);
+const mc26 = r26.monthlyCashflow;
+// flat mensile calcolato come nell'engine: max(0, opexTotal - opex fissi)/12
+const fixed26 = 120000 + 12000; // opex + opexTaxes (altri campi 0)
+const flat26 = (y) => Math.max(0, (r26.matrix.opexTotal[y - 1] || 0) - fixed26) / 12;
+// indici: giu-2027=17, dic-2027=23, mar-2027=14, mar-2028=26, giu-2028=29
+check('IMU acconto giu-2027 = flat + 6.000', Math.abs(mc26.opex[17] - (flat26(1) + 6000)) < 1e-6, `got=${mc26.opex[17].toFixed(2)} exp=${(flat26(1) + 6000).toFixed(2)}`);
+check('IMU saldo dic-2027 = flat + 6.000', Math.abs(mc26.opex[23] - (flat26(1) + 6000)) < 1e-6);
+check('Evento mar-2027 NON applicato (precedente al COD)', Math.abs(mc26.opex[14] - flat26(1)) < 1e-6);
+check('Evento manutenzione mar-2028 = flat + 30.000', Math.abs(mc26.opex[26] - (flat26(2) + 30000)) < 1e-6, `got=${mc26.opex[26].toFixed(2)}`);
+check('Imposte anno 1 pagate a giu-2028 (non a giu-2027)', mc26.taxes[17] === 0 && Math.abs(mc26.taxes[29] - (r26.matrix.currentTaxesSpv[0] || 0)) < 1e-6);
+check('Imposte anno 5 oltre orizzonte tracciate', Math.abs(mc26.taxesAfterHorizon - (r26.matrix.currentTaxesSpv[4] || 0)) < 1e-6);
+check('Nessuna imposta o OPEX in anno 0', mc26.taxes.slice(0, 12).every(v => v === 0) && mc26.opex.slice(0, 12).every(v => v === 0));
 
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);

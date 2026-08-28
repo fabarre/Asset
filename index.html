@@ -478,7 +478,7 @@
                         </div>
                         <div class="mb-3">
                             <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Ritardo di incasso per regime di mercato: i ricavi maturati nel mese N dell'impianto sono incassati al mese N+lag. Ogni impianto segue il lag del proprio regime.">Lag di incasso per regime (mesi) <i class="fa-solid fa-circle-info"></i></div>
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
                                 <div>
                                     <label class="block text-[9px] text-slate-400 mb-0.5">RID</label>
                                     <input type="number" id="mc-lag-rid" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
@@ -494,6 +494,10 @@
                                 <div>
                                     <label class="block text-[9px] text-slate-400 mb-0.5">FER X</label>
                                     <input type="number" id="mc-lag-ferx" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div title="Mese di pagamento di IRES/IRAP relative all'anno precedente (saldo)">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Imposte (mese)</label>
+                                    <input type="number" id="mc-tax-pay-month" value="6" min="1" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 </div>
                             </div>
                         </div>
@@ -523,6 +527,40 @@
                             <div id="capex-pay-rows" class="mt-2 space-y-1"></div>
                             <div class="flex justify-end mt-2">
                                 <button onclick="saveCapexPayments()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-floppy-disk mr-1"></i>Salva esborsi CAPEX</button>
+                            </div>
+                        </div>
+                        <div class="mb-3 pt-3 border-t border-slate-800/80">
+                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="OPEX ricorrenti con scadenza mensile per impianto (es. manutenzione). IMU (da OPEX imposte) è applicata automaticamente: acconto giugno + saldo dicembre. Le imposte IRES/IRAP dal P&L sono pagate nel mese scelto dell'anno successivo.">Eventi OPEX ricorrenti (per impianto) <i class="fa-solid fa-circle-info"></i></div>
+                            <div class="grid grid-cols-12 gap-2 items-end">
+                                <div class="col-span-4">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Impianto</label>
+                                    <select id="opexev-plant-select" onchange="renderOpexEventRows()" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"></select>
+                                </div>
+                                <div class="col-span-3">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Mese scadenza</label>
+                                    <select id="opexev-month" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                        <option value="">—</option>
+                                        <option value="1">Gen</option><option value="2">Feb</option><option value="3">Mar</option>
+                                        <option value="4">Apr</option><option value="5">Mag</option><option value="6">Giu</option>
+                                        <option value="7">Lug</option><option value="8">Ago</option><option value="9">Set</option>
+                                        <option value="10">Ott</option><option value="11">Nov</option><option value="12">Dic</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Importo €/anno</label>
+                                    <input type="number" id="opexev-amount" min="0" step="100" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Causale</label>
+                                    <input type="text" id="opexev-label" maxlength="60" placeholder="Es. Manutenzione" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div class="col-span-1">
+                                    <button onclick="addOpexEvent()" class="w-full px-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] transition-colors" title="Aggiungi evento"><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                            </div>
+                            <div id="opexev-rows" class="mt-2 space-y-1"></div>
+                            <div class="flex justify-end mt-2">
+                                <button onclick="saveOpexEvents()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-floppy-disk mr-1"></i>Salva eventi OPEX</button>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -3290,7 +3328,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=18"></script>
+    <script src="./src/main.js?v=19"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {
