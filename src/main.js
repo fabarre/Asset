@@ -5285,6 +5285,7 @@
         function renderZeroState() {
             // Re-render table skeletons with dynamic labels based on active inputs
             initializeTableSkeletons();
+            renderMonthlyCashflow(null);
 
             const p = State.inputs;
             const setTxt = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
@@ -6105,12 +6106,99 @@
 
             updateTableData(r.matrix, r.debtSchedule);
             renderChart(r.matrix, r.debtSchedule);
+            renderMonthlyCashflow(r.monthlyCashflow);
             renderPlantsList(); // Update the plants table (including PUN Zonale Ponderato) when calculations are run
             renderDealValueBreakdownTable();
             renderGmeDashboard();
         }
 
         // Render main 20-year charts (operational revenues composition & cashflow/DSCR)
+        // D2: tabella + grafico cash flow mensile (anni 1-5) con evidenza mesi negativi
+        function renderMonthlyCashflow(mc) {
+            const kMin = document.getElementById('mc-kpi-min-cash');
+            const kMinM = document.getElementById('mc-kpi-min-month');
+            const kNeg = document.getElementById('mc-kpi-neg-months');
+            const tbody = document.getElementById('monthly-cf-body');
+            const canvas = document.getElementById('chart-monthly-cash');
+            if (!mc || !mc.months || mc.months.length === 0) {
+                if (kMin) kMin.textContent = '—';
+                if (kMinM) kMinM.textContent = '—';
+                if (kNeg) kNeg.textContent = '—';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-500">Esegui un calcolo per visualizzare il cash flow mensile.</td></tr>';
+                if (State.monthlyChartInstance) { State.monthlyChartInstance.destroy(); State.monthlyChartInstance = null; }
+                return;
+            }
+            if (kMin) {
+                kMin.textContent = _fmtE(mc.minCashClosing);
+                kMin.className = 'text-sm font-black mt-1 ' + (mc.minCashClosing < 0 ? 'text-rose-400' : 'text-emerald-400');
+            }
+            if (kMinM) kMinM.textContent = mc.minCashMonth > 0 ? 'Mese ' + mc.minCashMonth : '—';
+            if (kNeg) {
+                kNeg.textContent = String(mc.negativeMonths);
+                kNeg.className = 'text-sm font-black mt-1 ' + (mc.negativeMonths > 0 ? 'text-rose-400' : 'text-emerald-400');
+            }
+            if (tbody) {
+                let html = '';
+                for (let i = 0; i < mc.months.length; i++) {
+                    const negRow = mc.cashClosing[i] < 0;
+                    const rowCls = negRow ? 'bg-rose-950/20' : (i % 2 === 1 ? 'bg-slate-900/30' : '');
+                    html += `<tr class="${rowCls} border-t border-slate-850/60">
+                        <td class="px-2 py-1.5 text-slate-300 font-bold">${mc.labels[i]}</td>
+                        <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
+                        <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.opex[i], 0)}</td>
+                        <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.taxes[i], 0)}</td>
+                        <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.debtService[i], 0)}</td>
+                        <td class="px-2 py-1.5 text-right font-mono ${mc.netCashflow[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(mc.netCashflow[i], 0)}</td>
+                        <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(mc.cashClosing[i], 0)}</td>
+                    </tr>`;
+                }
+                tbody.innerHTML = html;
+            }
+            if (canvas && window.Chart) {
+                if (State.monthlyChartInstance) State.monthlyChartInstance.destroy();
+                State.monthlyChartInstance = new Chart(canvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: mc.labels,
+                        datasets: [
+                            {
+                                label: 'Net Cashflow Mensile (€)',
+                                data: mc.netCashflow.map(v => Math.round(v)),
+                                backgroundColor: mc.netCashflow.map(v => v < 0 ? 'rgba(244, 63, 94, 0.7)' : 'rgba(16, 185, 129, 0.7)'),
+                                borderRadius: 2,
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: 'Cassa Cumulata (€)',
+                                data: mc.cashClosing.map(v => Math.round(v)),
+                                type: 'line',
+                                borderColor: '#38bdf8',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                tension: 0.25,
+                                yAxisID: 'y'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8', maxTicksLimit: 20, font: { size: 8 } } },
+                            y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', callback: v => chartCompactEuro(v) } }
+                        },
+                        plugins: {
+                            legend: { labels: { color: '#cbd5e1', boxWidth: 10, font: { size: 9 } }, position: 'top' },
+                            tooltip: {
+                                callbacks: { label: (c) => ` ${c.dataset.label}: ${chartEuroFull(c.parsed.y)}` }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
         function renderChart(matrix, debtSchedule) {
             const labels = matrix.years.map(yr => `Anno ${yr}`);
 
@@ -9738,6 +9826,42 @@ function _repRendicontoFinanziario(doc) {
         { key: 'spvCashTrap', label: '(=) Cassa Residua SPV (Cash Trap)' }
     ];
     y = _yearTable(doc, 'Rendiconto Finanziario', '', rows, y);
+
+    // D2: Cash flow mensile anni 1-5 (disponibilità di cassa)
+    const mc = (window.State.results || {}).monthlyCashflow;
+    if (mc && mc.months && mc.months.length > 0) {
+        doc.addPage('a4', 'landscape');
+        _pdfHeader(doc, 'Rendiconto Finanziario SPV - CFADS & Waterfall', 'Report N. 03');
+        let ym = 30;
+        ym = _sectionTitleLS(doc, 'Cash Flow Mensile & Disponibilità di Cassa (Anni 1-5)', ym);
+        doc.autoTable({
+            startY: ym,
+            theme: 'striped',
+            headStyles: { fillColor: [15, 23, 42], textColor: [148, 163, 184], fontSize: 6, halign: 'right' },
+            bodyStyles: { fontSize: 5.5, textColor: [30, 41, 59] },
+            columnStyles: { 0: { cellWidth: 16, halign: 'left', fontStyle: 'bold' } },
+            head: [['Mese', 'Ricavi Tot.', 'OPEX', 'Imposte', 'Serv. Debito', 'Net Cashflow', 'Cassa Finale']],
+            body: mc.months.map((_, i) => [
+                mc.labels[i],
+                _fmtEFull(mc.revenueTotal[i]), _fmtEFull(mc.opex[i]), _fmtEFull(mc.taxes[i]),
+                _fmtEFull(mc.debtService[i]), _fmtEFull(mc.netCashflow[i]), _fmtEFull(mc.cashClosing[i])
+            ]),
+            didParseCell: (data) => {
+                if (data.section === 'body') {
+                    const i = data.row.index;
+                    if (data.column.index === 5 && mc.netCashflow[i] < 0) data.cell.styles.textColor = [185, 28, 50];
+                    if (data.column.index === 6 && mc.cashClosing[i] < 0) {
+                        data.cell.styles.textColor = [185, 28, 50];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                }
+            }
+        });
+        const yEnd = doc.lastAutoTable.finalY + 6;
+        doc.setFontSize(7);
+        doc.setTextColor(71, 85, 105);
+        doc.text(`Cassa minima 60m: ${_fmtE(mc.minCashClosing)} (mese ${mc.minCashMonth})  -  Mesi con cassa negativa: ${mc.negativeMonths}`, 14, yEnd);
+    }
     return doc;
 }
 

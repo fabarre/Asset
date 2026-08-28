@@ -1864,6 +1864,52 @@ async function exportPnlToExcel() {
         pf.cell.value = { formula: pf.formulaFn(pf.colLetter, pf.yearIndex), result: undefined };
     });
 
+    // ---------------------------------------------------------
+    // D2: FOGLIO CASH FLOW MENSILE (anni 1-5, 60 mesi)
+    // ---------------------------------------------------------
+    const mc = window.State.results && window.State.results.monthlyCashflow;
+    if (mc && mc.months && mc.months.length > 0) {
+        const sheetMc = workbook.addWorksheet('CASH FLOW MENSILE', { views: [{ state: 'frozen', xSplit: 1, ySplit: 1, showGridLines: false }] });
+        sheetMc.columns = [
+            { header: 'MESE', key: 'mese', width: 12 },
+            { header: 'RICAVI TOT. (€)', key: 'ricavi', width: 16 },
+            { header: 'OPEX (€)', key: 'opex', width: 14 },
+            { header: 'IMPOSTE (€)', key: 'imposte', width: 14 },
+            { header: 'SERV. DEBITO (€)', key: 'debito', width: 16 },
+            { header: 'NET CASHFLOW (€)', key: 'net', width: 16 },
+            { header: 'CASSA FINALE (€)', key: 'cassa', width: 16 }
+        ];
+        sheetMc.getRow(1).eachCell((cell) => {
+            cell.font = headerStyle.font; cell.fill = headerStyle.fill;
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            cell.border = headerStyle.border;
+        });
+        sheetMc.getCell('A1').alignment = { horizontal: 'left', vertical: 'middle' };
+        for (let i = 0; i < mc.months.length; i++) {
+            const row = sheetMc.addRow({
+                mese: mc.labels[i],
+                ricavi: Math.round(mc.revenueTotal[i]),
+                opex: Math.round(mc.opex[i]),
+                imposte: Math.round(mc.taxes[i]),
+                debito: Math.round(mc.debtService[i]),
+                net: Math.round(mc.netCashflow[i]),
+                cassa: Math.round(mc.cashClosing[i])
+            });
+            row.eachCell((cell, colNumber) => {
+                if (colNumber > 1) cell.numFmt = '€ #,##0';
+                if (colNumber === 6) cell.font = { color: { argb: mc.netCashflow[i] < 0 ? 'FFB91C32' : 'FF047857' }, bold: true };
+                if (colNumber === 7) {
+                    cell.font = { bold: true, color: { argb: mc.cashClosing[i] < 0 ? 'FFB91C32' : 'FF0369A1' } };
+                    if (mc.cashClosing[i] < 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE8EC' } };
+                }
+            });
+        }
+        const kRow = sheetMc.addRow([]);
+        sheetMc.addRow(['CASSA MINIMA (60m)', mc.minCashClosing]).getCell('B' + (kRow.number + 1)).numFmt = '€ #,##0';
+        sheetMc.addRow(['MESE CASSA MINIMA', mc.minCashMonth]);
+        sheetMc.addRow(['MESI CON CASSA NEGATIVA', mc.negativeMonths]);
+    }
+
     // Download del file
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
