@@ -807,6 +807,7 @@
             const getFloat = (id) => parseFloat(getVal(id)) || 0;
             
             const name = getVal('plant-name');
+            const codDate = getVal('plant-cod-date') || null;
             const capex = getFloat('plant-capex');
             const opex = getFloat('plant-opex');
             const opexOmBess = getFloat('plant-opex-om-bess');
@@ -864,6 +865,7 @@
             const degradeArbitrage = getFloat('plant-degrade-arbitrage');
 
             return name !== originalPlantData.name ||
+                   codDate !== (originalPlantData.codDate || null) ||
                    capex !== originalPlantData.capex ||
                    opex !== originalPlantData.opex ||
                    opexOmBess !== (originalPlantData.opexOmBess || 0) ||
