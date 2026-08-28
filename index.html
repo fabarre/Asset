@@ -204,6 +204,8 @@
                     <span class="text-[9px] text-slate-500 uppercase tracking-widest font-bold">ultimi 200 eventi</span>
                 </div>
                 <div class="flex items-center space-x-2">
+                    <button onclick="downloadAuditCSV()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition-colors" title="Esporta audit log in CSV"><i class="fa-solid fa-file-csv"></i></button>
+                    <button onclick="downloadAuditPDF()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition-colors" title="Esporta audit log in PDF"><i class="fa-solid fa-file-pdf"></i></button>
                     <button onclick="clearAuditLog()" class="px-2.5 py-1 bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 font-bold rounded-lg text-[10px] transition-colors">Svuota</button>
                     <button onclick="closeAuditLog()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-xmark"></i></button>
                 </div>

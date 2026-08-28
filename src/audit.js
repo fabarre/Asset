@@ -227,6 +227,72 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
+// ── D6: export audit log (CSV / PDF) con attribuzione utente ──
+function _auditUser() {
+    return (typeof State !== 'undefined' && State.currentUser && State.currentUser.email) ? State.currentUser.email : 'n/d';
+}
+
+window.downloadAuditCSV = function() {
+    if (!Audit.entries || Audit.entries.length === 0) {
+        if (typeof showToast === 'function') showToast('Nessun evento audit da esportare.', 'warning');
+        return;
+    }
+    const user = _auditUser();
+    const esc = (v) => '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"';
+    let csv = 'Registro Attività (Audit Log) - ' + new Date().toLocaleString('it-IT') + '\n';
+    csv += 'Utente;' + esc(user) + ';Eventi;' + Audit.entries.length + '\n';
+    csv += 'Timestamp;Azione;Dettaglio;Utente\n';
+    Audit.entries.forEach(e => {
+        csv += [esc(new Date(e.t).toLocaleString('it-IT')), esc(e.a), esc(e.d || ''), esc(user)].join(';') + '\n';
+    });
+    const blob = new Blob([String.fromCharCode(0xFEFF) + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Audit_Log.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    if (typeof showToast === 'function') showToast('Audit log esportato in CSV.', 'success');
+    Audit.log('audit.export', 'csv');
+};
+
+window.downloadAuditPDF = function() {
+    if (!Audit.entries || Audit.entries.length === 0) {
+        if (typeof showToast === 'function') showToast('Nessun evento audit da esportare.', 'warning');
+        return;
+    }
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        if (typeof showToast === 'function') showToast('Libreria PDF non caricata. Ricarica la pagina.', 'error');
+        return;
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    if (typeof _pdfHeader === 'function') _pdfHeader(doc, 'Registro Attività (Audit Log)', 'Compliance');
+    const user = _auditUser();
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Utente: ' + user + '  -  Eventi registrati: ' + Audit.entries.length, 14, 28);
+    doc.autoTable({
+        startY: 32,
+        theme: 'striped',
+        headStyles: { fillColor: [15, 23, 42], textColor: [148, 163, 184], fontSize: 7 },
+        bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+        head: [['Timestamp', 'Azione', 'Dettaglio', 'Utente']],
+        body: Audit.entries.map(e => [
+            new Date(e.t).toLocaleString('it-IT'),
+            e.a,
+            e.d || '',
+            user
+        ])
+    });
+    if (typeof _pdfFooter === 'function') _pdfFooter(doc);
+    doc.save('Audit_Log.pdf');
+    if (typeof showToast === 'function') showToast('Audit log esportato in PDF.', 'success');
+    Audit.log('audit.export', 'pdf');
+};
+
 window.Audit = Audit;
 window.UndoManager = UndoManager;
 window.ConfigHistory = ConfigHistory;
