@@ -582,6 +582,35 @@ check('Imposte anno 1 pagate a giu-2028 (non a giu-2027)', mc26.taxes[17] === 0 
 check('Imposte anno 5 oltre orizzonte tracciate', Math.abs(mc26.taxesAfterHorizon - (r26.matrix.currentTaxesSpv[4] || 0)) < 1e-6);
 check('Nessuna imposta o OPEX in anno 0', mc26.taxes.slice(0, 12).every(v => v === 0) && mc26.opex.slice(0, 12).every(v => v === 0));
 
+// ── Test 27: vista Holding mensile (CF6) ──
+console.log('\n[Test 27] Serie Holding: SPV − soci − PD − oneri HoldCo');
+const r27 = run(buildState({
+    inputs: { collectionLagRid: 0 },
+    plants: [
+        { id: 'pA', name: 'Impianto A', capacity: 8000, zone: 'NORD', opex: 120000, enabled: true, generation: gen24a, codDate: '2027-05-15', ...plantNoBess24 }
+    ]
+}));
+const mc27 = r27.monthlyCashflow;
+check('Array Holding presenti (72 mesi)', mc27.holdcoNetCashflow.length === 72 && mc27.holdcoCashClosing.length === 72);
+check('Anno 0: nessun servizio soci/PD/oneri HoldCo', mc27.holdcoSociService.slice(0, 12).every(v => v === 0) &&
+    mc27.holdcoPdService.slice(0, 12).every(v => v === 0) && mc27.holdcoOtherCosts.slice(0, 12).every(v => v === 0));
+// giu-2028 (idx 29): holdcoNet = spvNet - sociM - pdM - otherM
+const i27 = 29;
+const sociM27 = ((r27.debtSchedule.interestPaidSoci[1] || 0) + (r27.debtSchedule.principalPaidSoci[1] || 0)) / 12;
+const pdM27 = ((r27.matrix.pdInterestPaid[1] || 0) + (r27.matrix.pdPrincipalPaid[1] || 0) + (r27.matrix.pdBulletPayoff[1] || 0)) / 12;
+const otherM27 = ((r27.matrix.holdcoEarnoutPaid[1] || 0) + (r27.matrix.holdcoOpex[1] || 0) +
+    (r27.matrix.holdcoIresTaxPaid[1] || 0) + (r27.matrix.holdcoIrapTaxPaid[1] || 0)) / 12;
+check('Netto Holding = SPV − soci − PD − oneri HoldCo (giu-2028)', Math.abs(mc27.holdcoNetCashflow[i27] - (mc27.netCashflow[i27] - sociM27 - pdM27 - otherM27)) < 1e-6);
+check('Identità di cassa Holding sui 72 mesi', (() => {
+    for (let i = 0; i < 72; i++) {
+        if (Math.abs((mc27.holdcoCashOpening[i] + mc27.holdcoNetCashflow[i]) - mc27.holdcoCashClosing[i]) > 1e-6) return false;
+        if (i > 0 && Math.abs(mc27.holdcoCashOpening[i] - mc27.holdcoCashClosing[i - 1]) > 1e-6) return false;
+    }
+    return true;
+})());
+const r27legacy = run(buildState());
+check('Modalità legacy senza COD: nessuna serie Holding', !r27legacy.monthlyCashflow.holdcoNetCashflow);
+
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);

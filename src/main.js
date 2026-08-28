@@ -6341,7 +6341,34 @@
             showToast('Report qualità dati esportato.', 'success');
         };
 
-        // D2: tabella + grafico cash flow mensile (anni 1-5) con evidenza mesi negativi
+        // D2/CF6: tabella + grafico cash flow mensile con vista SPV/Holding,
+        // banner fabbisogno, linea zero e export CSV
+        function activeMonthlySeries(mc) {
+            const holding = State.monthlyView === 'holding' && mc.mode === 'dated' && mc.holdcoNetCashflow;
+            return {
+                holding,
+                net: holding ? mc.holdcoNetCashflow : mc.netCashflow,
+                closing: holding ? mc.holdcoCashClosing : mc.cashClosing
+            };
+        }
+
+        function updateMonthlyViewToggle() {
+            const dated = State.lastMonthlyCashflow && State.lastMonthlyCashflow.mode === 'dated';
+            const toggle = document.getElementById('mc-view-toggle');
+            if (toggle) toggle.classList.toggle('hidden', !dated);
+            const bSpv = document.getElementById('mc-view-spv');
+            const bHold = document.getElementById('mc-view-holding');
+            const active = 'px-2.5 py-1 text-[10px] font-bold transition-colors bg-emerald-600 text-white';
+            const idle = 'px-2.5 py-1 text-[10px] font-bold transition-colors bg-slate-900 text-slate-400 hover:text-slate-200';
+            if (bSpv) bSpv.className = (State.monthlyView !== 'holding') ? active : idle;
+            if (bHold) bHold.className = (State.monthlyView === 'holding') ? active : idle;
+        }
+
+        window.setMonthlyView = function(view) {
+            State.monthlyView = view === 'holding' ? 'holding' : 'spv';
+            renderMonthlyCashflow(State.lastMonthlyCashflow);
+        };
+
         function renderMonthlyCashflow(mc) {
             const kMin = document.getElementById('mc-kpi-min-cash');
             const kMinM = document.getElementById('mc-kpi-min-month');
@@ -6349,30 +6376,50 @@
             const kNeg = document.getElementById('mc-kpi-neg-months');
             const tbody = document.getElementById('monthly-cf-body');
             const canvas = document.getElementById('chart-monthly-cash');
+            const banner = document.getElementById('mc-shortfall-banner');
+            State.lastMonthlyCashflow = mc || null;
+            updateMonthlyViewToggle();
             if (!mc || !mc.months || mc.months.length === 0) {
                 if (kMin) kMin.textContent = '—';
                 if (kMinM) kMinM.textContent = '—';
                 if (kNegNet) kNegNet.textContent = '—';
                 if (kNeg) kNeg.textContent = '—';
-                if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-500">Esegui un calcolo per visualizzare il cash flow mensile.</td></tr>';
+                if (banner) banner.classList.add('hidden');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="py-4 text-center text-slate-500">Esegui un calcolo per visualizzare il cash flow mensile.</td></tr>';
                 if (State.monthlyChartInstance) { State.monthlyChartInstance.destroy(); State.monthlyChartInstance = null; }
                 return;
             }
+            const dated = mc.mode === 'dated';
+            const s = activeMonthlySeries(mc);
+            // KPI calcolati sulla vista attiva
+            let minClosing = Infinity, minIdx = -1, negNet = 0, negCash = 0;
+            s.closing.forEach((c, i) => {
+                if (c < minClosing) { minClosing = c; minIdx = i; }
+                if (c < 0) negCash++;
+            });
+            s.net.forEach(v => { if (v < 0) negNet++; });
+            if (!isFinite(minClosing)) minClosing = 0;
             if (kMin) {
-                kMin.textContent = _fmtE(mc.minCashClosing);
-                kMin.className = 'text-sm font-black mt-1 ' + (mc.minCashClosing < 0 ? 'text-rose-400' : 'text-emerald-400');
+                kMin.textContent = _fmtE(minClosing);
+                kMin.className = 'text-sm font-black mt-1 ' + (minClosing < 0 ? 'text-rose-400' : 'text-emerald-400');
             }
-            if (kMinM) kMinM.textContent = mc.minCashMonth > 0 ? (mc.labels[mc.minCashMonth - 1] || ('Mese ' + mc.minCashMonth)) : '—';
+            if (kMinM) kMinM.textContent = minIdx >= 0 ? (mc.labels[minIdx] || ('Mese ' + (minIdx + 1))) : '—';
             if (kNegNet) {
-                const negNet = mc.negativeNetMonths || 0;
                 kNegNet.textContent = String(negNet);
                 kNegNet.className = 'text-sm font-black mt-1 ' + (negNet > 0 ? 'text-amber-400' : 'text-emerald-400');
             }
             if (kNeg) {
-                kNeg.textContent = String(mc.negativeMonths);
-                kNeg.className = 'text-sm font-black mt-1 ' + (mc.negativeMonths > 0 ? 'text-rose-400' : 'text-emerald-400');
+                kNeg.textContent = String(negCash);
+                kNeg.className = 'text-sm font-black mt-1 ' + (negCash > 0 ? 'text-rose-400' : 'text-emerald-400');
             }
-            const dated = mc.mode === 'dated';
+            if (banner) {
+                if (minClosing < 0) {
+                    banner.textContent = `Fabbisogno di cassa: ${_fmtE(minClosing)} a ${mc.labels[minIdx]} (${s.holding ? 'Holding' : 'SPV'}) — valutare copertura (apporto soci, linea liquidità, ridistribuzione esborsi).`;
+                    banner.classList.remove('hidden');
+                } else {
+                    banner.classList.add('hidden');
+                }
+            }
             const periodEl = document.getElementById('mc-period-label');
             if (periodEl) {
                 periodEl.textContent = dated
@@ -6381,34 +6428,58 @@
             }
             const thead = document.getElementById('mc-thead');
             if (thead) {
-                thead.innerHTML = `<tr class="text-slate-400 uppercase tracking-wider">
-                    <th class="px-2 py-2 text-left">Mese</th>
-                    ${dated ? '<th class="px-2 py-2 text-right" title="Ricavi di competenza del mese">Ricavi Maturati</th>' : ''}
-                    <th class="px-2 py-2 text-right">${dated ? 'Ricavi Incassati' : 'Ricavi Tot.'}</th>
-                    <th class="px-2 py-2 text-right">OPEX</th>
-                    <th class="px-2 py-2 text-right">Imposte</th>
-                    <th class="px-2 py-2 text-right">Serv. Debito</th>
-                    ${dated ? '<th class="px-2 py-2 text-right" title="Esborsi CAPEX datati">CAPEX</th>' : ''}
-                    <th class="px-2 py-2 text-right">Net Cashflow</th>
-                    <th class="px-2 py-2 text-right">Cassa Finale</th>
-                </tr>`;
+                if (s.holding) {
+                    thead.innerHTML = `<tr class="text-slate-400 uppercase tracking-wider">
+                        <th class="px-2 py-2 text-left">Mese</th>
+                        <th class="px-2 py-2 text-right" title="Net cashflow SPV">Flusso SPV</th>
+                        <th class="px-2 py-2 text-right" title="Interessi + capitale finanziamento soci">Serv. Soci</th>
+                        <th class="px-2 py-2 text-right" title="Interessi + capitale/bullet Private Debt">Serv. PD</th>
+                        <th class="px-2 py-2 text-right" title="Earnout + OPEX + imposte Holding">Oneri HoldCo</th>
+                        <th class="px-2 py-2 text-right">Netto Holding</th>
+                        <th class="px-2 py-2 text-right">Cassa Holding</th>
+                    </tr>`;
+                } else {
+                    thead.innerHTML = `<tr class="text-slate-400 uppercase tracking-wider">
+                        <th class="px-2 py-2 text-left">Mese</th>
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Ricavi di competenza del mese">Ricavi Maturati</th>' : ''}
+                        <th class="px-2 py-2 text-right">${dated ? 'Ricavi Incassati' : 'Ricavi Tot.'}</th>
+                        <th class="px-2 py-2 text-right">OPEX</th>
+                        <th class="px-2 py-2 text-right">Imposte</th>
+                        <th class="px-2 py-2 text-right">Serv. Debito</th>
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Esborsi CAPEX datati">CAPEX</th>' : ''}
+                        <th class="px-2 py-2 text-right">Net Cashflow</th>
+                        <th class="px-2 py-2 text-right">Cassa Finale</th>
+                    </tr>`;
+                }
             }
             if (tbody) {
                 let html = '';
                 for (let i = 0; i < mc.months.length; i++) {
-                    const negRow = mc.cashClosing[i] < 0;
+                    const negRow = s.closing[i] < 0;
                     const rowCls = negRow ? 'bg-rose-950/20' : (i % 2 === 1 ? 'bg-slate-900/30' : '');
-                    html += `<tr class="${rowCls} border-t border-slate-850/60">
-                        <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
-                        ${dated ? `<td class="px-2 py-1.5 text-right font-mono text-slate-500">${fmtDec(mc.revenueAccrued[i], 0)}</td>` : ''}
-                        <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
-                        <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.opex[i], 0)}</td>
-                        <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.taxes[i], 0)}</td>
-                        <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.debtService[i], 0)}</td>
-                        ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(mc.capexOutflow[i], 0)}</td>` : ''}
-                        <td class="px-2 py-1.5 text-right font-mono ${mc.netCashflow[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(mc.netCashflow[i], 0)}</td>
-                        <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(mc.cashClosing[i], 0)}</td>
-                    </tr>`;
+                    if (s.holding) {
+                        html += `<tr class="${rowCls} border-t border-slate-850/60">
+                            <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.netCashflow[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.holdcoSociService[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.holdcoPdService[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.holdcoOtherCosts[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono ${s.net[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(s.net[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(s.closing[i], 0)}</td>
+                        </tr>`;
+                    } else {
+                        html += `<tr class="${rowCls} border-t border-slate-850/60">
+                            <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono text-slate-500">${fmtDec(mc.revenueAccrued[i], 0)}</td>` : ''}
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.opex[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.taxes[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.debtService[i], 0)}</td>
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(mc.capexOutflow[i], 0)}</td>` : ''}
+                            <td class="px-2 py-1.5 text-right font-mono ${s.net[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(s.net[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(s.closing[i], 0)}</td>
+                        </tr>`;
+                    }
                 }
                 tbody.innerHTML = html;
             }
@@ -6420,20 +6491,30 @@
                         labels: mc.labels,
                         datasets: [
                             {
-                                label: 'Net Cashflow Mensile (€)',
-                                data: mc.netCashflow.map(v => Math.round(v)),
-                                backgroundColor: mc.netCashflow.map(v => v < 0 ? 'rgba(244, 63, 94, 0.7)' : 'rgba(16, 185, 129, 0.7)'),
+                                label: (s.holding ? 'Netto Holding' : 'Net Cashflow') + ' Mensile (€)',
+                                data: s.net.map(v => Math.round(v)),
+                                backgroundColor: s.net.map(v => v < 0 ? 'rgba(244, 63, 94, 0.7)' : 'rgba(16, 185, 129, 0.7)'),
                                 borderRadius: 2,
                                 yAxisID: 'y'
                             },
                             {
-                                label: 'Cassa Cumulata (€)',
-                                data: mc.cashClosing.map(v => Math.round(v)),
+                                label: (s.holding ? 'Cassa Holding' : 'Cassa Cumulata') + ' (€)',
+                                data: s.closing.map(v => Math.round(v)),
                                 type: 'line',
                                 borderColor: '#38bdf8',
                                 borderWidth: 2,
                                 pointRadius: 0,
                                 tension: 0.25,
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: 'Zero',
+                                data: mc.months.map(() => 0),
+                                type: 'line',
+                                borderColor: 'rgba(148, 163, 184, 0.5)',
+                                borderDash: [4, 4],
+                                borderWidth: 1,
+                                pointRadius: 0,
                                 yAxisID: 'y'
                             }
                         ]
@@ -6447,8 +6528,9 @@
                             y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', callback: v => chartCompactEuro(v) } }
                         },
                         plugins: {
-                            legend: { labels: { color: '#cbd5e1', boxWidth: 10, font: { size: 9 } }, position: 'top' },
+                            legend: { labels: { color: '#cbd5e1', boxWidth: 10, font: { size: 9 }, filter: (item) => item.text !== 'Zero' }, position: 'top' },
                             tooltip: {
+                                filter: (item) => item.dataset.label !== 'Zero',
                                 callbacks: { label: (c) => ` ${c.dataset.label}: ${chartEuroFull(c.parsed.y)}` }
                             }
                         }
@@ -6456,6 +6538,46 @@
                 });
             }
         }
+
+        // CF6: export CSV dello schedule mensile (vista attiva)
+        window.downloadMonthlyCashflowCSV = function() {
+            const mc = State.lastMonthlyCashflow;
+            if (!mc || !mc.months || !mc.months.length) { showToast('Nessun cash flow mensile da esportare.', 'warning'); return; }
+            const s = activeMonthlySeries(mc);
+            const dated = mc.mode === 'dated';
+            const num = (v) => String(Math.round(v || 0)).replace('.', '');
+            let csv = 'Cash Flow Mensile (' + (s.holding ? 'Holding' : 'SPV') + ') - ' + new Date().toLocaleString('it-IT') + '\n';
+            if (s.holding) {
+                csv += 'Mese;Flusso SPV;Serv. Soci;Serv. PD;Oneri HoldCo;Netto Holding;Cassa Holding\n';
+                for (let i = 0; i < mc.months.length; i++) {
+                    csv += [mc.labels[i], num(mc.netCashflow[i]), num(mc.holdcoSociService[i]), num(mc.holdcoPdService[i]),
+                        num(mc.holdcoOtherCosts[i]), num(s.net[i]), num(s.closing[i])].join(';') + '\n';
+                }
+            } else if (dated) {
+                csv += 'Mese;Ricavi Maturati;Ricavi Incassati;OPEX;Imposte;Serv. Debito;CAPEX;Net Cashflow;Cassa Finale\n';
+                for (let i = 0; i < mc.months.length; i++) {
+                    csv += [mc.labels[i], num(mc.revenueAccrued[i]), num(mc.revenueTotal[i]), num(mc.opex[i]), num(mc.taxes[i]),
+                        num(mc.debtService[i]), num(mc.capexOutflow[i]), num(s.net[i]), num(s.closing[i])].join(';') + '\n';
+                }
+            } else {
+                csv += 'Mese;Ricavi Tot.;OPEX;Imposte;Serv. Debito;Net Cashflow;Cassa Finale\n';
+                for (let i = 0; i < mc.months.length; i++) {
+                    csv += [mc.labels[i], num(mc.revenueTotal[i]), num(mc.opex[i]), num(mc.taxes[i]),
+                        num(mc.debtService[i]), num(s.net[i]), num(s.closing[i])].join(';') + '\n';
+                }
+            }
+            const blob = new Blob(['' + csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'CashFlow_Mensile_' + (s.holding ? 'Holding' : 'SPV') + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            Audit.log('monthlycashflow.export', s.holding ? 'holding' : 'spv');
+            showToast('Schedule mensile esportato.', 'success');
+        };
 
         function renderChart(matrix, debtSchedule) {
             const labels = matrix.years.map(yr => `Anno ${yr}`);

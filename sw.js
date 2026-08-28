@@ -5,7 +5,7 @@
 //  - CDN (tailwind, chart.js, librerie): cache-first con aggiornamento in background
 //  - API Supabase: MAI cachate (dati sempre live)
 // ─────────────────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'asset-shell-v22'; // bump ad ogni modifica di index.html/sw.js: forza pulizia cache precedenti
+const CACHE_NAME = 'asset-shell-v23'; // bump ad ogni modifica di index.html/sw.js: forza pulizia cache precedenti
 const APP_SHELL = [
     './',
     './index.html',

@@ -3454,6 +3454,8 @@ function runSensitivityLoop(baseState, config) {
                     opex: [], taxes: [], interest: [], principal: [], debtService: [],
                     capexOutflow: [],
                     netCashflow: [], cashOpening: [], cashClosing: [],
+                    holdcoSociService: [], holdcoPdService: [], holdcoOtherCosts: [],
+                    holdcoNetCashflow: [], holdcoCashOpening: [], holdcoCashClosing: [],
                     lagResidual: 0, capexBeforeHorizon: 0, taxesAfterHorizon: 0
                 };
                 const accrued = new Float64Array(totalMonths);
@@ -3587,7 +3589,20 @@ function runSensitivityLoop(baseState, config) {
                     }
                 });
 
+                // CF6: vista Holding mensile (flussi annui Holding ripartiti /12)
+                const sociM = new Float64Array(YEARS);
+                const pdM = new Float64Array(YEARS);
+                const otherM = new Float64Array(YEARS);
+                for (let y = 1; y <= YEARS; y++) {
+                    const yi = y - 1;
+                    sociM[yi] = (((ds.interestPaidSoci && ds.interestPaidSoci[yi]) || 0) + ((ds.principalPaidSoci && ds.principalPaidSoci[yi]) || 0)) / 12;
+                    pdM[yi] = (((mtx.pdInterestPaid && mtx.pdInterestPaid[yi]) || 0) + ((mtx.pdPrincipalPaid && mtx.pdPrincipalPaid[yi]) || 0) + ((mtx.pdBulletPayoff && mtx.pdBulletPayoff[yi]) || 0)) / 12;
+                    otherM[yi] = (((mtx.holdcoEarnoutPaid && mtx.holdcoEarnoutPaid[yi]) || 0) + ((mtx.holdcoOpex && mtx.holdcoOpex[yi]) || 0) +
+                        ((mtx.holdcoIresTaxPaid && mtx.holdcoIresTaxPaid[yi]) || 0) + ((mtx.holdcoIrapTaxPaid && mtx.holdcoIrapTaxPaid[yi]) || 0)) / 12;
+                }
+
                 let cash = 0;
+                let holdcoCash = 0;
                 for (let i = 0; i < totalMonths; i++) {
                     const isYear0 = i < 12;
                     const yi = isYear0 ? -1 : Math.floor((i - 12) / 12);
@@ -3616,6 +3631,18 @@ function runSensitivityLoop(baseState, config) {
                     out.cashOpening.push(cash);
                     cash += net;
                     out.cashClosing.push(cash);
+                    // CF6: cascata Holding = netto SPV - servizio soci - servizio PD - oneri HoldCo
+                    const hSoci = isYear0 ? 0 : sociM[yi];
+                    const hPd = isYear0 ? 0 : pdM[yi];
+                    const hOther = isYear0 ? 0 : otherM[yi];
+                    const hNet = net - hSoci - hPd - hOther;
+                    out.holdcoSociService.push(hSoci);
+                    out.holdcoPdService.push(hPd);
+                    out.holdcoOtherCosts.push(hOther);
+                    out.holdcoNetCashflow.push(hNet);
+                    out.holdcoCashOpening.push(holdcoCash);
+                    holdcoCash += hNet;
+                    out.holdcoCashClosing.push(holdcoCash);
                 }
                 let minClosing = Infinity, minMonth = 0, negCount = 0, negNetCount = 0;
                 out.cashClosing.forEach((c, i) => {

@@ -474,8 +474,16 @@
                     <div class="bg-[#0b0f19] border border-slate-850 p-5 rounded-2xl shadow-xl mt-6">
                         <div class="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
                             <h4 class="font-bold text-white text-xs tracking-wide uppercase"><i class="fa-solid fa-calendar-days text-emerald-400 mr-1.5"></i>Cash Flow Mensile & Disponibilità di Cassa</h4>
-                            <span id="mc-period-label" class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Anni 1-5 (60 mesi)</span>
+                            <div class="flex items-center space-x-2">
+                                <div id="mc-view-toggle" class="hidden md:flex items-center rounded-lg border border-slate-800 overflow-hidden">
+                                    <button id="mc-view-spv" onclick="setMonthlyView('spv')" class="px-2.5 py-1 text-[10px] font-bold transition-colors" title="Flussi di cassa a livello SPV">SPV</button>
+                                    <button id="mc-view-holding" onclick="setMonthlyView('holding')" class="px-2.5 py-1 text-[10px] font-bold transition-colors" title="Flussi di cassa a livello Holding (SPV − servizio soci/PD − oneri HoldCo)">Holding</button>
+                                </div>
+                                <span id="mc-period-label" class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Anni 1-5 (60 mesi)</span>
+                                <button onclick="downloadMonthlyCashflowCSV()" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition-colors" title="Esporta schedule mensile in CSV"><i class="fa-solid fa-file-csv"></i></button>
+                            </div>
                         </div>
+                        <div id="mc-shortfall-banner" class="hidden mb-3 px-3 py-2 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-300 text-[11px] font-bold"></div>
                         <div class="mb-3">
                             <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Ritardo di incasso per regime di mercato: i ricavi maturati nel mese N dell'impianto sono incassati al mese N+lag. Ogni impianto segue il lag del proprio regime.">Lag di incasso per regime (mesi) <i class="fa-solid fa-circle-info"></i></div>
                             <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
@@ -3328,7 +3336,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=19"></script>
+    <script src="./src/main.js?v=20"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {
