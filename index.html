@@ -476,17 +476,21 @@
                             <h4 class="font-bold text-white text-xs tracking-wide uppercase"><i class="fa-solid fa-calendar-days text-emerald-400 mr-1.5"></i>Cash Flow Mensile & Disponibilità di Cassa</h4>
                             <span class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Anni 1-5 (60 mesi)</span>
                         </div>
-                        <div class="grid grid-cols-3 gap-3 mb-4">
-                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3">
-                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Cassa Minima (60m)</div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Valore minimo della cassa finale cumulata sull'orizzonte">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Cassa Minima</div>
                                 <div id="mc-kpi-min-cash" class="text-sm font-black text-white mt-1">—</div>
                             </div>
-                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3">
+                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Mese in cui si registra la cassa minima">
                                 <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Mese Cassa Minima</div>
                                 <div id="mc-kpi-min-month" class="text-sm font-black text-white mt-1">—</div>
                             </div>
-                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3">
-                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Mesi Cassa Negativa</div>
+                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Mesi con Net Cashflow mensile negativo (ricavi < costi+debito)">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Mesi NET &lt; 0</div>
+                                <div id="mc-kpi-neg-net" class="text-sm font-black text-white mt-1">—</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Mesi in cui la cassa finale cumulata scende sotto zero (fabbisogno di liquidità)">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Mesi Cassa &lt; 0</div>
                                 <div id="mc-kpi-neg-months" class="text-sm font-black text-white mt-1">—</div>
                             </div>
                         </div>

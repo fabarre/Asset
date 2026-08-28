@@ -3344,14 +3344,16 @@ function runSensitivityLoop(baseState, config) {
                         out.cashClosing.push(cash);
                     }
                 }
-                let minClosing = Infinity, minMonth = 0, negCount = 0;
+                let minClosing = Infinity, minMonth = 0, negCount = 0, negNetCount = 0;
                 out.cashClosing.forEach((c, i) => {
                     if (c < minClosing) { minClosing = c; minMonth = out.months[i]; }
                     if (c < 0) negCount++;
                 });
+                out.netCashflow.forEach(v => { if (v < 0) negNetCount++; });
                 out.minCashClosing = isFinite(minClosing) ? minClosing : 0;
                 out.minCashMonth = minMonth;
                 out.negativeMonths = negCount;
+                out.negativeNetMonths = negNetCount;
                 return out;
             }
 

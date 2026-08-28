@@ -6313,12 +6313,14 @@
         function renderMonthlyCashflow(mc) {
             const kMin = document.getElementById('mc-kpi-min-cash');
             const kMinM = document.getElementById('mc-kpi-min-month');
+            const kNegNet = document.getElementById('mc-kpi-neg-net');
             const kNeg = document.getElementById('mc-kpi-neg-months');
             const tbody = document.getElementById('monthly-cf-body');
             const canvas = document.getElementById('chart-monthly-cash');
             if (!mc || !mc.months || mc.months.length === 0) {
                 if (kMin) kMin.textContent = '—';
                 if (kMinM) kMinM.textContent = '—';
+                if (kNegNet) kNegNet.textContent = '—';
                 if (kNeg) kNeg.textContent = '—';
                 if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-500">Esegui un calcolo per visualizzare il cash flow mensile.</td></tr>';
                 if (State.monthlyChartInstance) { State.monthlyChartInstance.destroy(); State.monthlyChartInstance = null; }
@@ -6329,6 +6331,11 @@
                 kMin.className = 'text-sm font-black mt-1 ' + (mc.minCashClosing < 0 ? 'text-rose-400' : 'text-emerald-400');
             }
             if (kMinM) kMinM.textContent = mc.minCashMonth > 0 ? 'Mese ' + mc.minCashMonth : '—';
+            if (kNegNet) {
+                const negNet = mc.negativeNetMonths || 0;
+                kNegNet.textContent = String(negNet);
+                kNegNet.className = 'text-sm font-black mt-1 ' + (negNet > 0 ? 'text-amber-400' : 'text-emerald-400');
+            }
             if (kNeg) {
                 kNeg.textContent = String(mc.negativeMonths);
                 kNeg.className = 'text-sm font-black mt-1 ' + (mc.negativeMonths > 0 ? 'text-rose-400' : 'text-emerald-400');

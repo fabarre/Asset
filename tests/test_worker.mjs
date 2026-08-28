@@ -478,6 +478,19 @@ if (mc23 && mc23.months.length === 60) {
     check('Nessun NaN/Inf nello schedule mensile', mc23.netCashflow.every(v => Number.isFinite(v)) && mc23.cashClosing.every(v => Number.isFinite(v)));
     check('Metriche liquidità: minCashClosing e negativeMonths coerenti', Number.isFinite(mc23.minCashClosing) && mc23.negativeMonths >= 0 &&
         (mc23.negativeMonths === 0 || mc23.minCashClosing < 0));
+    // Semantica KPI liquidità: NET mensile negativo ≠ cassa cumulata negativa (CF1)
+    const negNet23 = mc23.netCashflow.filter(v => v < 0).length;
+    const negCash23 = mc23.cashClosing.filter(v => v < 0).length;
+    check('negativeNetMonths = conteggio NET<0 ricalcolato', mc23.negativeNetMonths === negNet23,
+        `kpi=${mc23.negativeNetMonths} ricalcolato=${negNet23}`);
+    check('negativeMonths = conteggio cassa finale<0 ricalcolato', mc23.negativeMonths === negCash23,
+        `kpi=${mc23.negativeMonths} ricalcolato=${negCash23}`);
+    // Scenario stressato: OPEX enorme -> NET e cassa negativi
+    const rNeg = run(buildState({ plant: { opex: 99999999, bessMw: 0, bessMwh: 0, bessType: 'none', traderSpread: 0, traderDisp: 0 } }));
+    const mcNeg = rNeg.monthlyCashflow;
+    check('Scenario stressato: mesi NET<0 > 0', mcNeg.negativeNetMonths > 0, `negNet=${mcNeg.negativeNetMonths}`);
+    check('Scenario stressato: mesi cassa<0 > 0 e cassa minima < 0', mcNeg.negativeMonths > 0 && mcNeg.minCashClosing < 0,
+        `negCash=${mcNeg.negativeMonths} min=${mcNeg.minCashClosing.toFixed(0)}`);
 }
 
 console.log(`\n═══════════════════════════════════`);
