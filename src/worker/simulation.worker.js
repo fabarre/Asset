@@ -3275,11 +3275,92 @@ function runSensitivityLoop(baseState, config) {
             }
             State.previouslySeenPlantIds = new Set(activePlantsForBess.map(p => p.id));
 
+            // ═══ D1: Cash flow mensile anni 1-5 (60 mesi) ═══
+            // Forme mensili derivate dagli array orari del dispatch (anno 1),
+            // normalizzate ai totali annui del matrix: la somma dei mesi dell'anno y
+            // coincide per costruzione con il valore annuo (quadratura esatta).
+            // OPEX/imposte/servizio debito (annuali nel modello) sono ripartiti /12.
+            function buildMonthlyCashflow(plantsList, mtx, ds) {
+                const nYears = Math.min(5, (mtx.years ? mtx.years.length : 5));
+                const shape = { ppa: new Float64Array(12), rid: new Float64Array(12), arb: new Float64Array(12), ts: new Float64Array(12) };
+                plantsList.forEach(pl => {
+                    const s = pl.sim;
+                    if (!s) return;
+                    for (let t = 0; t < 8760; t++) {
+                        const m = getMonthOfHour(t);
+                        if (s.hourlyRevenuePpaPv) shape.ppa[m] += s.hourlyRevenuePpaPv[t] + (s.hourlyRevenuePpaBess ? s.hourlyRevenuePpaBess[t] : 0);
+                        if (s.hourlyRevenueRidActual) shape.rid[m] += s.hourlyRevenueRidActual[t];
+                        if (s.hourlyRevenueArbitrageGrid) shape.arb[m] += s.hourlyRevenueArbitrageGrid[t];
+                        if (s.hourlyRevenueTimeshifting) shape.ts[m] += s.hourlyRevenueTimeshifting[t];
+                    }
+                });
+                const shares = {};
+                ['ppa', 'rid', 'arb', 'ts'].forEach(k => {
+                    const tot = shape[k].reduce((a, b) => a + b, 0);
+                    shares[k] = tot > 1e-6 ? Array.from(shape[k], v => v / tot) : new Array(12).fill(1 / 12);
+                });
+                const totShape = new Array(12).fill(0);
+                for (let m = 0; m < 12; m++) totShape[m] = shape.ppa[m] + shape.rid[m] + shape.arb[m] + shape.ts[m];
+                const totTot = totShape.reduce((a, b) => a + b, 0);
+                const shareTot = totTot > 1e-6 ? totShape.map(v => v / totTot) : new Array(12).fill(1 / 12);
+
+                const out = {
+                    months: [], labels: [],
+                    revenuePpa: [], revenueRid: [], revenueArbitrage: [], revenueTimeshifting: [], revenueTotal: [],
+                    opex: [], taxes: [], interest: [], principal: [], debtService: [],
+                    netCashflow: [], cashOpening: [], cashClosing: []
+                };
+                const MONTHS_IT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+                let cash = 0;
+                for (let y = 1; y <= nYears; y++) {
+                    const yi = y - 1;
+                    for (let m = 0; m < 12; m++) {
+                        const revPpa = (mtx.revenuePpa[yi] || 0) * shares.ppa[m];
+                        const revRid = (mtx.revenueRid[yi] || 0) * shares.rid[m];
+                        const revArb = (mtx.revenueArbitrage[yi] || 0) * shares.arb[m];
+                        const revTs = (mtx.revenueTimeshifting[yi] || 0) * shares.ts[m];
+                        const revTot = (mtx.revenueTotal[yi] || 0) * shareTot[m];
+                        const opex = (mtx.opexTotal[yi] || 0) / 12;
+                        const taxes = (mtx.currentTaxesSpv[yi] || 0) / 12;
+                        const interest = (ds.interestAccrued[yi] || 0) / 12;
+                        const principal = ((ds.principalScheduled[yi] || 0) + (ds.principalVoluntary[yi] || 0)) / 12;
+                        const debtSvc = interest + principal;
+                        const net = revTot - opex - taxes - debtSvc;
+                        out.months.push(yi * 12 + m + 1);
+                        out.labels.push(MONTHS_IT[m] + ' Y' + y);
+                        out.revenuePpa.push(revPpa);
+                        out.revenueRid.push(revRid);
+                        out.revenueArbitrage.push(revArb);
+                        out.revenueTimeshifting.push(revTs);
+                        out.revenueTotal.push(revTot);
+                        out.opex.push(opex);
+                        out.taxes.push(taxes);
+                        out.interest.push(interest);
+                        out.principal.push(principal);
+                        out.debtService.push(debtSvc);
+                        out.netCashflow.push(net);
+                        out.cashOpening.push(cash);
+                        cash += net;
+                        out.cashClosing.push(cash);
+                    }
+                }
+                let minClosing = Infinity, minMonth = 0, negCount = 0;
+                out.cashClosing.forEach((c, i) => {
+                    if (c < minClosing) { minClosing = c; minMonth = out.months[i]; }
+                    if (c < 0) negCount++;
+                });
+                out.minCashClosing = isFinite(minClosing) ? minClosing : 0;
+                out.minCashMonth = minMonth;
+                out.negativeMonths = negCount;
+                return out;
+            }
+
             const finalResults = {
                 medioneKpiText: medioneKpiText,
                 totalProjectCost, debtAmount, equityAmount,
                 calculatedIrr, calculatedProjectIrr, holdcoNpv, holdcoMoic, paybackPeriod, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
                 matrix, debtSchedule, combinedSolarProfile, generalMedionePrices, bessSimulation,
+                monthlyCashflow: buildMonthlyCashflow(activePlants, matrix, debtSchedule),
                 totalBessMw, totalBessMwh,
                 totalSelfConsMwh, totalPpaRev_y1, totalStabLoadMwh,
                 stabCoverage: totalStabLoadMwh > 0 ? (totalSelfConsMwh / totalStabLoadMwh * 100) : 0,

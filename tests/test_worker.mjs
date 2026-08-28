@@ -443,6 +443,43 @@ if (mcA1 && mcA1.status === 'montecarlo_success') {
     check('Campioni IRR finiti e non NaN', irrA1.every(v => Number.isFinite(v)));
 }
 
+// ── Test 23: cash flow mensile anni 1-5 (quadratura con i totali annui) ──
+console.log('\n[Test 23] Cash flow mensile anni 1-5: quadratura e identità di cassa');
+const r23 = run(buildState());
+const mc23 = r23.monthlyCashflow;
+check('monthlyCashflow presente con 60 mesi', !!mc23 && mc23.months.length === 60 && mc23.labels.length === 60);
+if (mc23 && mc23.months.length === 60) {
+    const sumYear = (arr, y) => arr.slice((y - 1) * 12, y * 12).reduce((a, b) => a + b, 0);
+    let quadOk = true; let detail = '';
+    for (let y = 1; y <= 5 && quadOk; y++) {
+        const pairs = [
+            ['revenueRid', mc23.revenueRid, r23.matrix.revenueRid[y - 1]],
+            ['revenuePpa', mc23.revenuePpa, r23.matrix.revenuePpa[y - 1]],
+            ['revenueArbitrage', mc23.revenueArbitrage, r23.matrix.revenueArbitrage[y - 1]],
+            ['revenueTimeshifting', mc23.revenueTimeshifting, r23.matrix.revenueTimeshifting[y - 1]],
+            ['revenueTotal', mc23.revenueTotal, r23.matrix.revenueTotal[y - 1]],
+            ['opex', mc23.opex, r23.matrix.opexTotal[y - 1]],
+            ['debtService', mc23.debtService,
+                (r23.debtSchedule.interestAccrued[y - 1] || 0) + (r23.debtSchedule.principalScheduled[y - 1] || 0) + (r23.debtSchedule.principalVoluntary[y - 1] || 0)]
+        ];
+        for (const [name, arr, annual] of pairs) {
+            const s = sumYear(arr, y);
+            const tol = Math.max(1e-6, Math.abs(annual) * 1e-9);
+            if (Math.abs(s - annual) > tol) { quadOk = false; detail = `Y${y} ${name}: ${s.toFixed(2)} vs ${annual.toFixed(2)}`; break; }
+        }
+    }
+    check('Quadratura mensile=annuo (ricavi, OPEX, servizio debito) su 5 anni', quadOk, detail);
+    let cashOk = true;
+    for (let i = 0; i < 60 && cashOk; i++) {
+        if (Math.abs((mc23.cashOpening[i] + mc23.netCashflow[i]) - mc23.cashClosing[i]) > 1e-6) cashOk = false;
+        if (i > 0 && Math.abs(mc23.cashOpening[i] - mc23.cashClosing[i - 1]) > 1e-6) cashOk = false;
+    }
+    check('Identità di cassa: apertura+net=chiusura e concatenazione mesi', cashOk);
+    check('Nessun NaN/Inf nello schedule mensile', mc23.netCashflow.every(v => Number.isFinite(v)) && mc23.cashClosing.every(v => Number.isFinite(v)));
+    check('Metriche liquidità: minCashClosing e negativeMonths coerenti', Number.isFinite(mc23.minCashClosing) && mc23.negativeMonths >= 0 &&
+        (mc23.negativeMonths === 0 || mc23.minCashClosing < 0));
+}
+
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);
