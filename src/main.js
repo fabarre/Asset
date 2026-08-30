@@ -6196,10 +6196,13 @@
             const seniorDebt = r.debtAmount || 0;
             const privateDebt = r.pdAmount || 0;
             const privateEquity = r.peAmount || 0;
-            // L'equity di costruzione ora è residua dopo senior + PD + PE
-            const constructionEquity = Math.max(0, constructionCapex - seniorDebt - privateDebt - privateEquity);
+            // Equity di costruzione SPV: CAPEX costruzione - senior - PE.
+            // Il PD NON si sottrae: è debito di Holding immesso come equity SPV (coerente col worker).
+            const constructionEquity = Math.max(0, constructionCapex - seniorDebt - privateEquity);
             const sponsorLoan = constructionEquity * ((p.sociEquityPct || 0) / 100);
-            const sponsorEquity = Math.max(0, (r.equityAmount || 0) - sponsorLoan);
+            // equityAmount del worker è GIÀ al netto del prestito soci: non sottrarlo di nuovo,
+            // altrimenti le Fonti risultano inferiori agli Impieghi proprio di sponsorLoan.
+            const sponsorEquity = Math.max(0, r.equityAmount || 0);
             const totalSources = seniorDebt + privateDebt + privateEquity + sponsorLoan + sponsorEquity;
 
             setTxt('uses-spv-acquisition', formatEuro(spvAcquisition));
@@ -10311,9 +10314,11 @@ function _repExecutiveSummary(doc) {
     const seniorDebt = r.debtAmount || 0;
     const pdAmt = r.pdAmount || 0;
     const peAmt = r.peAmount || 0;
-    const constructionEquity = Math.max(0, constructionCapex - seniorDebt - pdAmt - peAmt);
+    // Equity di costruzione SPV senza PD (debito di Holding) - coerente col worker
+    const constructionEquity = Math.max(0, constructionCapex - seniorDebt - peAmt);
     const sponsorLoan = constructionEquity * ((p.sociEquityPct || 0) / 100);
-    const sponsorEquity = Math.max(0, (r.equityAmount || 0) - sponsorLoan);
+    // equityAmount del worker è già al netto del prestito soci
+    const sponsorEquity = Math.max(0, r.equityAmount || 0);
     doc.autoTable({
         startY: y,
         theme: 'grid',
@@ -10746,9 +10751,11 @@ function _repStrutturaFinanziaria(doc) {
     const seniorDebt = r.debtAmount || 0;
     const pdAmt = r.pdAmount || 0;
     const peAmt = r.peAmount || 0;
-    const constructionEquity = Math.max(0, constructionCapex - seniorDebt - pdAmt - peAmt);
+    // Equity di costruzione SPV senza PD (debito di Holding) - coerente col worker
+    const constructionEquity = Math.max(0, constructionCapex - seniorDebt - peAmt);
     const sponsorLoan = constructionEquity * ((p.sociEquityPct || 0) / 100);
-    const sponsorEquity = Math.max(0, (r.equityAmount || 0) - sponsorLoan);
+    // equityAmount del worker è già al netto del prestito soci
+    const sponsorEquity = Math.max(0, r.equityAmount || 0);
     const totalSources = seniorDebt + pdAmt + peAmt + sponsorLoan + sponsorEquity;
 
     y = _sectionTitle(doc, '1. Fonti & Impieghi', y);
