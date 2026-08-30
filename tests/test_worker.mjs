@@ -555,13 +555,17 @@ const mc25 = r25.monthlyCashflow;
 // indici: anno0=2026 -> ott-2026 = mese 9; feb-2027 = 12+1=13; mag-2027 = 12+4=16; feb-2028 = 24+1=25
 check('Esborso SPV ott-2026 (anno 0) = 500.000', mc25.capexOutflow[9] === 500000, `got=${mc25.capexOutflow[9]}`);
 check('Esborso EPC 50% feb-2027 = 2.000.000', mc25.capexOutflow[13] === 2000000, `got=${mc25.capexOutflow[13]}`);
-check('Esborso EPC saldo mag-2027 = 2.000.000', mc25.capexOutflow[16] === 2000000, `got=${mc25.capexOutflow[16]}`);
+// CF9: al mag-2027 (COD pA) arriva l'esborso esplicito 2M + il residuo non allocato di pA (base 5,6M - allocato 4,5M = 1,1M)
+const residuoP25 = 8000 * 700 - (500000 + 2000000 + 2000000);
+check('EPC saldo mag-2027 + residuo pA al COD', Math.abs(mc25.capexOutflow[16] - (2000000 + residuoP25)) < 1e-6, `got=${mc25.capexOutflow[16]} exp=${2000000 + residuoP25}`);
 check('Default pB: 100% CAPEX (4000*750) al COD feb-2028', mc25.capexOutflow[25] === 4000 * 750, `got=${mc25.capexOutflow[25]}`);
+check('Contatori budget CAPEX (CF9)', mc25.capexAllocated === 4500000 && Math.abs(mc25.capexResidual - Math.max(0, mc25.capexBudget - 4500000)) < 1e-6,
+    `alloc=${mc25.capexAllocated} resid=${mc25.capexResidual} budget=${mc25.capexBudget}`);
 check('Il net del mese include gli esborsi CAPEX', Math.abs((mc25.revenueTotal[9] - mc25.opex[9] - mc25.taxes[9] - mc25.debtService[9] - 500000) - mc25.netCashflow[9]) < 1e-6);
 check('Nessun CAPEX prima dell\'orizzonte', mc25.capexBeforeHorizon === 0);
 
-// ── Test 26: OPEX con scadenze — eventi ricorrenti, IMU giu/dic, imposte Y+1 (CF5) ──
-console.log('\n[Test 26] OPEX scadenzati: manutenzione mar, IMU giu/dic, imposte a giu Y+1');
+// ── Test 26: OPEX modello budget — eventi allocati + residuo /12, imposte Y+1 (CF9) ──
+console.log('\n[Test 26] OPEX budget: evento manutenzione mar, residuo spalmato /12, imposte a giu Y+1');
 const opexEv26 = { pA: [{ month: 3, amount: 30000, label: 'Manutenzione' }] };
 const r26 = run(buildState({
     inputs: { collectionLagRid: 0, taxPaymentMonth: 6 },
@@ -570,14 +574,18 @@ const r26 = run(buildState({
     ]
 }), null, opexEv26);
 const mc26 = r26.monthlyCashflow;
-// flat mensile calcolato come nell'engine: max(0, opexTotal - opex fissi)/12
-const fixed26 = 120000 + 12000; // opex + opexTaxes (altri campi 0)
-const flat26 = (y) => Math.max(0, (r26.matrix.opexTotal[y - 1] || 0) - fixed26) / 12;
-// indici: giu-2027=17, dic-2027=23, mar-2027=14, mar-2028=26, giu-2028=29
-check('IMU acconto giu-2027 = flat + 6.000', Math.abs(mc26.opex[17] - (flat26(1) + 6000)) < 1e-6, `got=${mc26.opex[17].toFixed(2)} exp=${(flat26(1) + 6000).toFixed(2)}`);
-check('IMU saldo dic-2027 = flat + 6.000', Math.abs(mc26.opex[23] - (flat26(1) + 6000)) < 1e-6);
-check('Evento mar-2027 NON applicato (precedente al COD)', Math.abs(mc26.opex[14] - flat26(1)) < 1e-6);
-check('Evento manutenzione mar-2028 = flat + 30.000', Math.abs(mc26.opex[26] - (flat26(2) + 30000)) < 1e-6, `got=${mc26.opex[26].toFixed(2)}`);
+const opexTotY1 = r26.matrix.opexTotal[0] || 0;
+const opexTotY2 = r26.matrix.opexTotal[1] || 0;
+const resid26Y1 = Math.max(0, opexTotY1 - 30000);
+const resid26Y2 = Math.max(0, opexTotY2 - 30000);
+// indici: mar-2027=14, giu-2027=17, mar-2028=26, giu-2028=29
+check('Evento mar-2027 = 30.000 + residuo Y1/12', Math.abs(mc26.opex[14] - (30000 + resid26Y1 / 12)) < 1e-6, `got=${mc26.opex[14].toFixed(2)}`);
+check('Mese senza eventi (giu-2027) = solo residuo Y1/12', Math.abs(mc26.opex[17] - resid26Y1 / 12) < 1e-6);
+check('Evento mar-2028 = 30.000 + residuo Y2/12', Math.abs(mc26.opex[26] - (30000 + resid26Y2 / 12)) < 1e-6, `got=${mc26.opex[26].toFixed(2)}`);
+const sumOpexY1 = mc26.opex.slice(12, 24).reduce((a, b) => a + b, 0);
+check('Conservazione OPEX anno 1 (Σ 12 mesi = opexTotal)', Math.abs(sumOpexY1 - opexTotY1) < 1e-3, `sum=${sumOpexY1.toFixed(0)} tot=${opexTotY1.toFixed(0)}`);
+check('Contatori budget OPEX (CF9)', mc26.opexBudgetY1 === opexTotY1 && mc26.opexAllocated === 30000 && Math.abs(mc26.opexResidual - resid26Y1) < 1e-6,
+    `budget=${mc26.opexBudgetY1} alloc=${mc26.opexAllocated} resid=${mc26.opexResidual}`);
 check('Imposte anno 1 pagate a giu-2028 (non a giu-2027)', mc26.taxes[17] === 0 && Math.abs(mc26.taxes[29] - (r26.matrix.currentTaxesSpv[0] || 0)) < 1e-6);
 check('Imposte anno 5 oltre orizzonte tracciate', Math.abs(mc26.taxesAfterHorizon - (r26.matrix.currentTaxesSpv[4] || 0)) < 1e-6);
 check('Nessuna imposta o OPEX in anno 0', mc26.taxes.slice(0, 12).every(v => v === 0) && mc26.opex.slice(0, 12).every(v => v === 0));

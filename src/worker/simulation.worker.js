@@ -3533,38 +3533,10 @@ function runSensitivityLoop(baseState, config) {
                     });
                 }
 
-                // ═══ CF5: OPEX con scadenze ═══
-                // 1) Eventi ricorrenti per impianto (mese specifico, ogni anno dal COD)
-                // 2) IMU da opex_taxes: acconto giugno + saldo dicembre
-                // 3) Residuo OPEX non scadenzato (opexTotal annuo - OPEX fissi impianto) ripartito /12
-                // 4) Imposte dal P&L pagate a taxPaymentMonth dell'anno successivo
+                // ═══ CF5/CF9: OPEX e imposte ═══
+                // OPEX: modello budget (CF9) — eventi dichiarati + residuo /12 (blocco sotto).
+                // Imposte dal P&L pagate a taxPaymentMonth dell'anno successivo.
                 const taxPayMonth = Math.min(12, Math.max(1, parseInt(inputs.taxPaymentMonth, 10) || 6));
-                const opexScheduled = new Float64Array(totalMonths);
-                plantsList.forEach(pl => {
-                    const cod = pl._codParsed;
-                    const evs = (opexEvents && opexEvents[pl.id]) || [];
-                    for (let y = 1; y <= YEARS; y++) {
-                        const calYear = anchorYearIn + y - 1;
-                        if (cod && calYear < cod.y) continue;
-                        const mStart = (cod && calYear === cod.y) ? cod.m : 1;
-                        evs.forEach(ev => {
-                            const m = parseInt(ev.month, 10);
-                            const amt = parseFloat(ev.amount) || 0;
-                            if (m >= 1 && m <= 12 && m >= mStart && amt !== 0) {
-                                opexScheduled[12 + (y - 1) * 12 + (m - 1)] += amt;
-                            }
-                        });
-                        const imu = parseFloat(pl.opexTaxes) || 0;
-                        if (imu > 0) {
-                            if (6 >= mStart) opexScheduled[12 + (y - 1) * 12 + 5] += imu / 2;
-                            if (12 >= mStart) opexScheduled[12 + (y - 1) * 12 + 11] += imu / 2;
-                        }
-                    }
-                });
-                const fixedOpexAnnual = plantsList.reduce((a, pl) => a +
-                    (pl.opex || 0) + (pl.opexOmBess || 0) + (pl.opexInsurance || 0) +
-                    (pl.opexTaxes || 0) + (pl.opexSecurity || 0) + (pl.opexAssetManagement || 0), 0);
-                const customOpexAnnual = plantsList.reduce((a, pl) => a + (pl.customOpexEur || 0), 0);
                 const taxesOut = new Float64Array(totalMonths);
                 for (let y = 1; y <= YEARS; y++) {
                     const tax = (mtx.currentTaxesSpv && mtx.currentTaxesSpv[y - 1]) || 0;
@@ -3574,31 +3546,72 @@ function runSensitivityLoop(baseState, config) {
                     else out.taxesAfterHorizon += tax;
                 }
 
-                // CF4: esborsi CAPEX datati per impianto
+                // CF9: budget CAPEX = investimento complessivo (totalProjectCost).
+                // Gli esborsi espliciti (capexPayments) controllano il "quando"; il residuo
+                // non allocato di ciascun impianto viene collocato alla sua data di COD.
                 const capexOut = new Float64Array(totalMonths);
                 const firstYear = anchorYearIn - 1; // anno 0
+                let capexAllocated = 0;
+                let sumPlantCapex = 0;
+                const plantBases = [];
                 plantsList.forEach(pl => {
-                    const list = (capexPayments && capexPayments[pl.id]) || null;
-                    if (list && list.length) {
-                        list.forEach(pm => {
-                            const d = parseCodDate(pm.date);
-                            const amt = parseFloat(pm.amount) || 0;
-                            if (!d || amt <= 0) return;
-                            const idx = (d.y - firstYear) * 12 + (d.m - 1);
-                            if (idx < 0) out.capexBeforeHorizon += amt;
-                            else if (idx < totalMonths) capexOut[idx] += amt;
-                        });
-                    } else {
-                        // Default: 100% del CAPEX impianto (FV + BESS) alla data COD
-                        const capexTot = (pl.capacity || 0) * (pl.capex || 0) + ((pl.bessMwh || 0) * 1000) * (pl.bessCapexKwh || 0);
-                        if (capexTot > 0) {
-                            const cod = pl._codParsed;
-                            const idx = cod ? (cod.y - firstYear) * 12 + (cod.m - 1) : 12; // senza COD: gen anno 1
-                            if (idx >= 0 && idx < totalMonths) capexOut[idx] += capexTot;
-                            else if (idx < 0) out.capexBeforeHorizon += capexTot;
-                        }
+                    const base = (pl.capacity || 0) * (pl.capex || 0) + ((pl.bessMwh || 0) * 1000) * (pl.bessCapexKwh || 0) +
+                        (pl.connectionCost || 0) + (pl.developmentCost || 0) + (pl.spvAcquisitionCost || 0) + (pl.customCapexEur || 0);
+                    sumPlantCapex += base;
+                    const cod = pl._codParsed;
+                    const codIdx = cod ? (cod.y - firstYear) * 12 + (cod.m - 1) : 12; // senza COD: gen anno 1
+                    plantBases.push({ base, codIdx });
+                    const list = (capexPayments && capexPayments[pl.id]) || [];
+                    let outlaysSum = 0;
+                    list.forEach(pm => {
+                        const amt = parseFloat(pm.amount) || 0;
+                        if (amt <= 0) return;
+                        capexAllocated += amt;
+                        outlaysSum += amt;
+                        const d = parseCodDate(pm.date);
+                        const idx = d ? (d.y - firstYear) * 12 + (d.m - 1) : codIdx;
+                        if (idx < 0) out.capexBeforeHorizon += amt;
+                        else if (idx < totalMonths) capexOut[idx] += amt;
+                    });
+                    // Residuo impianto (CAPEX non ancora allocato) collocato al COD
+                    const residual = Math.max(0, base - outlaysSum);
+                    if (residual > 0) {
+                        if (codIdx >= 0 && codIdx < totalMonths) capexOut[codIdx] += residual;
+                        else if (codIdx < 0) out.capexBeforeHorizon += residual;
                     }
                 });
+                // Costi non attribuibili al singolo impianto (IDC, terreni, ecc.): pro-quota al COD
+                const totalProjCost = (funding && funding.totalProjectCost) || mtx.totalProjectCost || 0;
+                const extra = Math.max(0, totalProjCost - sumPlantCapex);
+                if (extra > 0 && sumPlantCapex > 0) {
+                    plantBases.forEach(pb => {
+                        const share = extra * (pb.base / sumPlantCapex);
+                        if (share <= 0) return;
+                        if (pb.codIdx >= 0 && pb.codIdx < totalMonths) capexOut[pb.codIdx] += share;
+                        else if (pb.codIdx < 0) out.capexBeforeHorizon += share;
+                    });
+                } else if (extra > 0) {
+                    capexOut[12] += extra;
+                }
+                out.capexBudget = totalProjCost;
+                out.capexAllocated = capexAllocated;
+                out.capexResidual = Math.max(0, totalProjCost - capexAllocated);
+
+                // CF9: budget OPEX = OPEX Anno 1; eventi dichiarati sul loro mese,
+                // il residuo non allocato si spalma uniformemente (/12).
+                const opexEvMonthly = new Float64Array(12);
+                let opexEvTotal = 0;
+                plantsList.forEach(pl => {
+                    const evs = (opexEvents && opexEvents[pl.id]) || [];
+                    evs.forEach(ev => {
+                        const m = parseInt(ev.month, 10);
+                        const amt = parseFloat(ev.amount) || 0;
+                        if (m >= 1 && m <= 12 && amt > 0) { opexEvMonthly[m - 1] += amt; opexEvTotal += amt; }
+                    });
+                });
+                out.opexBudgetY1 = (mtx.opexTotal && mtx.opexTotal[0]) || 0;
+                out.opexAllocated = opexEvTotal;
+                out.opexResidual = Math.max(0, out.opexBudgetY1 - opexEvTotal);
 
                 // CF6: vista Holding mensile (flussi annui Holding ripartiti /12)
                 const sociM = new Float64Array(YEARS);
@@ -3640,8 +3653,9 @@ function runSensitivityLoop(baseState, config) {
                     const yi = isYear0 ? -1 : Math.floor((i - 12) / 12);
                     const m = i % 12;
                     const calYear = anchorYearIn - 1 + Math.floor(i / 12);
-                    const flatOpex = isYear0 ? 0 : Math.max(0, ((mtx.opexTotal[yi] || 0) - fixedOpexAnnual - customOpexAnnual)) / 12 + (isYear0 ? 0 : customOpexAnnual / 12);
-                    const opex = flatOpex + (isYear0 ? 0 : opexScheduled[i]);
+                    // CF9: OPEX = eventi dichiarati sul mese + residuo annuo spal /12
+                    const opexResidualY = Math.max(0, (mtx.opexTotal[yi] || 0) - opexEvTotal);
+                    const opex = isYear0 ? 0 : (opexEvMonthly[m] + opexResidualY / 12);
                     const taxes = taxesOut[i];
                     const interest = isYear0 ? 0 : (ds.interestAccrued[yi] || 0) / 12;
                     const principal = isYear0 ? 0 : ((ds.principalScheduled[yi] || 0) + (ds.principalVoluntary[yi] || 0)) / 12;
@@ -3720,7 +3734,7 @@ function runSensitivityLoop(baseState, config) {
                 matrix, debtSchedule, combinedSolarProfile, generalMedionePrices, bessSimulation,
                 monthlyCashflow: anchorYear !== null
                     ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear, State.capexPayments || null, State.opexEvents || null, {
-                        equityAmount, debtAmount, sociLoan: initialShareholderLoan
+                        equityAmount, debtAmount, sociLoan: initialShareholderLoan, totalProjectCost
                     })
                     : buildMonthlyCashflow(activePlants, matrix, debtSchedule),
                 totalBessMw, totalBessMwh,

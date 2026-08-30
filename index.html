@@ -484,6 +484,21 @@
                             </div>
                         </div>
                         <div id="mc-shortfall-banner" class="hidden mb-3 px-3 py-2 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-300 text-[11px] font-bold"></div>
+                        <!-- CF9: budget da allocare (totali letti dal form IMPIANTI) -->
+                        <div id="mc-budget-panel" class="hidden grid-cols-2 gap-3 mb-3" style="display:none;">
+                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-1.5" title="Investimento complessivo dal modello: alloca gli esborsi CAPEX nel periodo fino a residuo zero">Budget CAPEX</div>
+                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Totale</span><span id="mc-capex-budget" class="font-mono text-white">—</span></div>
+                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Allocato</span><span id="mc-capex-allocated" class="font-mono text-sky-300">—</span></div>
+                                <div class="flex justify-between text-[10px] py-0.5 font-bold border-t border-slate-800 mt-1 pt-1"><span class="text-slate-300">Residuo (va al COD)</span><span id="mc-capex-residual" class="font-mono">—</span></div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-1.5" title="OPEX Anno 1 dal modello: alloca gli eventi OPEX sui mesi fino a residuo zero (il residuo si spalma /12)">Budget OPEX Anno 1</div>
+                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Totale</span><span id="mc-opex-budget" class="font-mono text-white">—</span></div>
+                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Allocato</span><span id="mc-opex-allocated" class="font-mono text-sky-300">—</span></div>
+                                <div class="flex justify-between text-[10px] py-0.5 font-bold border-t border-slate-800 mt-1 pt-1"><span class="text-slate-300">Residuo (spalm. /12)</span><span id="mc-opex-residual" class="font-mono">—</span></div>
+                            </div>
+                        </div>
                         <div class="mb-3">
                             <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Ritardo di incasso per regime di mercato: i ricavi maturati nel mese N dell'impianto sono incassati al mese N+lag. Ogni impianto segue il lag del proprio regime.">Lag di incasso per regime (mesi) <i class="fa-solid fa-circle-info"></i></div>
                             <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
@@ -525,8 +540,16 @@
                                     <input type="number" id="capex-pay-amount" min="0" step="1000" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 </div>
                                 <div class="col-span-2">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Causale</label>
-                                    <input type="text" id="capex-pay-label" maxlength="60" placeholder="Es. EPC 50%" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Voce CAPEX</label>
+                                    <select id="capex-pay-label" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
+                                        <option value="EPC FV">EPC FV</option>
+                                        <option value="EPC BESS">EPC BESS</option>
+                                        <option value="Connessione rete">Connessione rete</option>
+                                        <option value="Sviluppo">Sviluppo</option>
+                                        <option value="Acquisto SPV">Acquisto SPV</option>
+                                        <option value="Terreno">Terreno</option>
+                                        <option value="Altro">Altro</option>
+                                    </select>
                                 </div>
                                 <div class="col-span-1">
                                     <button onclick="addCapexPayment()" class="w-full px-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] transition-colors" title="Aggiungi esborso"><i class="fa-solid fa-plus"></i></button>
@@ -559,8 +582,17 @@
                                     <input type="number" id="opexev-amount" min="0" step="100" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 </div>
                                 <div class="col-span-2">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Causale</label>
-                                    <input type="text" id="opexev-label" maxlength="60" placeholder="Es. Manutenzione" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Voce OPEX</label>
+                                    <select id="opexev-label" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
+                                        <option value="O&M FV">O&M FV</option>
+                                        <option value="O&M BESS">O&M BESS</option>
+                                        <option value="Assicurazione">Assicurazione</option>
+                                        <option value="IMU / Tasse locali">IMU / Tasse locali</option>
+                                        <option value="Sicurezza">Sicurezza</option>
+                                        <option value="Asset Management">Asset Management</option>
+                                        <option value="Manutenzione straordinaria">Manutenzione straordinaria</option>
+                                        <option value="Altro">Altro</option>
+                                    </select>
                                 </div>
                                 <div class="col-span-1">
                                     <button onclick="addOpexEvent()" class="w-full px-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] transition-colors" title="Aggiungi evento"><i class="fa-solid fa-plus"></i></button>
@@ -3405,7 +3437,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=24"></script>
+    <script src="./src/main.js?v=25"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

@@ -4932,8 +4932,11 @@
             State.inputs.disabledPlants = JSON.stringify(disabled);
             
             saveConfigDebounced();
-            
+
             renderPlantsList();
+            // CF: i menu a tendina CAPEX/OPEX devono mostrare solo gli impianti attivi
+            renderCapexPaymentOptions();
+            renderOpexEventOptions();
             triggerRecalculate();
         };
 
@@ -6476,6 +6479,27 @@
                     banner.classList.remove('hidden');
                 } else {
                     banner.classList.add('hidden');
+                }
+            }
+            // CF9: pannello budget CAPEX/OPEX con contatori residuo
+            const budgetPanel = document.getElementById('mc-budget-panel');
+            if (budgetPanel) {
+                if (dated && mc.capexBudget !== undefined) {
+                    budgetPanel.style.display = 'grid';
+                    const setB = (id, val, isResidual) => {
+                        const el = document.getElementById(id);
+                        if (!el) return;
+                        el.textContent = _fmtE(val || 0);
+                        if (isResidual) el.className = 'font-mono ' + ((val || 0) <= 0 ? 'text-emerald-400' : 'text-amber-400');
+                    };
+                    setB('mc-capex-budget', mc.capexBudget);
+                    setB('mc-capex-allocated', mc.capexAllocated);
+                    setB('mc-capex-residual', mc.capexResidual, true);
+                    setB('mc-opex-budget', mc.opexBudgetY1);
+                    setB('mc-opex-allocated', mc.opexAllocated);
+                    setB('mc-opex-residual', mc.opexResidual, true);
+                } else {
+                    budgetPanel.style.display = 'none';
                 }
             }
             const periodEl = document.getElementById('mc-period-label');
