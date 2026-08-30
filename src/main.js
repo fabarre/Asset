@@ -3701,7 +3701,12 @@
                         }
                     }
                 } // fine ramo config esistente
-                
+
+                // CF: dopo aver applicato i flag abilitato/disabilitato, ridisegna i menu
+                // CAPEX/OPEX mostrando solo gli impianti selezionati (attivi)
+                renderCapexPaymentOptions();
+                renderOpexEventOptions();
+
                 // Carica gli scenari nominati salvati
                 await loadScenariosFromSupabase();
                 // Carica il registro audit
