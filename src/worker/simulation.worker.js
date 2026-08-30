@@ -3548,21 +3548,69 @@ function runSensitivityLoop(baseState, config) {
                     else out.taxesAfterHorizon += tax;
                 }
 
+                // CF11: aliquote IVA per categoria (frazioni). Le voci di budget ereditano
+                // l'aliquota della propria categoria; le voci personalizzate usano vat_rate
+                // della riga (NULL = 22%).
+                const _vatPct = (v, def) => ((v !== undefined && v !== null && isFinite(v)) ? v : def) / 100;
+                const vatCapexRateByLabel = {
+                    'EPC FV': _vatPct(inputs.vatCapexEpcFv, 22),
+                    'EPC BESS': _vatPct(inputs.vatCapexEpcBess, 22),
+                    'Connessione rete': _vatPct(inputs.vatCapexConnection, 22),
+                    'Sviluppo': _vatPct(inputs.vatCapexDevelopment, 22),
+                    'Acquisto SPV': _vatPct(inputs.vatCapexSpv, 22),
+                    'Terreno': _vatPct(inputs.vatCapexLand, 0)
+                };
+                const vatOpexRateByLabel = {
+                    'O&M FV': _vatPct(inputs.vatOpexOmFv, 22),
+                    'O&M BESS': _vatPct(inputs.vatOpexOmBess, 22),
+                    'Assicurazione': _vatPct(inputs.vatOpexInsurance, 0),
+                    'IMU / Tasse locali': _vatPct(inputs.vatOpexImu, 0),
+                    'Sicurezza': _vatPct(inputs.vatOpexSecurity, 22),
+                    'Asset Management': _vatPct(inputs.vatOpexAssetMgmt, 22),
+                    'Manutenzione straordinaria': _vatPct(inputs.vatOpexOmFv, 22)
+                };
+                // IVA delle voci personalizzate di un impianto: { net, vat } per tipo
+                const customVatByType = (pl, type) => {
+                    let net = 0, vat = 0;
+                    (pl.customCosts || []).forEach(r => {
+                        if (r.cost_type !== type) return;
+                        const amt = parseFloat(r.amount_eur !== undefined ? r.amount_eur : r.amountEur) || 0;
+                        const val = r.unit === 'per_kwp' ? amt * (pl.capacity || 0) : amt;
+                        if (val <= 0) return;
+                        const rate = (r.vat_rate !== undefined && r.vat_rate !== null) ? parseFloat(r.vat_rate) / 100 : 0.22;
+                        net += val;
+                        vat += val * rate;
+                    });
+                    return { net, vat };
+                };
+
                 // CF9: budget CAPEX = investimento complessivo (totalProjectCost).
                 // Gli esborsi espliciti (capexPayments) controllano il "quando"; il residuo
                 // non allocato di ciascun impianto viene collocato alla sua data di COD.
                 const capexOut = new Float64Array(totalMonths);
+                const capexVat = new Float64Array(totalMonths); // CF11: IVA pagata sui pagamenti CAPEX
                 const firstYear = anchorYearIn - 1; // anno 0
                 let capexAllocated = 0;
+                let capexVatAllocated = 0;
                 let sumPlantCapex = 0;
+                let sumPlantCapexVat = 0;
                 const plantBases = [];
                 plantsList.forEach(pl => {
                     const base = (pl.capacity || 0) * (pl.capex || 0) + ((pl.bessMwh || 0) * 1000) * (pl.bessCapexKwh || 0) +
                         (pl.connectionCost || 0) + (pl.developmentCost || 0) + (pl.spvAcquisitionCost || 0) + (pl.customCapexEur || 0);
                     sumPlantCapex += base;
+                    // CF11: aliquota media ponderata del CAPEX impianto (per residuo e voci "Altro")
+                    const cc = customVatByType(pl, 'capex');
+                    const plantVatBase = (pl.capacity || 0) * (pl.capex || 0) * vatCapexRateByLabel['EPC FV'] +
+                        ((pl.bessMwh || 0) * 1000) * (pl.bessCapexKwh || 0) * vatCapexRateByLabel['EPC BESS'] +
+                        (pl.connectionCost || 0) * vatCapexRateByLabel['Connessione rete'] +
+                        (pl.developmentCost || 0) * vatCapexRateByLabel['Sviluppo'] +
+                        (pl.spvAcquisitionCost || 0) * vatCapexRateByLabel['Acquisto SPV'] + cc.vat;
+                    const plantVatBlend = base > 0 ? plantVatBase / base : vatCapexRateByLabel['EPC FV'];
+                    sumPlantCapexVat += plantVatBase;
                     const cod = pl._codParsed;
                     const codIdx = cod ? (cod.y - firstYear) * 12 + (cod.m - 1) : 12; // senza COD: gen anno 1
-                    plantBases.push({ base, codIdx });
+                    plantBases.push({ base, codIdx, vatBlend: plantVatBlend });
                     const list = (capexPayments && capexPayments[pl.id]) || [];
                     let outlaysSum = 0;
                     list.forEach(pm => {
@@ -3570,50 +3618,87 @@ function runSensitivityLoop(baseState, config) {
                         if (amt <= 0) return;
                         capexAllocated += amt;
                         outlaysSum += amt;
+                        const rate = vatCapexRateByLabel[pm.label] !== undefined ? vatCapexRateByLabel[pm.label] : plantVatBlend;
+                        const vatAmt = amt * rate;
+                        capexVatAllocated += vatAmt;
                         const d = parseCodDate(pm.date);
                         const idx = d ? (d.y - firstYear) * 12 + (d.m - 1) : codIdx;
                         if (idx < 0) out.capexBeforeHorizon += amt;
-                        else if (idx < totalMonths) capexOut[idx] += amt;
+                        else if (idx < totalMonths) { capexOut[idx] += amt; capexVat[idx] += vatAmt; }
                     });
                     // Residuo impianto (CAPEX non ancora allocato) collocato al COD
                     const residual = Math.max(0, base - outlaysSum);
                     if (residual > 0) {
-                        if (codIdx >= 0 && codIdx < totalMonths) capexOut[codIdx] += residual;
+                        if (codIdx >= 0 && codIdx < totalMonths) { capexOut[codIdx] += residual; capexVat[codIdx] += residual * plantVatBlend; }
                         else if (codIdx < 0) out.capexBeforeHorizon += residual;
                     }
                 });
                 // Costi non attribuibili al singolo impianto (IDC, terreni, ecc.): pro-quota al COD
                 const totalProjCost = (funding && funding.totalProjectCost) || mtx.totalProjectCost || 0;
                 const extra = Math.max(0, totalProjCost - sumPlantCapex);
+                const projectVatBlend = sumPlantCapex > 0 ? sumPlantCapexVat / sumPlantCapex : vatCapexRateByLabel['EPC FV'];
                 if (extra > 0 && sumPlantCapex > 0) {
                     plantBases.forEach(pb => {
                         const share = extra * (pb.base / sumPlantCapex);
                         if (share <= 0) return;
-                        if (pb.codIdx >= 0 && pb.codIdx < totalMonths) capexOut[pb.codIdx] += share;
+                        if (pb.codIdx >= 0 && pb.codIdx < totalMonths) { capexOut[pb.codIdx] += share; capexVat[pb.codIdx] += share * projectVatBlend; }
                         else if (pb.codIdx < 0) out.capexBeforeHorizon += share;
                     });
                 } else if (extra > 0) {
                     capexOut[12] += extra;
+                    capexVat[12] += extra * projectVatBlend;
                 }
                 out.capexBudget = totalProjCost;
                 out.capexAllocated = capexAllocated;
                 out.capexResidual = Math.max(0, totalProjCost - capexAllocated);
+                out.capexVatAllocated = capexVatAllocated;
+                out.capexGrossAllocated = capexAllocated + capexVatAllocated;
 
                 // CF9: budget OPEX = OPEX Anno 1; eventi dichiarati sul loro mese,
                 // il residuo non allocato si spalma uniformemente (/12).
                 const opexEvMonthly = new Float64Array(12);
+                const opexVatEvMonthly = new Float64Array(12); // CF11: IVA sugli eventi OPEX
                 let opexEvTotal = 0;
+                let opexVatEvTotal = 0;
                 plantsList.forEach(pl => {
                     const evs = (opexEvents && opexEvents[pl.id]) || [];
                     evs.forEach(ev => {
                         const m = parseInt(ev.month, 10);
                         const amt = parseFloat(ev.amount) || 0;
-                        if (m >= 1 && m <= 12 && amt > 0) { opexEvMonthly[m - 1] += amt; opexEvTotal += amt; }
+                        if (m >= 1 && m <= 12 && amt > 0) {
+                            opexEvMonthly[m - 1] += amt;
+                            opexEvTotal += amt;
+                            const rate = vatOpexRateByLabel[ev.label] !== undefined ? vatOpexRateByLabel[ev.label] : _vatPct(inputs.vatOpexAssetMgmt, 22);
+                            opexVatEvMonthly[m - 1] += amt * rate;
+                            opexVatEvTotal += amt * rate;
+                        }
                     });
                 });
                 out.opexBudgetY1 = (mtx.opexTotal && mtx.opexTotal[0]) || 0;
                 out.opexAllocated = opexEvTotal;
                 out.opexResidual = Math.max(0, out.opexBudgetY1 - opexEvTotal);
+                out.opexVatAllocated = opexVatEvTotal;
+                out.opexGrossAllocated = opexEvTotal + opexVatEvTotal;
+
+                // CF11: aliquota media ponderata dell'OPEX Anno 1 (per il residuo spal /12).
+                // Composizione dalle matrici Y1; voci personalizzate con vat_rate proprio;
+                // il delta residuo (royalty/AF fee/ecc.) assume aliquota Asset Management.
+                let opexVatWeighted = 0;
+                let opexCovered = 0;
+                const _addOpexComp = (net, rate) => { const n = net || 0; opexVatWeighted += n * rate; opexCovered += n; };
+                let customOpexNet = 0;
+                plantsList.forEach(pl => { const cc = customVatByType(pl, 'opex'); customOpexNet += cc.net; opexVatWeighted += cc.vat; opexCovered += cc.net; });
+                _addOpexComp((mtx.opexPlants && mtx.opexPlants[0] || 0) - customOpexNet, vatOpexRateByLabel['O&M FV']);
+                _addOpexComp(mtx.opexBess && mtx.opexBess[0], vatOpexRateByLabel['O&M BESS']);
+                _addOpexComp(mtx.opexGridCharging && mtx.opexGridCharging[0], vatOpexRateByLabel['O&M BESS']);
+                _addOpexComp(mtx.opexLandDds && mtx.opexLandDds[0], 0);
+                _addOpexComp(mtx.opexInsurance && mtx.opexInsurance[0], vatOpexRateByLabel['Assicurazione']);
+                _addOpexComp(mtx.opexTaxes && mtx.opexTaxes[0], vatOpexRateByLabel['IMU / Tasse locali']);
+                _addOpexComp(mtx.opexSecurity && mtx.opexSecurity[0], vatOpexRateByLabel['Sicurezza']);
+                _addOpexComp((mtx.opexAssetManagement && mtx.opexAssetManagement[0] || 0) + (mtx.opexServiceContract && mtx.opexServiceContract[0] || 0), vatOpexRateByLabel['Asset Management']);
+                const opexResto = out.opexBudgetY1 - opexCovered;
+                if (opexResto > 0) opexVatWeighted += opexResto * vatOpexRateByLabel['Asset Management'];
+                const blendedOpexVatRate = out.opexBudgetY1 > 0 ? opexVatWeighted / out.opexBudgetY1 : 0;
 
                 // CF6: vista Holding mensile (flussi annui Holding ripartiti /12)
                 const sociM = new Float64Array(YEARS);
@@ -3677,7 +3762,10 @@ function runSensitivityLoop(baseState, config) {
                     let vatOut = 0, vatIn = 0, vatRemit = 0;
                     if (vatEnabled) {
                         vatOut = vatRate * vatTaxableRevenuePct * collected[i];
-                        vatIn = vatRate * (capexOut[i] + opex);
+                        // CF11: IVA a credito per categoria: esborsi CAPEX con aliquota della
+                        // voce + eventi OPEX con aliquota della voce + residuo OPEX ponderato.
+                        const vatInOpex = isYear0 ? 0 : (opexVatEvMonthly[m] + (opexResidualY / 12) * blendedOpexVatRate);
+                        vatIn = capexVat[i] + vatInOpex;
                         vatCredit += vatIn - vatOut;
                         const isSettle = ((i % vatSettleEvery) === (vatSettleEvery - 1)) || (i === totalMonths - 1);
                         if (isSettle && vatCredit < 0) { vatRemit = -vatCredit; vatCredit = 0; }

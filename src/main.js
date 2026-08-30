@@ -2988,6 +2988,20 @@
             p.vatRate = parseFloat(getVal('input-vat-rate')); if (isNaN(p.vatRate)) p.vatRate = 22;
             p.vatTaxableRevenuePct = parseFloat(getVal('input-vat-taxable-pct')); if (isNaN(p.vatTaxableRevenuePct)) p.vatTaxableRevenuePct = 100;
             p.vatSettlement = getVal('input-vat-settlement') || 'mensile';
+            // CF11: aliquote IVA per categoria CAPEX/OPEX (default italiani)
+            const vatCat = (id, def) => { const v = parseFloat(getVal(id)); return isNaN(v) ? def : v; };
+            p.vatCapexEpcFv = vatCat('vat-capex-epc-fv', 22);
+            p.vatCapexEpcBess = vatCat('vat-capex-epc-bess', 22);
+            p.vatCapexConnection = vatCat('vat-capex-connection', 22);
+            p.vatCapexDevelopment = vatCat('vat-capex-development', 22);
+            p.vatCapexSpv = vatCat('vat-capex-spv', 22);
+            p.vatCapexLand = vatCat('vat-capex-land', 0);
+            p.vatOpexOmFv = vatCat('vat-opex-om-fv', 22);
+            p.vatOpexOmBess = vatCat('vat-opex-om-bess', 22);
+            p.vatOpexInsurance = vatCat('vat-opex-insurance', 0);
+            p.vatOpexImu = vatCat('vat-opex-imu', 0);
+            p.vatOpexSecurity = vatCat('vat-opex-security', 22);
+            p.vatOpexAssetMgmt = vatCat('vat-opex-asset-mgmt', 22);
             // CF8: date di messa a disposizione dei capitali (vuote = default al COD/anno 1)
             p.fundingEquityDate = getVal('input-funding-equity-date') || '';
             p.fundingSociDate = getVal('input-funding-soci-date') || '';
@@ -3328,6 +3342,18 @@
                         'vatRate': { id: 'input-vat-rate', mult: 1 },
                         'vatTaxableRevenuePct': { id: 'input-vat-taxable-pct', mult: 1 },
                         'vatSettlement': { id: 'input-vat-settlement', mult: 1 },
+                        'vatCapexEpcFv': { id: 'vat-capex-epc-fv', mult: 1 },
+                        'vatCapexEpcBess': { id: 'vat-capex-epc-bess', mult: 1 },
+                        'vatCapexConnection': { id: 'vat-capex-connection', mult: 1 },
+                        'vatCapexDevelopment': { id: 'vat-capex-development', mult: 1 },
+                        'vatCapexSpv': { id: 'vat-capex-spv', mult: 1 },
+                        'vatCapexLand': { id: 'vat-capex-land', mult: 1 },
+                        'vatOpexOmFv': { id: 'vat-opex-om-fv', mult: 1 },
+                        'vatOpexOmBess': { id: 'vat-opex-om-bess', mult: 1 },
+                        'vatOpexInsurance': { id: 'vat-opex-insurance', mult: 1 },
+                        'vatOpexImu': { id: 'vat-opex-imu', mult: 1 },
+                        'vatOpexSecurity': { id: 'vat-opex-security', mult: 1 },
+                        'vatOpexAssetMgmt': { id: 'vat-opex-asset-mgmt', mult: 1 },
                         'fundingEquityDate': { id: 'input-funding-equity-date', mult: 1 },
                         'fundingSociDate': { id: 'input-funding-soci-date', mult: 1 },
                         'fundingDebtDate': { id: 'input-funding-debt-date', mult: 1 },
@@ -3781,6 +3807,18 @@
                         'vatRate': { id: 'input-vat-rate', mult: 1 },
                         'vatTaxableRevenuePct': { id: 'input-vat-taxable-pct', mult: 1 },
                         'vatSettlement': { id: 'input-vat-settlement', mult: 1 },
+                        'vatCapexEpcFv': { id: 'vat-capex-epc-fv', mult: 1 },
+                        'vatCapexEpcBess': { id: 'vat-capex-epc-bess', mult: 1 },
+                        'vatCapexConnection': { id: 'vat-capex-connection', mult: 1 },
+                        'vatCapexDevelopment': { id: 'vat-capex-development', mult: 1 },
+                        'vatCapexSpv': { id: 'vat-capex-spv', mult: 1 },
+                        'vatCapexLand': { id: 'vat-capex-land', mult: 1 },
+                        'vatOpexOmFv': { id: 'vat-opex-om-fv', mult: 1 },
+                        'vatOpexOmBess': { id: 'vat-opex-om-bess', mult: 1 },
+                        'vatOpexInsurance': { id: 'vat-opex-insurance', mult: 1 },
+                        'vatOpexImu': { id: 'vat-opex-imu', mult: 1 },
+                        'vatOpexSecurity': { id: 'vat-opex-security', mult: 1 },
+                        'vatOpexAssetMgmt': { id: 'vat-opex-asset-mgmt', mult: 1 },
                                 'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
                                 'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                                 'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
@@ -6625,9 +6663,13 @@
                     };
                     setB('mc-capex-budget', mc.capexBudget);
                     setB('mc-capex-allocated', mc.capexAllocated);
+                    setB('mc-capex-vat', mc.capexVatAllocated);
+                    setB('mc-capex-gross', mc.capexGrossAllocated);
                     setB('mc-capex-residual', mc.capexResidual, true);
                     setB('mc-opex-budget', mc.opexBudgetY1);
                     setB('mc-opex-allocated', mc.opexAllocated);
+                    setB('mc-opex-vat', mc.opexVatAllocated);
+                    setB('mc-opex-gross', mc.opexGrossAllocated);
                     setB('mc-opex-residual', mc.opexResidual, true);
                 } else {
                     budgetPanel.style.display = 'none';
@@ -9016,9 +9058,17 @@
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', triggerRecalculate);
             });
-            ['input-vat-rate', 'input-vat-taxable-pct'].forEach(id => {
+            ['input-vat-rate', 'input-vat-taxable-pct',
+             'vat-capex-epc-fv', 'vat-capex-epc-bess', 'vat-capex-connection', 'vat-capex-development', 'vat-capex-spv', 'vat-capex-land',
+             'vat-opex-om-fv', 'vat-opex-om-bess', 'vat-opex-insurance', 'vat-opex-imu', 'vat-opex-security', 'vat-opex-asset-mgmt'].forEach(id => {
                 const el = document.getElementById(id);
-                if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
+                if (el) el.addEventListener('input', () => {
+                    // CF11: aggiorna subito le colonne IVA delle righe budget
+                    if (typeof renderCapexPaymentRows === 'function') renderCapexPaymentRows();
+                    if (typeof renderOpexEventRows === 'function') renderOpexEventRows();
+                    if (typeof renderCustomCostsUI === 'function') renderCustomCostsUI();
+                    triggerRecalculateDebounced(350);
+                });
             });
             ['input-vat-settlement'].forEach(id => {
                 const el = document.getElementById(id);
@@ -10049,6 +10099,45 @@ function loadCapexPaymentsFromRows(rows) {
     renderCapexPaymentOptions();
 }
 
+// ═══ CF11: aliquote IVA per voce di budget (speculare ai criteri del worker) ═══
+// Le righe CAPEX/OPEX ereditano l'aliquota della propria categoria (label);
+// le voci "Altro"/non mappate usano la media ponderata (CAPEX) o Asset Mgmt (OPEX).
+function vatRatePctForCapexLabel(label, plant) {
+    const p = State.inputs || {};
+    const map = {
+        'EPC FV': p.vatCapexEpcFv, 'EPC BESS': p.vatCapexEpcBess, 'Connessione rete': p.vatCapexConnection,
+        'Sviluppo': p.vatCapexDevelopment, 'Acquisto SPV': p.vatCapexSpv, 'Terreno': p.vatCapexLand
+    };
+    if (map[label] !== undefined && map[label] !== null && isFinite(map[label])) return map[label];
+    const r = (v, def) => (v !== undefined && v !== null && isFinite(v)) ? v : def;
+    if (!plant) return r(p.vatCapexEpcFv, 22);
+    let customVat = 0;
+    (plant.customCosts || []).forEach(x => {
+        if (x.cost_type !== 'capex') return;
+        const amt = parseFloat(x.amount_eur !== undefined ? x.amount_eur : x.amountEur) || 0;
+        const val = x.unit === 'per_kwp' ? amt * (plant.capacity || 0) : amt;
+        if (val > 0) customVat += val * ((x.vat_rate !== undefined && x.vat_rate !== null) ? parseFloat(x.vat_rate) / 100 : 0.22);
+    });
+    const base = (plant.capacity || 0) * (plant.capex || 0) + ((plant.bessMwh || 0) * 1000) * (plant.bessCapexKwh || 0) +
+        (plant.connectionCost || 0) + (plant.developmentCost || 0) + (plant.spvAcquisitionCost || 0) + (plant.customCapexEur || 0);
+    const vatBase = (plant.capacity || 0) * (plant.capex || 0) * r(p.vatCapexEpcFv, 22) / 100 +
+        ((plant.bessMwh || 0) * 1000) * (plant.bessCapexKwh || 0) * r(p.vatCapexEpcBess, 22) / 100 +
+        (plant.connectionCost || 0) * r(p.vatCapexConnection, 22) / 100 +
+        (plant.developmentCost || 0) * r(p.vatCapexDevelopment, 22) / 100 +
+        (plant.spvAcquisitionCost || 0) * r(p.vatCapexSpv, 22) / 100 + customVat;
+    return base > 0 ? vatBase / base * 100 : r(p.vatCapexEpcFv, 22);
+}
+function vatRatePctForOpexLabel(label) {
+    const p = State.inputs || {};
+    const map = {
+        'O&M FV': p.vatOpexOmFv, 'O&M BESS': p.vatOpexOmBess, 'Assicurazione': p.vatOpexInsurance,
+        'IMU / Tasse locali': p.vatOpexImu, 'Sicurezza': p.vatOpexSecurity,
+        'Asset Management': p.vatOpexAssetMgmt, 'Manutenzione straordinaria': p.vatOpexOmFv
+    };
+    if (map[label] !== undefined && map[label] !== null && isFinite(map[label])) return map[label];
+    return (p.vatOpexAssetMgmt !== undefined && p.vatOpexAssetMgmt !== null && isFinite(p.vatOpexAssetMgmt)) ? p.vatOpexAssetMgmt : 22;
+}
+
 window.renderCapexPaymentOptions = function() {
     const sel = document.getElementById('capex-plant-select');
     if (!sel) return;
@@ -10070,14 +10159,23 @@ window.renderCapexPaymentRows = function() {
         box.innerHTML = '<div class="text-[10px] text-slate-500 italic py-1">Nessun esborso configurato: default = 100% del CAPEX impianto alla data COD.</div>';
         return;
     }
+    const plant = (State.plants || []).find(p => p.id === pid);
+    const fmt0 = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
     const sorted = list.map((pm, i) => ({ ...pm, _i: i })).sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    box.innerHTML = sorted.map(pm => `
+    box.innerHTML = sorted.map(pm => {
+        const net = pm.amount || 0;
+        const ratePct = vatRatePctForCapexLabel(pm.label, plant);
+        const iva = net * ratePct / 100;
+        return `
         <div class="flex items-center gap-2 text-[10px] bg-slate-900/50 border border-slate-850 rounded-lg px-2 py-1">
             <span class="font-mono text-sky-300 whitespace-nowrap">${escapeHtml(pm.date)}</span>
-            <span class="font-mono text-white flex-1 text-right">${new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(pm.amount || 0)}</span>
-            <span class="text-slate-400 truncate max-w-[120px]">${escapeHtml(pm.label || '')}</span>
+            <span class="font-mono text-white text-right" title="Importo netto">${fmt0.format(net)}</span>
+            <span class="font-mono text-violet-300 whitespace-nowrap" title="Aliquota IVA della voce: ${ratePct.toLocaleString('it-IT', { maximumFractionDigits: 1 })}%">+${fmt0.format(iva)} IVA</span>
+            <span class="font-mono text-slate-200 whitespace-nowrap" title="Netto + IVA">${fmt0.format(net + iva)}</span>
+            <span class="text-slate-400 truncate flex-1">${escapeHtml(pm.label || '')}</span>
             <button onclick="removeCapexPayment(${pm._i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi esborso"><i class="fa-solid fa-xmark"></i></button>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 };
 
 window.addCapexPayment = function() {
@@ -10180,14 +10278,22 @@ window.renderOpexEventRows = function() {
         box.innerHTML = '<div class="text-[10px] text-slate-500 italic py-1">Nessun evento OPEX ricorrente configurato per questo impianto.</div>';
         return;
     }
+    const fmt0 = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
     const sorted = list.map((ev, i) => ({ ...ev, _i: i })).sort((a, b) => (a.month || 0) - (b.month || 0));
-    box.innerHTML = sorted.map(ev => `
+    box.innerHTML = sorted.map(ev => {
+        const net = ev.amount || 0;
+        const ratePct = vatRatePctForOpexLabel(ev.label);
+        const iva = net * ratePct / 100;
+        return `
         <div class="flex items-center gap-2 text-[10px] bg-slate-900/50 border border-slate-850 rounded-lg px-2 py-1">
             <span class="font-mono text-emerald-300 whitespace-nowrap">${MONTHS_IT_SHORT[(ev.month || 1) - 1] || ev.month}</span>
-            <span class="font-mono text-white flex-1 text-right">${new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(ev.amount || 0)}</span>
-            <span class="text-slate-400 truncate max-w-[120px]">${escapeHtml(ev.label || '')}</span>
+            <span class="font-mono text-white text-right" title="Importo netto annuo">${fmt0.format(net)}</span>
+            <span class="font-mono text-violet-300 whitespace-nowrap" title="Aliquota IVA della voce: ${ratePct.toLocaleString('it-IT', { maximumFractionDigits: 1 })}%">+${fmt0.format(iva)} IVA</span>
+            <span class="font-mono text-slate-200 whitespace-nowrap" title="Netto + IVA">${fmt0.format(net + iva)}</span>
+            <span class="text-slate-400 truncate flex-1">${escapeHtml(ev.label || '')}</span>
             <button onclick="removeOpexEvent(${ev._i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi evento"><i class="fa-solid fa-xmark"></i></button>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 };
 
 window.addOpexEvent = function() {
@@ -10270,6 +10376,7 @@ window.renderCustomCostsUI = function() {
             <span class="font-bold ${r.cost_type === 'capex' ? 'text-orange-400' : 'text-emerald-400'} uppercase w-12">${r.cost_type === 'capex' ? 'CAPEX' : 'OPEX'}</span>
             <span class="text-slate-300 flex-1 truncate">${escapeHtml(r.label || '')}</span>
             <span class="font-mono text-white">${new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(customCostEur(r, plant))}</span>
+            <span class="font-mono text-slate-400 whitespace-nowrap" title="Aliquota IVA della voce">IVA ${r.vat_rate == null ? 'default' : Number(r.vat_rate).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + '%'}</span>
             <span class="text-slate-500 whitespace-nowrap">${r.unit === 'per_kwp' ? '€/kWp' : (r.cost_type === 'capex' ? '€ una tantum' : '€/anno')}</span>
             <button onclick="removeCustomCost(${i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi voce"><i class="fa-solid fa-xmark"></i></button>
         </div>`).join('');
@@ -10278,29 +10385,35 @@ window.renderCustomCostsUI = function() {
 window.addCustomCost = function() {
     const plant = State.plants.find(p => p.id === editingPlantId);
     if (!plant) { showToast('Apri un impianto in modifica per aggiungere voci.', 'warning'); return; }
+    if (!canWrite()) return;
     const type = (document.getElementById('custom-cost-type') || {}).value;
     const label = ((document.getElementById('custom-cost-label') || {}).value || '').trim();
     const amount = parseFloat((document.getElementById('custom-cost-amount') || {}).value);
     const unit = (document.getElementById('custom-cost-unit') || {}).value || 'total';
+    const vatRate = parseFloat((document.getElementById('custom-cost-vat-rate') || {}).value);
     if (!label) { showToast('Inserisci la descrizione della voce.', 'warning'); return; }
     if (!isFinite(amount) || amount <= 0) { showToast('Importo non valido.', 'warning'); return; }
+    if (!isFinite(vatRate) || vatRate < 0 || vatRate > 99) { showToast('Aliquota IVA non valida (0–99%).', 'warning'); return; }
     plant.customCosts = plant.customCosts || [];
-    plant.customCosts.push({ cost_type: type, label, amount_eur: amount, unit });
+    plant.customCosts.push({ cost_type: type, label, amount_eur: amount, unit, vat_rate: vatRate });
     applyCustomCostTotals(plant);
     renderCustomCostsUI();
     if (typeof recalcPlantKpis === 'function') recalcPlantKpis();
+    saveCustomCosts(true);
 };
 
 window.removeCustomCost = function(i) {
     const plant = State.plants.find(p => p.id === editingPlantId);
     if (!plant || !plant.customCosts) return;
+    if (!canWrite()) return;
     plant.customCosts.splice(i, 1);
     applyCustomCostTotals(plant);
     renderCustomCostsUI();
     if (typeof recalcPlantKpis === 'function') recalcPlantKpis();
+    saveCustomCosts(true);
 };
 
-window.saveCustomCosts = async function() {
+window.saveCustomCosts = async function(silent) {
     if (!canWrite()) return;
     const plant = State.plants.find(p => p.id === editingPlantId);
     if (!plant) { showToast('Apri un impianto in modifica.', 'warning'); return; }
@@ -10313,6 +10426,7 @@ window.saveCustomCosts = async function() {
             label: r.label || '',
             amount_eur: parseFloat(r.amount_eur !== undefined ? r.amount_eur : r.amountEur) || 0,
             unit: r.unit || 'total',
+            vat_rate: r.vat_rate == null ? null : parseFloat(r.vat_rate),
             user_id: currentUserId()
         }));
         if (rows.length) {
@@ -10324,7 +10438,7 @@ window.saveCustomCosts = async function() {
         applyCustomCostTotals(plant);
         renderCustomCostsUI();
         Audit.log('customcosts.save', `${plant.name}: ${rows.length} voci`);
-        showToast('Voci CAPEX/OPEX personalizzate salvate nel database.', 'success');
+        if (!silent) showToast('Voci CAPEX/OPEX personalizzate salvate nel database.', 'success');
     } catch (err) {
         showToast('Errore salvataggio voci: ' + err.message, 'error');
     }

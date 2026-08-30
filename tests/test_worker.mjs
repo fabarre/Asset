@@ -674,6 +674,59 @@ check('Effetto netto cumulato = Σ vatCashFlow', Math.abs(mc30.vatNetCumulative 
 const r30off = run(buildState({ inputs: { collectionLagRid: 0, vatEnabled: false }, plants: basePlants28() }));
 check('IVA disabilitata: nessun effetto sul cash flow', r30off.monthlyCashflow.vatCashFlow.every(v => v === 0));
 
+// ── Test 31: IVA per categoria CAPEX/OPEX e aliquote per riga sulle voci personalizzate (CF11) ──
+console.log('\n[Test 31] CF11: aliquote per categoria, voci personalizzate con vat_rate, contatori netto/IVA/lordo');
+const plants31 = (vat10) => {
+    const pl = {
+        id: 'pA', name: 'Impianto A', capacity: 8000, zone: 'NORD', opex: 120000, enabled: true,
+        generation: gen24a, codDate: '2027-05-15', ...plantNoBess24,
+        customCapexEur: 100000, customOpexEur: 12000,
+        customCosts: [
+            { cost_type: 'capex', label: 'Bonifica', amount_eur: 100000, unit: 'total', vat_rate: vat10 ? 10 : 22 },
+            { cost_type: 'opex', label: 'Monitoraggio', amount_eur: 12000, unit: 'total', vat_rate: 4 }
+        ]
+    };
+    return [pl];
+};
+const capexPay31 = { pA: [{ date: '2027-02-15', amount: 1000000, label: 'Connessione rete' }] };
+const opexEv31 = { pA: [{ month: 6, amount: 10000, label: 'IMU / Tasse locali' }, { month: 7, amount: 10000, label: 'Sicurezza' }] };
+const vatAllButConn = { collectionLagRid: 0, vatEnabled: true, vatRate: 22, vatTaxableRevenuePct: 100, vatSettlement: 'mensile', vatCapexConnection: 0 };
+const r31a = run(buildState({ inputs: vatAllButConn, plants: plants31(true) }), capexPay31, opexEv31);
+const r31b = run(buildState({ inputs: { ...vatAllButConn, vatCapexConnection: 22 }, plants: plants31(true) }), capexPay31, opexEv31);
+const mc31a = r31a.monthlyCashflow, mc31b = r31b.monthlyCashflow;
+// feb-2027 = idx 13 (solo esborso connessione), mag-2027 = idx 16 (COD: residuo CAPEX)
+check('Connessione rete con IVA 0%: nessun credito IVA sull\'esborso (Δ vs 22% = 220.000)',
+    Math.abs((mc31b.vatPaidToSuppliers[13] - mc31a.vatPaidToSuppliers[13]) - 220000) < 1e-6,
+    `a=${mc31a.vatPaidToSuppliers[13].toFixed(0)} b=${mc31b.vatPaidToSuppliers[13].toFixed(0)}`);
+check('Contatori budget: IVA allocata CAPEX (0% vs 22%)', Math.abs(mc31a.capexVatAllocated - 0) < 1e-6 && Math.abs(mc31b.capexVatAllocated - 220000) < 1e-6,
+    `a=${mc31a.capexVatAllocated} b=${mc31b.capexVatAllocated}`);
+check('Lordo allocato CAPEX = netto + IVA', Math.abs(mc31b.capexGrossAllocated - (mc31b.capexAllocated + mc31b.capexVatAllocated)) < 1e-6);
+check('Eventi OPEX: IMU 0% + Sicurezza 22% → IVA allocata 2.200', Math.abs(mc31a.opexVatAllocated - 2200) < 1e-6 && Math.abs(mc31a.opexGrossAllocated - 22200) < 1e-6,
+    `vat=${mc31a.opexVatAllocated} gross=${mc31a.opexGrossAllocated}`);
+// Identità CF11 al mese di COD (idx 16): residuo CAPEX × blend impianto + residuo OPEX/12 × blend OPEX
+const base31 = 8000 * 700 + 100000;
+const residCapex31 = base31 - 1000000;
+const blendCapex31a = (5600000 * 0.22 + 100000 * 0.10) / base31;
+const opexTot31 = r31a.matrix.opexTotal[0];
+const residOpex31 = Math.max(0, opexTot31 - 20000);
+const blendOpex31 = ((opexTot31 - 12000) * 0.22 + 12000 * 0.04) / opexTot31;
+check('VAT pagata al COD = residuo×blend impianto + residuo OPEX/12×blend OPEX',
+    Math.abs(mc31a.vatPaidToSuppliers[16] - (residCapex31 * blendCapex31a + (residOpex31 / 12) * blendOpex31)) < 1e-3,
+    `got=${mc31a.vatPaidToSuppliers[16].toFixed(0)} exp=${(residCapex31 * blendCapex31a + (residOpex31 / 12) * blendOpex31).toFixed(0)}`);
+// Voce personalizzata con vat_rate 10 vs 22: il Δ sul credito IVA al COD = residuo/base × 100.000 × 12%
+const r31c = run(buildState({ inputs: vatAllButConn, plants: plants31(false) }), capexPay31, opexEv31);
+const mc31c = r31c.monthlyCashflow;
+const deltaCustom31 = (residCapex31 / base31) * 100000 * 0.12;
+check('vat_rate voce personalizzata 10% vs 22%: Δ credito IVA al COD',
+    Math.abs((mc31c.vatPaidToSuppliers[16] - mc31b.vatPaidToSuppliers[16]) - deltaCustom31) < 1e-3,
+    `Δ=${(mc31c.vatPaidToSuppliers[16] - mc31b.vatPaidToSuppliers[16]).toFixed(0)} exp=${deltaCustom31.toFixed(0)}`);
+check('Identità IVA mensile ancora valida (CF11)', (() => {
+    for (let i = 0; i < 72; i++) {
+        if (Math.abs(mc31a.vatCashFlow[i] - (mc31a.vatCollected[i] - mc31a.vatPaidToSuppliers[i] - mc31a.vatRemitted[i])) > 1e-6) return false;
+    }
+    return true;
+})());
+
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);
