@@ -1554,7 +1554,9 @@
                                 stabilimenti: State.stabilimenti,
                                 zonalPun: State.zonalPun,
                                 selectedBessPlantIds: State.selectedBessPlantIds,
-                                previouslySeenPlantIds: State.previouslySeenPlantIds
+                                previouslySeenPlantIds: State.previouslySeenPlantIds,
+                                capexPayments: State.capexPaymentsSaved || {},
+                                opexEvents: State.opexEventsSaved || {}
                             }
                         }
                     });
@@ -2983,13 +2985,17 @@
             p.collectionLagFerx = Math.max(0, parseInt(getVal('mc-lag-ferx'), 10) || 0);
             // CF5: mese di pagamento imposte (IRES/IRAP) dell'anno successivo
             p.taxPaymentMonth = Math.min(12, Math.max(1, parseInt(getVal('mc-tax-pay-month'), 10) || 6));
-            // CF10: IVA solo cash flow
+            // CF10/CF11: IVA di cassa — meccanismo + aliquote sui ricavi per regime + aliquote per voce di spesa
             p.vatEnabled = document.getElementById('input-vat-enabled') ? document.getElementById('input-vat-enabled').checked : true;
-            p.vatRate = parseFloat(getVal('input-vat-rate')); if (isNaN(p.vatRate)) p.vatRate = 22;
-            p.vatTaxableRevenuePct = parseFloat(getVal('input-vat-taxable-pct')); if (isNaN(p.vatTaxableRevenuePct)) p.vatTaxableRevenuePct = 100;
             p.vatSettlement = getVal('input-vat-settlement') || 'mensile';
-            // CF11: aliquote IVA per categoria CAPEX/OPEX (default italiani)
             const vatCat = (id, def) => { const v = parseFloat(getVal(id)); return isNaN(v) ? def : v; };
+            // IVA a debito sui ricavi per regime (reverse charge = 0%; CER 22%)
+            p.vatRevRid = vatCat('vat-rev-rid', 0);
+            p.vatRevPpa = vatCat('vat-rev-ppa', 0);
+            p.vatRevBrp = vatCat('vat-rev-brp', 0);
+            p.vatRevCer = vatCat('vat-rev-cer', 22);
+            p.vatRevFerx = vatCat('vat-rev-ferx', 0);
+            // IVA a credito per categoria CAPEX/OPEX (default italiani)
             p.vatCapexEpcFv = vatCat('vat-capex-epc-fv', 22);
             p.vatCapexEpcBess = vatCat('vat-capex-epc-bess', 22);
             p.vatCapexConnection = vatCat('vat-capex-connection', 22);
@@ -3339,8 +3345,11 @@
                         'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
                         'taxPaymentMonth': { id: 'mc-tax-pay-month', mult: 1 },
                         'vatEnabled': { id: 'input-vat-enabled', mult: 1 },
-                        'vatRate': { id: 'input-vat-rate', mult: 1 },
-                        'vatTaxableRevenuePct': { id: 'input-vat-taxable-pct', mult: 1 },
+                        'vatRevRid': { id: 'vat-rev-rid', mult: 1 },
+                        'vatRevPpa': { id: 'vat-rev-ppa', mult: 1 },
+                        'vatRevBrp': { id: 'vat-rev-brp', mult: 1 },
+                        'vatRevCer': { id: 'vat-rev-cer', mult: 1 },
+                        'vatRevFerx': { id: 'vat-rev-ferx', mult: 1 },
                         'vatSettlement': { id: 'input-vat-settlement', mult: 1 },
                         'vatCapexEpcFv': { id: 'vat-capex-epc-fv', mult: 1 },
                         'vatCapexEpcBess': { id: 'vat-capex-epc-bess', mult: 1 },
@@ -3804,8 +3813,11 @@
                         'fundingSociDate': { id: 'input-funding-soci-date', mult: 1 },
                         'fundingDebtDate': { id: 'input-funding-debt-date', mult: 1 },
                         'vatEnabled': { id: 'input-vat-enabled', mult: 1 },
-                        'vatRate': { id: 'input-vat-rate', mult: 1 },
-                        'vatTaxableRevenuePct': { id: 'input-vat-taxable-pct', mult: 1 },
+                        'vatRevRid': { id: 'vat-rev-rid', mult: 1 },
+                        'vatRevPpa': { id: 'vat-rev-ppa', mult: 1 },
+                        'vatRevBrp': { id: 'vat-rev-brp', mult: 1 },
+                        'vatRevCer': { id: 'vat-rev-cer', mult: 1 },
+                        'vatRevFerx': { id: 'vat-rev-ferx', mult: 1 },
                         'vatSettlement': { id: 'input-vat-settlement', mult: 1 },
                         'vatCapexEpcFv': { id: 'vat-capex-epc-fv', mult: 1 },
                         'vatCapexEpcBess': { id: 'vat-capex-epc-bess', mult: 1 },
@@ -4112,7 +4124,9 @@
                         stabilimenti: State.stabilimenti,
                         zonalPun: State.zonalPun,
                         selectedBessPlantIds: State.selectedBessPlantIds,
-                        previouslySeenPlantIds: State.previouslySeenPlantIds
+                        previouslySeenPlantIds: State.previouslySeenPlantIds,
+                        capexPayments: State.capexPaymentsSaved || {},
+                        opexEvents: State.opexEventsSaved || {}
                     },
                     scenarios: selected.map(s => ({ id: s.id, name: s.name, inputs: s.payload }))
                 }
@@ -6668,9 +6682,25 @@
                     setB('mc-capex-residual', mc.capexResidual, true);
                     setB('mc-opex-budget', mc.opexBudgetY1);
                     setB('mc-opex-allocated', mc.opexAllocated);
+                    setB('mc-opex-eff', mc.opexAllocatedY1);
                     setB('mc-opex-vat', mc.opexVatAllocated);
                     setB('mc-opex-gross', mc.opexGrossAllocated);
                     setB('mc-opex-residual', mc.opexResidual, true);
+                    // CF11: stessi indici nella card "Cash Flow Mensile — Configurazione" (FINANZA)
+                    setB('fin-capex-total', mc.capexBudget);
+                    setB('fin-capex-alloc', mc.capexAllocated);
+                    setB('fin-capex-vat', mc.capexVatAllocated);
+                    setB('fin-capex-gross', mc.capexGrossAllocated);
+                    setB('fin-capex-resid', mc.capexResidual, true);
+                    setB('fin-opex-total', mc.opexBudgetY1);
+                    setB('fin-opex-alloc', mc.opexAllocated);
+                    setB('fin-opex-eff', mc.opexAllocatedY1);
+                    setB('fin-opex-vat', mc.opexVatAllocated);
+                    setB('fin-opex-gross', mc.opexGrossAllocated);
+                    setB('fin-opex-resid', mc.opexResidual, true);
+                    // CF11: aggiorna i residui per voce con i nuovi budget del ricalcolo
+                    if (typeof updateCapexCategoryInfo === 'function') updateCapexCategoryInfo();
+                    if (typeof updateOpexCategoryInfo === 'function') updateOpexCategoryInfo();
                 } else {
                     budgetPanel.style.display = 'none';
                 }
@@ -6712,10 +6742,16 @@
                         <th class="px-2 py-2 text-right">OPEX</th>
                         <th class="px-2 py-2 text-right">Imposte</th>
                         <th class="px-2 py-2 text-right">Serv. Debito</th>
-                        ${dated ? '<th class="px-2 py-2 text-right" title="Esborsi CAPEX datati">CAPEX</th>' : ''}
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Esborsi CAPEX datati (netto IVA)">CAPEX</th>' : ''}
                         ${dated ? '<th class="px-2 py-2 text-right" title="Flussi in entrata equity/soci/debito sulle date di FINANZA">Funding</th>' : ''}
-                        <th class="px-2 py-2 text-right">Net Cashflow</th>
-                        <th class="px-2 py-2 text-right">Cassa Finale</th>
+                        ${dated ? '<th class="px-2 py-2 text-right" title="IVA incassata sui ricavi (a debito)">IVA Inc.</th>' : ''}
+                        ${dated ? '<th class="px-2 py-2 text-right" title="IVA pagata ai fornitori su CAPEX+OPEX (a credito)">IVA Pag.</th>' : ''}
+                        ${dated ? '<th class="px-2 py-2 text-right" title="IVA versata all erario alla liquidazione (mensile/trimestrale)">IVA Vers.</th>' : ''}
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Credito IVA a fine mese (portato a nuovo)">Credito IVA</th>' : ''}
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Effetto IVA sulla cassa del mese = IVA incassata − IVA pagata − IVA versata">IVA CF</th>' : ''}
+                        <th class="px-2 py-2 text-right" title="Incassati − OPEX − Imposte − Serv. Debito − CAPEX + IVA CF. Il funding NON è incluso: entra nella Cassa con Funding.">Net Cashflow</th>
+                        <th class="px-2 py-2 text-right" title="Cassa cumulata SENZA funding (fabbisogno lordo)">Cassa Finale</th>
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Cassa cumulata DOPO gli afflussi equity/soci/debito alle date FINANZA">Cassa con Funding</th>' : ''}
                     </tr>`;
                 }
             }
@@ -6728,9 +6764,9 @@
                         html += `<tr class="${rowCls} border-t border-slate-850/60">
                             <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
                             <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.netCashflow[i], 0)}</td>
-                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.holdcoSociService[i], 0)}</td>
-                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.holdcoPdService[i], 0)}</td>
-                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.holdcoOtherCosts[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(-mc.holdcoSociService[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(-mc.holdcoPdService[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(-mc.holdcoOtherCosts[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono ${s.net[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(s.net[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(s.closing[i], 0)}</td>
                         </tr>`;
@@ -6739,13 +6775,19 @@
                             <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono text-slate-500">${fmtDec(mc.revenueAccrued[i], 0)}</td>` : ''}
                             <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
-                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.opex[i], 0)}</td>
-                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.taxes[i], 0)}</td>
-                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.debtService[i], 0)}</td>
-                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(mc.capexOutflow[i], 0)}</td>` : ''}
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.opex[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.taxes[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(-mc.debtService[i], 0)}</td>
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(-mc.capexOutflow[i], 0)}</td>` : ''}
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.fundingInflow[i] > 0 ? 'text-violet-300 font-bold' : 'text-slate-600'}">${fmtDec(mc.fundingInflow[i], 0)}</td>` : ''}
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.vatCollected[i] > 0 ? 'text-emerald-400' : 'text-slate-600'}">${fmtDec(mc.vatCollected[i], 0)}</td>` : ''}
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.vatPaidToSuppliers[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(-mc.vatPaidToSuppliers[i], 0)}</td>` : ''}
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.vatRemitted[i] > 0 ? 'text-rose-400' : 'text-slate-600'}">${fmtDec(-mc.vatRemitted[i], 0)}</td>` : ''}
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.vatCreditEnd[i] > 0 ? 'text-sky-300' : 'text-slate-600'}">${fmtDec(mc.vatCreditEnd[i], 0)}</td>` : ''}
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${(mc.vatCashFlow[i] || 0) < 0 ? 'text-rose-400' : ((mc.vatCashFlow[i] || 0) > 0 ? 'text-emerald-400' : 'text-slate-600')}">${fmtDec(mc.vatCashFlow[i], 0)}</td>` : ''}
                             <td class="px-2 py-1.5 text-right font-mono ${s.net[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(s.net[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(s.closing[i], 0)}</td>
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono font-bold ${(mc.fundedCashClosing[i] || 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(mc.fundedCashClosing[i], 0)}</td>` : ''}
                         </tr>`;
                     }
                 }
@@ -6832,10 +6874,13 @@
                         num(mc.holdcoOtherCosts[i]), num(s.net[i]), num(s.closing[i])].join(';') + '\n';
                 }
             } else if (dated) {
-                csv += 'Mese;Ricavi Maturati;Ricavi Incassati;OPEX;Imposte;Serv. Debito;CAPEX;Net Cashflow;Cassa Finale\n';
+                csv += 'Mese;Ricavi Maturati;Ricavi Incassati;OPEX;Imposte;Serv. Debito;CAPEX;Funding;IVA Incassata;IVA Pagata;IVA Versata;Credito IVA;IVA CF;Net Cashflow;Cassa Finale;Cassa con Funding\n';
                 for (let i = 0; i < mc.months.length; i++) {
                     csv += [mc.labels[i], num(mc.revenueAccrued[i]), num(mc.revenueTotal[i]), num(mc.opex[i]), num(mc.taxes[i]),
-                        num(mc.debtService[i]), num(mc.capexOutflow[i]), num(s.net[i]), num(s.closing[i])].join(';') + '\n';
+                        num(mc.debtService[i]), num(mc.capexOutflow[i]), num(mc.fundingInflow[i]),
+                        num(mc.vatCollected[i]), num(mc.vatPaidToSuppliers[i]), num(mc.vatRemitted[i]),
+                        num(mc.vatCreditEnd[i]), num(mc.vatCashFlow[i]),
+                        num(s.net[i]), num(s.closing[i]), num(mc.fundedCashClosing[i])].join(';') + '\n';
                 }
             } else {
                 csv += 'Mese;Ricavi Tot.;OPEX;Imposte;Serv. Debito;Net Cashflow;Cassa Finale\n';
@@ -9058,7 +9103,7 @@
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', triggerRecalculate);
             });
-            ['input-vat-rate', 'input-vat-taxable-pct',
+            ['vat-rev-rid', 'vat-rev-ppa', 'vat-rev-brp', 'vat-rev-cer', 'vat-rev-ferx',
              'vat-capex-epc-fv', 'vat-capex-epc-bess', 'vat-capex-connection', 'vat-capex-development', 'vat-capex-spv', 'vat-capex-land',
              'vat-opex-om-fv', 'vat-opex-om-bess', 'vat-opex-insurance', 'vat-opex-imu', 'vat-opex-security', 'vat-opex-asset-mgmt'].forEach(id => {
                 const el = document.getElementById(id);
@@ -9073,6 +9118,11 @@
             ['input-vat-settlement'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', triggerRecalculate);
+            });
+            // CF2/CF5: lag di incasso per regime e mese pagamento imposte — ricalcolo in tempo reale
+            ['mc-lag-rid', 'mc-lag-brp', 'mc-lag-cer', 'mc-lag-ferx', 'mc-tax-pay-month'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
             });
             const inputs = [
                 'input-ke-val', 'input-wacc', 'input-inflation', 'input-ires-rate', 'input-irap-rate', 'input-pun-zonal-floor', 'input-pun-bearish-decay-rate', 'input-ts-bearish-decay-rate', 'input-arb-bearish-decay-rate', 'input-dividend-lock',
@@ -9380,7 +9430,9 @@
                     stabilimenti: State.stabilimenti,
                     zonalPun: State.zonalPun,
                     selectedBessPlantIds: State.selectedBessPlantIds,
-                    previouslySeenPlantIds: State.previouslySeenPlantIds
+                    previouslySeenPlantIds: State.previouslySeenPlantIds,
+                    capexPayments: State.capexPaymentsSaved || {},
+                    opexEvents: State.opexEventsSaved || {}
                 },
                 sensitivityConfig: config
             };
@@ -9570,7 +9622,9 @@
                         stabilimenti: State.stabilimenti,
                         zonalPun: State.zonalPun,
                         selectedBessPlantIds: State.selectedBessPlantIds,
-                        previouslySeenPlantIds: State.previouslySeenPlantIds
+                        previouslySeenPlantIds: State.previouslySeenPlantIds,
+                        capexPayments: State.capexPaymentsSaved || {},
+                        opexEvents: State.opexEventsSaved || {}
                     },
                     mcConfig
                 }
@@ -9647,7 +9701,9 @@
                             stabilimenti: State.stabilimenti,
                             zonalPun: State.zonalPun,
                             selectedBessPlantIds: State.selectedBessPlantIds,
-                            previouslySeenPlantIds: State.previouslySeenPlantIds
+                            previouslySeenPlantIds: State.previouslySeenPlantIds,
+                            capexPayments: State.capexPaymentsSaved || {},
+                            opexEvents: State.opexEventsSaved || {}
                         }
                     }
                 });
@@ -10075,10 +10131,13 @@ window.saveBranding = async function() {
 // ═══ CF4: Esborsi CAPEX datati per impianto ═══
 // State.capexPayments: { plantId: [{ date: 'YYYY-MM-DD', amount: n, label: '' }] }
 // Persistenza: chiavi chunkate capexpay::<plantId>::<i> in simulation_config.
+// Save-gate: i calcoli usano SOLO State.capexPaymentsSaved (ultima versione salvata
+// nel database); le righe aggiunte ma non confermate con "Salva esborsi CAPEX"
+// restano visibili in UI ma non entrano nei risultati.
 function loadCapexPaymentsFromRows(rows) {
     const capexRows = rows.filter(r => r.parameter_key && r.parameter_key.startsWith('capexpay::'));
     State.capexPayments = State.capexPayments || {};
-    if (!capexRows.length) { renderCapexPaymentOptions(); return; }
+    if (!capexRows.length) { State.capexPaymentsSaved = JSON.parse(JSON.stringify(State.capexPayments)); renderCapexPaymentOptions(); return; }
     const byPlant = {};
     capexRows.forEach(r => {
         const parts = r.parameter_key.split('::');
@@ -10096,7 +10155,22 @@ function loadCapexPaymentsFromRows(rows) {
             console.warn('[CF4] parse capexpay fallito per', pid, e.message);
         }
     });
+    State.capexPaymentsSaved = JSON.parse(JSON.stringify(State.capexPayments));
     renderCapexPaymentOptions();
+}
+function capexPaymentsDirty() {
+    return JSON.stringify(State.capexPayments || {}) !== JSON.stringify(State.capexPaymentsSaved || {});
+}
+function updateCapexSaveIndicator() {
+    const btn = document.getElementById('capex-save-btn');
+    if (!btn) return;
+    if (capexPaymentsDirty()) {
+        btn.className = 'px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-[10px] transition-colors';
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i>Salva esborsi CAPEX • non salvato';
+    } else {
+        btn.className = 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors';
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i>Salva esborsi CAPEX';
+    }
 }
 
 // ═══ CF11: aliquote IVA per voce di budget (speculare ai criteri del worker) ═══
@@ -10138,6 +10212,94 @@ function vatRatePctForOpexLabel(label) {
     return (p.vatOpexAssetMgmt !== undefined && p.vatOpexAssetMgmt !== null && isFinite(p.vatOpexAssetMgmt)) ? p.vatOpexAssetMgmt : 22;
 }
 
+// ═══ CF11: residuo per voce CAPEX/OPEX selezionata (dell'impianto della riga, dinamico mentre si digita) ═══
+function capexCategoryBudgetEur(label, plant) {
+    if (!plant) return 0;
+    const epcFv = (plant.capacity || 0) * (plant.capex || 0);
+    const epcBess = ((plant.bessMwh || 0) * 1000) * (plant.bessCapexKwh || 0);
+    switch (label) {
+        case 'EPC FV': return epcFv;
+        case 'EPC BESS': return epcBess;
+        case 'Connessione rete': return plant.connectionCost || 0;
+        case 'Sviluppo': return plant.developmentCost || 0;
+        case 'Acquisto SPV': return plant.spvAcquisitionCost || 0;
+        case 'Terreno': return plant.landType === 'dds_annuo' ? 0 : (plant.landCost || 0);
+        default: // "Altro": CAPEX impianto non coperto dalle voci mappate (incl. voci personalizzate)
+            return Math.max(0, (plant.customCapexEur || 0));
+    }
+}
+function opexCategoryBudgetEur(label, plant) {
+    if (!plant) return null;
+    const bessCapex = ((plant.bessMwh || 0) * 1000) * (plant.bessCapexKwh || 0);
+    const omBess = (plant.opexOmBess || 0) > 0 ? plant.opexOmBess : (bessCapex > 0 ? bessCapex * 0.015 : 0);
+    switch (label) {
+        case 'O&M FV': return (plant.opex || 0) + (plant.customOpexEur || 0);
+        case 'O&M BESS': return omBess;
+        case 'Assicurazione': return plant.opexInsurance || 0;
+        case 'IMU / Tasse locali': return plant.opexTaxes || 0;
+        case 'Sicurezza': return plant.opexSecurity || 0;
+        case 'Asset Management': return plant.opexAssetManagement || 0;
+        default: return 0; // "Manutenzione straordinaria"/"Altro": nessuna voce dedicata per impianto
+    }
+}
+function capexAllocatedByLabel(label, pid) {
+    let a = 0;
+    (((State.capexPayments || {})[pid]) || []).forEach(pm => {
+        if ((pm.label || '') === label) a += parseFloat(pm.amount) || 0;
+    });
+    return a;
+}
+function opexAllocatedByLabel(label, pid) {
+    let a = 0;
+    (((State.opexEvents || {})[pid]) || []).forEach(ev => {
+        if ((ev.label || '') === label) a += parseFloat(ev.amount) || 0;
+    });
+    return a;
+}
+function _renderCategoryInfo(box, plantName, label, budget, alloc, typing) {
+    if (!box) return;
+    const fmt = v => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+    if (!plantName) {
+        box.innerHTML = 'Seleziona un impianto per vedere budget, allocato e residuo della voce.';
+        return;
+    }
+    if (budget === null) {
+        box.innerHTML = `Impianto <b class="text-slate-200">${escapeHtml(plantName)}</b> · Voce <b class="text-slate-200">${escapeHtml(label)}</b>: budget non disponibile.`;
+        return;
+    }
+    const totAlloc = alloc + typing;
+    const resid = budget - totAlloc;
+    const cls = resid < 0 ? 'text-rose-400' : (resid <= 0 ? 'text-emerald-400' : 'text-amber-400');
+    box.innerHTML = `Impianto <b class="text-slate-200">${escapeHtml(plantName)}</b> · Voce <b class="text-slate-200">${escapeHtml(label)}</b> · Budget ${fmt(budget)} · Allocato ${fmt(totAlloc)}` +
+        (typing > 0 ? ` <span class="text-slate-500">(include ${fmt(typing)} digitato)</span>` : '') +
+        ` · Residuo <b class="${cls}">${fmt(resid)}</b>` +
+        (resid < 0 ? ' <span class="text-rose-400">(sovra-allocata)</span>' : '');
+}
+window.updateCapexCategoryInfo = function() {
+    const labelEl = document.getElementById('capex-pay-label');
+    const amountEl = document.getElementById('capex-pay-amount');
+    const sel = document.getElementById('capex-plant-select');
+    if (!labelEl) return;
+    const pid = sel ? sel.value : '';
+    const plant = (State.plants || []).find(p => p.id === pid);
+    const label = labelEl.value;
+    const typing = amountEl ? (parseFloat(amountEl.value) || 0) : 0;
+    _renderCategoryInfo(document.getElementById('capex-pay-cat-info'), plant ? plant.name : '', label,
+        plant ? capexCategoryBudgetEur(label, plant) : 0, capexAllocatedByLabel(label, pid), typing);
+};
+window.updateOpexCategoryInfo = function() {
+    const labelEl = document.getElementById('opexev-label');
+    const amountEl = document.getElementById('opexev-amount');
+    const sel = document.getElementById('opexev-plant-select');
+    if (!labelEl) return;
+    const pid = sel ? sel.value : '';
+    const plant = (State.plants || []).find(p => p.id === pid);
+    const label = labelEl.value;
+    const typing = amountEl ? (parseFloat(amountEl.value) || 0) : 0;
+    _renderCategoryInfo(document.getElementById('opexev-cat-info'), plant ? plant.name : '', label,
+        plant ? opexCategoryBudgetEur(label, plant) : null, opexAllocatedByLabel(label, pid), typing);
+};
+
 window.renderCapexPaymentOptions = function() {
     const sel = document.getElementById('capex-plant-select');
     if (!sel) return;
@@ -10145,15 +10307,25 @@ window.renderCapexPaymentOptions = function() {
     const enabledPlants = (State.plants || []).filter(p => p.enabled !== false);
     sel.innerHTML = enabledPlants.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
     if (prev && enabledPlants.some(p => p.id === prev)) sel.value = prev;
+    else {
+        // All'avvio mostra subito il primo impianto che ha esborsi salvati
+        const withRows = enabledPlants.find(p => ((State.capexPayments || {})[p.id] || []).length > 0);
+        if (withRows) sel.value = withRows.id;
+    }
     renderCapexPaymentRows();
 };
 
 window.renderCapexPaymentRows = function() {
     const box = document.getElementById('capex-pay-rows');
     if (!box) return;
+    updateCapexSaveIndicator();
+    updateCapexCategoryInfo();
     const sel = document.getElementById('capex-plant-select');
     const pid = sel ? sel.value : null;
+    // Cambio impianto durante una modifica → annulla la modifica in corso
+    if (State._capexEditing && State._capexEditing.pid !== pid) cancelCapexPaymentEdit(true);
     const list = (pid && State.capexPayments && State.capexPayments[pid]) || [];
+    updateCapexEditModeUI();
     if (!pid) { box.innerHTML = ''; return; }
     if (!list.length) {
         box.innerHTML = '<div class="text-[10px] text-slate-500 italic py-1">Nessun esborso configurato: default = 100% del CAPEX impianto alla data COD.</div>';
@@ -10166,17 +10338,67 @@ window.renderCapexPaymentRows = function() {
         const net = pm.amount || 0;
         const ratePct = vatRatePctForCapexLabel(pm.label, plant);
         const iva = net * ratePct / 100;
+        const isEditing = !!(State._capexEditing && State._capexEditing.pid === pid && State._capexEditing.idx === pm._i);
         return `
-        <div class="flex items-center gap-2 text-[10px] bg-slate-900/50 border border-slate-850 rounded-lg px-2 py-1">
+        <div class="flex items-center gap-2 text-[10px] bg-slate-900/50 border ${isEditing ? 'border-amber-500/70 bg-amber-500/10' : 'border-slate-850 hover:border-slate-600'} rounded-lg px-2 py-1 cursor-pointer" onclick="selectCapexPayment(${pm._i})" title="Clicca per modificare la riga">
             <span class="font-mono text-sky-300 whitespace-nowrap">${escapeHtml(pm.date)}</span>
             <span class="font-mono text-white text-right" title="Importo netto">${fmt0.format(net)}</span>
             <span class="font-mono text-violet-300 whitespace-nowrap" title="Aliquota IVA della voce: ${ratePct.toLocaleString('it-IT', { maximumFractionDigits: 1 })}%">+${fmt0.format(iva)} IVA</span>
             <span class="font-mono text-slate-200 whitespace-nowrap" title="Netto + IVA">${fmt0.format(net + iva)}</span>
             <span class="text-slate-400 truncate flex-1">${escapeHtml(pm.label || '')}</span>
-            <button onclick="removeCapexPayment(${pm._i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi esborso"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="event.stopPropagation(); removeCapexPayment(${pm._i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi esborso"><i class="fa-solid fa-xmark"></i></button>
         </div>`;
     }).join('');
 };
+
+// CF11: edit in linea — clic su una riga → popola l'editor (modificabili solo Data e Importo)
+window.selectCapexPayment = function(idx) {
+    const sel = document.getElementById('capex-plant-select');
+    const pid = sel ? sel.value : null;
+    const list = (pid && State.capexPayments && State.capexPayments[pid]) || [];
+    const row = list[idx];
+    if (!pid || !row) return;
+    State._capexEditing = { pid, idx };
+    const dateEl = document.getElementById('capex-pay-date');
+    const amountEl = document.getElementById('capex-pay-amount');
+    const labelEl = document.getElementById('capex-pay-label');
+    if (dateEl) dateEl.value = row.date || '';
+    if (amountEl) amountEl.value = row.amount;
+    if (labelEl) {
+        if ([...labelEl.options].some(o => o.value === (row.label || ''))) labelEl.value = row.label || '';
+        labelEl.disabled = true;
+    }
+    renderCapexPaymentRows();
+};
+window.cancelCapexPaymentEdit = function(silent) {
+    State._capexEditing = null;
+    const dateEl = document.getElementById('capex-pay-date');
+    const amountEl = document.getElementById('capex-pay-amount');
+    const labelEl = document.getElementById('capex-pay-label');
+    if (dateEl) dateEl.value = '';
+    if (amountEl) amountEl.value = '';
+    if (labelEl) labelEl.disabled = false;
+    if (!silent) renderCapexPaymentRows();
+    else updateCapexEditModeUI();
+};
+function updateCapexEditModeUI() {
+    const banner = document.getElementById('capex-edit-banner');
+    const addBtn = document.getElementById('capex-add-btn');
+    const ed = State._capexEditing;
+    if (banner) {
+        if (ed) {
+            const row = (((State.capexPayments || {})[ed.pid]) || [])[ed.idx];
+            const txt = document.getElementById('capex-edit-banner-text');
+            if (txt) txt.textContent = `Modifica esborso${row ? ' ' + row.date + ' · ' + (row.label || '') : ''} — modificabili solo Data e Importo`;
+            banner.classList.remove('hidden');
+        } else banner.classList.add('hidden');
+    }
+    if (addBtn) {
+        addBtn.title = ed ? 'Aggiorna esborso' : 'Aggiungi esborso';
+        addBtn.innerHTML = ed ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-plus"></i>';
+        addBtn.className = `w-full px-1 py-1 ${ed ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white font-bold rounded text-[11px] transition-colors`;
+    }
+}
 
 window.addCapexPayment = function() {
     const sel = document.getElementById('capex-plant-select');
@@ -10190,39 +10412,81 @@ window.addCapexPayment = function() {
     if (!isFinite(amount) || amount <= 0) { showToast('Importo non valido.', 'warning'); return; }
     State.capexPayments = State.capexPayments || {};
     if (!State.capexPayments[sel.value]) State.capexPayments[sel.value] = [];
+    // Modalità modifica: aggiorna la riga selezionata (data + importo)
+    const ed = State._capexEditing;
+    if (ed && ed.pid === sel.value && State.capexPayments[sel.value][ed.idx]) {
+        State.capexPayments[sel.value][ed.idx] = { ...State.capexPayments[sel.value][ed.idx], date, amount };
+        cancelCapexPaymentEdit();
+        renderCapexPaymentRows();
+        showToast('Esborso aggiornato (non ancora salvato): clicca "Salva esborsi CAPEX" per registrarlo nel database e applicarlo ai calcoli.', 'info');
+        return;
+    }
     State.capexPayments[sel.value].push({ date, amount, label: labelEl ? labelEl.value.trim().substring(0, 60) : '' });
+    if (dateEl) dateEl.value = '';
     if (amountEl) amountEl.value = '';
-    if (labelEl) labelEl.value = '';
     renderCapexPaymentRows();
-    showToast('Esborso aggiunto: salva per persistere e ricalcola per applicarlo al cash flow.', 'info');
+    showToast('Esborso aggiunto (non ancora salvato): clicca "Salva esborsi CAPEX" per registrarlo nel database e applicarlo ai calcoli.', 'info');
 };
 
-window.removeCapexPayment = function(idx) {
+// Persistenza su simulation_config (chiavi chunkate capexpay::<pid>::<i>)
+async function persistCapexPaymentsToDb(payments) {
+    await supabaseClient.from('simulation_config').delete().like('parameter_key', 'capexpay::%');
+    const rows = [];
+    Object.keys(payments || {}).forEach(pid => {
+        const json = JSON.stringify(payments[pid] || []);
+        for (let i = 0; i * 200 < json.length; i++) {
+            rows.push({ parameter_key: 'capexpay::' + pid + '::' + i, parameter_value: json.substring(i * 200, (i + 1) * 200), user_id: currentUserId() });
+        }
+    });
+    if (rows.length) {
+        const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key,user_id' });
+        if (error) throw error;
+    }
+}
+
+window.removeCapexPayment = async function(idx) {
     const sel = document.getElementById('capex-plant-select');
     const pid = sel ? sel.value : null;
-    if (!pid || !State.capexPayments || !State.capexPayments[pid]) return;
-    State.capexPayments[pid].splice(idx, 1);
+    const list = (pid && State.capexPayments && State.capexPayments[pid]) || null;
+    if (!list || !list[idx]) return;
+    const row = list[idx];
+    if (State._capexEditing && State._capexEditing.pid === pid) {
+        if (State._capexEditing.idx === idx) State._capexEditing = null;
+        else if (State._capexEditing.idx > idx) State._capexEditing.idx--;
+    }
+    list.splice(idx, 1);
     renderCapexPaymentRows();
+    // La riga era già salvata nel DB? → persisti la rimozione e ricalcola in tempo reale
+    const savedList = (((State.capexPaymentsSaved || {})[pid]) || []);
+    const sIdx = savedList.findIndex(r => JSON.stringify(r) === JSON.stringify(row));
+    if (sIdx >= 0 && canWrite() && supabaseClient) {
+        savedList.splice(sIdx, 1);
+        const newSaved = { ...(State.capexPaymentsSaved || {}) };
+        if (savedList.length) newSaved[pid] = savedList; else delete newSaved[pid];
+        try {
+            await persistCapexPaymentsToDb(newSaved);
+            State.capexPaymentsSaved = newSaved;
+            updateCapexSaveIndicator();
+            showToast('Esborso (salvato) rimosso dal database: ricalcolo in corso...', 'success');
+            triggerRecalculate();
+        } catch (err) {
+            showToast('Errore rimozione esborso: ' + err.message, 'error');
+        }
+    } else {
+        showToast('Esborso non salvato rimosso.', 'info');
+    }
 };
 
 window.saveCapexPayments = async function() {
     if (!canWrite()) return;
     if (!supabaseClient) { showToast('Database non connesso.', 'warning'); return; }
     try {
-        await supabaseClient.from('simulation_config').delete().like('parameter_key', 'capexpay::%');
-        const rows = [];
-        Object.keys(State.capexPayments || {}).forEach(pid => {
-            const json = JSON.stringify(State.capexPayments[pid] || []);
-            for (let i = 0; i * 200 < json.length; i++) {
-                rows.push({ parameter_key: 'capexpay::' + pid + '::' + i, parameter_value: json.substring(i * 200, (i + 1) * 200), user_id: currentUserId() });
-            }
-        });
-        if (rows.length) {
-            const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key,user_id' });
-            if (error) throw error;
-        }
+        await persistCapexPaymentsToDb(State.capexPayments || {});
+        State.capexPaymentsSaved = JSON.parse(JSON.stringify(State.capexPayments || {}));
         Audit.log('capex.payments.save', Object.keys(State.capexPayments || {}).length + ' impianti');
-        showToast('Esborsi CAPEX salvati.', 'success');
+        showToast('Esborsi CAPEX salvati nel database. Ricalcolo in corso...', 'success');
+        updateCapexSaveIndicator();
+        triggerRecalculate();
     } catch (err) {
         showToast('Errore salvataggio esborsi CAPEX: ' + err.message, 'error');
     }
@@ -10236,7 +10500,7 @@ const MONTHS_IT_SHORT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago',
 function loadOpexEventsFromRows(rows) {
     const opexRows = rows.filter(r => r.parameter_key && r.parameter_key.startsWith('opexev::'));
     State.opexEvents = State.opexEvents || {};
-    if (!opexRows.length) { renderOpexEventOptions(); return; }
+    if (!opexRows.length) { State.opexEventsSaved = JSON.parse(JSON.stringify(State.opexEvents)); renderOpexEventOptions(); return; }
     const byPlant = {};
     opexRows.forEach(r => {
         const parts = r.parameter_key.split('::');
@@ -10254,7 +10518,22 @@ function loadOpexEventsFromRows(rows) {
             console.warn('[CF5] parse opexev fallito per', pid, e.message);
         }
     });
+    State.opexEventsSaved = JSON.parse(JSON.stringify(State.opexEvents));
     renderOpexEventOptions();
+}
+function opexEventsDirty() {
+    return JSON.stringify(State.opexEvents || {}) !== JSON.stringify(State.opexEventsSaved || {});
+}
+function updateOpexSaveIndicator() {
+    const btn = document.getElementById('opexev-save-btn');
+    if (!btn) return;
+    if (opexEventsDirty()) {
+        btn.className = 'px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-[10px] transition-colors';
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i>Salva eventi OPEX • non salvato';
+    } else {
+        btn.className = 'px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors';
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i>Salva eventi OPEX';
+    }
 }
 
 window.renderOpexEventOptions = function() {
@@ -10264,83 +10543,195 @@ window.renderOpexEventOptions = function() {
     const enabledPlants = (State.plants || []).filter(p => p.enabled !== false);
     sel.innerHTML = enabledPlants.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
     if (prev && enabledPlants.some(p => p.id === prev)) sel.value = prev;
+    else {
+        // All'avvio mostra subito il primo impianto che ha eventi salvati
+        const withRows = enabledPlants.find(p => ((State.opexEvents || {})[p.id] || []).length > 0);
+        if (withRows) sel.value = withRows.id;
+    }
     renderOpexEventRows();
 };
 
 window.renderOpexEventRows = function() {
     const box = document.getElementById('opexev-rows');
     if (!box) return;
+    updateOpexSaveIndicator();
+    updateOpexCategoryInfo();
     const sel = document.getElementById('opexev-plant-select');
     const pid = sel ? sel.value : null;
+    // Cambio impianto durante una modifica → annulla la modifica in corso
+    if (State._opexEditing && State._opexEditing.pid !== pid) cancelOpexEventEdit(true);
     const list = (pid && State.opexEvents && State.opexEvents[pid]) || [];
+    updateOpexEditModeUI();
     if (!pid) { box.innerHTML = ''; return; }
     if (!list.length) {
         box.innerHTML = '<div class="text-[10px] text-slate-500 italic py-1">Nessun evento OPEX ricorrente configurato per questo impianto.</div>';
         return;
     }
     const fmt0 = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+    const RULE_LABELS = { sempre: 'Ogni anno', gt_cod: '> COD', lt_cod: '< COD' };
     const sorted = list.map((ev, i) => ({ ...ev, _i: i })).sort((a, b) => (a.month || 0) - (b.month || 0));
     box.innerHTML = sorted.map(ev => {
         const net = ev.amount || 0;
         const ratePct = vatRatePctForOpexLabel(ev.label);
         const iva = net * ratePct / 100;
+        const isEditing = !!(State._opexEditing && State._opexEditing.pid === pid && State._opexEditing.idx === ev._i);
         return `
-        <div class="flex items-center gap-2 text-[10px] bg-slate-900/50 border border-slate-850 rounded-lg px-2 py-1">
+        <div class="flex items-center gap-2 text-[10px] bg-slate-900/50 border ${isEditing ? 'border-amber-500/70 bg-amber-500/10' : 'border-slate-850 hover:border-slate-600'} rounded-lg px-2 py-1 cursor-pointer" onclick="selectOpexEvent(${ev._i})" title="Clicca per modificare la riga">
             <span class="font-mono text-emerald-300 whitespace-nowrap">${MONTHS_IT_SHORT[(ev.month || 1) - 1] || ev.month}</span>
             <span class="font-mono text-white text-right" title="Importo netto annuo">${fmt0.format(net)}</span>
             <span class="font-mono text-violet-300 whitespace-nowrap" title="Aliquota IVA della voce: ${ratePct.toLocaleString('it-IT', { maximumFractionDigits: 1 })}%">+${fmt0.format(iva)} IVA</span>
             <span class="font-mono text-slate-200 whitespace-nowrap" title="Netto + IVA">${fmt0.format(net + iva)}</span>
             <span class="text-slate-400 truncate flex-1">${escapeHtml(ev.label || '')}</span>
-            <button onclick="removeOpexEvent(${ev._i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi evento"><i class="fa-solid fa-xmark"></i></button>
+            <span class="font-mono ${ev.rule === 'gt_cod' || ev.rule === 'lt_cod' ? 'text-amber-300' : 'text-slate-500'} whitespace-nowrap" title="Condizione temporale dell'evento">${RULE_LABELS[ev.rule] || RULE_LABELS.sempre}</span>
+            <button onclick="event.stopPropagation(); removeOpexEvent(${ev._i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi evento"><i class="fa-solid fa-xmark"></i></button>
         </div>`;
     }).join('');
 };
+
+// CF11: edit in linea — clic su una riga → popola l'editor (modificabili solo Mese, Importo e Regola)
+window.selectOpexEvent = function(idx) {
+    const sel = document.getElementById('opexev-plant-select');
+    const pid = sel ? sel.value : null;
+    const list = (pid && State.opexEvents && State.opexEvents[pid]) || [];
+    const row = list[idx];
+    if (!pid || !row) return;
+    State._opexEditing = { pid, idx };
+    const monthEl = document.getElementById('opexev-month');
+    const amountEl = document.getElementById('opexev-amount');
+    const ruleEl = document.getElementById('opexev-rule');
+    const labelEl = document.getElementById('opexev-label');
+    if (monthEl) monthEl.value = String(row.month || '');
+    if (amountEl) amountEl.value = row.amount;
+    if (ruleEl) ruleEl.value = (row.rule === 'gt_cod' || row.rule === 'lt_cod') ? row.rule : 'sempre';
+    if (labelEl) {
+        if ([...labelEl.options].some(o => o.value === (row.label || ''))) labelEl.value = row.label || '';
+        labelEl.disabled = true;
+    }
+    renderOpexEventRows();
+};
+window.cancelOpexEventEdit = function(silent) {
+    State._opexEditing = null;
+    const monthEl = document.getElementById('opexev-month');
+    const amountEl = document.getElementById('opexev-amount');
+    const ruleEl = document.getElementById('opexev-rule');
+    const labelEl = document.getElementById('opexev-label');
+    if (monthEl) monthEl.value = '';
+    if (amountEl) amountEl.value = '';
+    if (ruleEl) ruleEl.value = 'sempre';
+    if (labelEl) labelEl.disabled = false;
+    if (!silent) renderOpexEventRows();
+    else updateOpexEditModeUI();
+};
+function updateOpexEditModeUI() {
+    const banner = document.getElementById('opexev-edit-banner');
+    const addBtn = document.getElementById('opexev-add-btn');
+    const ed = State._opexEditing;
+    if (banner) {
+        if (ed) {
+            const row = (((State.opexEvents || {})[ed.pid]) || [])[ed.idx];
+            const txt = document.getElementById('opexev-edit-banner-text');
+            if (txt) txt.textContent = `Modifica evento${row ? ' ' + (MONTHS_IT_SHORT[(row.month || 1) - 1] || row.month) + ' · ' + (row.label || '') : ''} — modificabili solo Mese, Importo e Regola`;
+            banner.classList.remove('hidden');
+        } else banner.classList.add('hidden');
+    }
+    if (addBtn) {
+        addBtn.title = ed ? 'Aggiorna evento' : 'Aggiungi evento';
+        addBtn.innerHTML = ed ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-plus"></i>';
+        addBtn.className = `w-full px-1 py-1 ${ed ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white font-bold rounded text-[11px] transition-colors`;
+    }
+}
 
 window.addOpexEvent = function() {
     const sel = document.getElementById('opexev-plant-select');
     const monthEl = document.getElementById('opexev-month');
     const amountEl = document.getElementById('opexev-amount');
     const labelEl = document.getElementById('opexev-label');
+    const ruleEl = document.getElementById('opexev-rule');
     if (!sel || !sel.value) { showToast('Seleziona un impianto.', 'warning'); return; }
     const month = monthEl ? parseInt(monthEl.value, 10) : NaN;
     const amount = amountEl ? parseFloat(amountEl.value) : NaN;
+    const ruleVal = ruleEl ? ruleEl.value : 'sempre';
+    const rule = (ruleVal === 'gt_cod' || ruleVal === 'lt_cod') ? ruleVal : 'sempre';
     if (!isFinite(month) || month < 1 || month > 12) { showToast('Seleziona il mese di scadenza.', 'warning'); return; }
     if (!isFinite(amount) || amount <= 0) { showToast('Importo non valido.', 'warning'); return; }
     State.opexEvents = State.opexEvents || {};
     if (!State.opexEvents[sel.value]) State.opexEvents[sel.value] = [];
-    State.opexEvents[sel.value].push({ month, amount, label: labelEl ? labelEl.value.trim().substring(0, 60) : '' });
+    // Modalità modifica: aggiorna la riga selezionata (mese + importo + regola)
+    const ed = State._opexEditing;
+    if (ed && ed.pid === sel.value && State.opexEvents[sel.value][ed.idx]) {
+        State.opexEvents[sel.value][ed.idx] = { ...State.opexEvents[sel.value][ed.idx], month, amount, rule };
+        cancelOpexEventEdit();
+        renderOpexEventRows();
+        showToast('Evento OPEX aggiornato (non ancora salvato): clicca "Salva eventi OPEX" per registrarlo nel database e applicarlo ai calcoli.', 'info');
+        return;
+    }
+    State.opexEvents[sel.value].push({ month, amount, label: labelEl ? labelEl.value.trim().substring(0, 60) : '', rule });
     if (amountEl) amountEl.value = '';
-    if (labelEl) labelEl.value = '';
+    if (monthEl) monthEl.value = '';
+    if (ruleEl) ruleEl.value = 'sempre';
     renderOpexEventRows();
-    showToast('Evento OPEX aggiunto: salva per persistere e ricalcola per applicarlo.', 'info');
+    showToast('Evento OPEX aggiunto (non ancora salvato): clicca "Salva eventi OPEX" per registrarlo nel database e applicarlo ai calcoli.', 'info');
 };
 
-window.removeOpexEvent = function(idx) {
+// Persistenza su simulation_config (chiavi chunkate opexev::<pid>::<i>)
+async function persistOpexEventsToDb(events) {
+    await supabaseClient.from('simulation_config').delete().like('parameter_key', 'opexev::%');
+    const rows = [];
+    Object.keys(events || {}).forEach(pid => {
+        const json = JSON.stringify(events[pid] || []);
+        for (let i = 0; i * 200 < json.length; i++) {
+            rows.push({ parameter_key: 'opexev::' + pid + '::' + i, parameter_value: json.substring(i * 200, (i + 1) * 200), user_id: currentUserId() });
+        }
+    });
+    if (rows.length) {
+        const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key,user_id' });
+        if (error) throw error;
+    }
+}
+
+window.removeOpexEvent = async function(idx) {
     const sel = document.getElementById('opexev-plant-select');
     const pid = sel ? sel.value : null;
-    if (!pid || !State.opexEvents || !State.opexEvents[pid]) return;
-    State.opexEvents[pid].splice(idx, 1);
+    const list = (pid && State.opexEvents && State.opexEvents[pid]) || null;
+    if (!list || !list[idx]) return;
+    const row = list[idx];
+    if (State._opexEditing && State._opexEditing.pid === pid) {
+        if (State._opexEditing.idx === idx) State._opexEditing = null;
+        else if (State._opexEditing.idx > idx) State._opexEditing.idx--;
+    }
+    list.splice(idx, 1);
     renderOpexEventRows();
+    // La riga era già salvata nel DB? → persisti la rimozione e ricalcola in tempo reale
+    const savedList = (((State.opexEventsSaved || {})[pid]) || []);
+    const sIdx = savedList.findIndex(r => JSON.stringify(r) === JSON.stringify(row));
+    if (sIdx >= 0 && canWrite() && supabaseClient) {
+        savedList.splice(sIdx, 1);
+        const newSaved = { ...(State.opexEventsSaved || {}) };
+        if (savedList.length) newSaved[pid] = savedList; else delete newSaved[pid];
+        try {
+            await persistOpexEventsToDb(newSaved);
+            State.opexEventsSaved = newSaved;
+            updateOpexSaveIndicator();
+            showToast('Evento OPEX (salvato) rimosso dal database: ricalcolo in corso...', 'success');
+            triggerRecalculate();
+        } catch (err) {
+            showToast('Errore rimozione evento OPEX: ' + err.message, 'error');
+        }
+    } else {
+        showToast('Evento OPEX non salvato rimosso.', 'info');
+    }
 };
 
 window.saveOpexEvents = async function() {
     if (!canWrite()) return;
     if (!supabaseClient) { showToast('Database non connesso.', 'warning'); return; }
     try {
-        await supabaseClient.from('simulation_config').delete().like('parameter_key', 'opexev::%');
-        const rows = [];
-        Object.keys(State.opexEvents || {}).forEach(pid => {
-            const json = JSON.stringify(State.opexEvents[pid] || []);
-            for (let i = 0; i * 200 < json.length; i++) {
-                rows.push({ parameter_key: 'opexev::' + pid + '::' + i, parameter_value: json.substring(i * 200, (i + 1) * 200), user_id: currentUserId() });
-            }
-        });
-        if (rows.length) {
-            const { error } = await supabaseClient.from('simulation_config').upsert(rows, { onConflict: 'parameter_key,user_id' });
-            if (error) throw error;
-        }
+        await persistOpexEventsToDb(State.opexEvents || {});
+        State.opexEventsSaved = JSON.parse(JSON.stringify(State.opexEvents || {}));
         Audit.log('opex.events.save', Object.keys(State.opexEvents || {}).length + ' impianti');
-        showToast('Eventi OPEX salvati.', 'success');
+        showToast('Eventi OPEX salvati nel database. Ricalcolo in corso...', 'success');
+        updateOpexSaveIndicator();
+        triggerRecalculate();
     } catch (err) {
         showToast('Errore salvataggio eventi OPEX: ' + err.message, 'error');
     }

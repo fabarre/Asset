@@ -499,163 +499,18 @@
                                 <div class="flex justify-between text-[10px] py-0.5 font-bold border-t border-slate-800 mt-1 pt-1"><span class="text-slate-300">Residuo (va al COD)</span><span id="mc-capex-residual" class="font-mono">—</span></div>
                             </div>
                             <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3">
-                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-1.5" title="OPEX Anno 1 dal modello (netto IVA): alloca gli eventi OPEX sui mesi fino a residuo zero (il residuo si spalma /12). IVA calcolata automaticamente per aliquota di categoria.">Budget OPEX Anno 1</div>
+                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-1.5" title="OPEX Anno 1 dal modello (netto IVA). Dichiarato = somma degli eventi salvati; Effettivo Y1 = quota attiva nell'Anno 1 secondo le regole temporali (es. > COD = strettamente dopo la data di COD); il residuo Y1 si spalma /12. IVA calcolata automaticamente per aliquota di categoria.">Budget OPEX Anno 1</div>
                                 <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Totale (netto)</span><span id="mc-opex-budget" class="font-mono text-white">—</span></div>
-                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Allocato (netto)</span><span id="mc-opex-allocated" class="font-mono text-sky-300">—</span></div>
-                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">IVA allocata (auto)</span><span id="mc-opex-vat" class="font-mono text-violet-300">—</span></div>
-                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Lordo allocato</span><span id="mc-opex-gross" class="font-mono text-slate-200">—</span></div>
-                                <div class="flex justify-between text-[10px] py-0.5 font-bold border-t border-slate-800 mt-1 pt-1"><span class="text-slate-300">Residuo (spalm. /12)</span><span id="mc-opex-residual" class="font-mono">—</span></div>
+                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Dichiarato (netto)</span><span id="mc-opex-allocated" class="font-mono text-sky-300">—</span></div>
+                                <div class="flex justify-between text-[10px] py-0.5" title="Quota degli eventi dichiarati effettivamente attiva nell'Anno 1 in base alle regole temporali"><span class="text-slate-400">Effettivo Y1 (con regole)</span><span id="mc-opex-eff" class="font-mono text-sky-300">—</span></div>
+                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">IVA dichiarata (auto)</span><span id="mc-opex-vat" class="font-mono text-violet-300">—</span></div>
+                                <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Lordo dichiarato</span><span id="mc-opex-gross" class="font-mono text-slate-200">—</span></div>
+                                <div class="flex justify-between text-[10px] py-0.5 font-bold border-t border-slate-800 mt-1 pt-1" title="Budget Y1 meno eventi effettivi in Anno 1: questa quota si spalma uniformemente /12"><span class="text-slate-300">Da allocare Y1 (spalm. /12)</span><span id="mc-opex-residual" class="font-mono">—</span></div>
                             </div>
                         </div>
                         <!-- CF10: indicatore IVA di cassa -->
                         <div id="mc-vat-info" class="hidden mb-3 px-3 py-2 rounded-xl border border-violet-500/30 bg-violet-500/10 text-[10px] text-violet-200">
                             <i class="fa-solid fa-percent mr-1"></i><span id="mc-vat-info-text">—</span>
-                        </div>
-                        <div class="mb-3">
-                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Ritardo di incasso per regime di mercato: i ricavi maturati nel mese N dell'impianto sono incassati al mese N+lag. Ogni impianto segue il lag del proprio regime.">Lag di incasso per regime (mesi) <i class="fa-solid fa-circle-info"></i></div>
-                            <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                <div>
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">RID</label>
-                                    <input type="number" id="mc-lag-rid" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                                <div>
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">BRP</label>
-                                    <input type="number" id="mc-lag-brp" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                                <div>
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">CER</label>
-                                    <input type="number" id="mc-lag-cer" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                                <div>
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">FER X</label>
-                                    <input type="number" id="mc-lag-ferx" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                                <div title="Mese di pagamento di IRES/IRAP relative all'anno precedente (saldo)">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Imposte (mese)</label>
-                                    <input type="number" id="mc-tax-pay-month" value="6" min="1" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                            </div>
-                        </div>
-                        <!-- CF10: IVA solo cash flow -->
-                        <div class="mb-3">
-                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="IVA di cassa: a debito sui ricavi incassati, a credito su CAPEX e OPEX pagati, con liquidazione periodica e credito IVA portato a nuovo. Incide SOLO sul timing della cassa (non su P&L né IRR).">IVA nel Cash Flow <i class="fa-solid fa-circle-info"></i></div>
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
-                                <div class="flex items-center gap-2 pb-1.5" title="Abilita/disabilita la modellazione dell'IVA nel cash flow">
-                                    <input type="checkbox" id="input-vat-enabled" checked class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
-                                    <span class="text-[10px] text-slate-300">Abilita IVA</span>
-                                </div>
-                                <div title="Aliquota IVA applicata a ricavi imponibili e acquisti">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Aliquota IVA (%)</label>
-                                    <input type="number" id="input-vat-rate" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                                <div title="Quota dei ricavi soggetta a IVA (es. tariffa incentivante fuori campo IVA)">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Ricavi imponibili IVA (%)</label>
-                                    <input type="number" id="input-vat-taxable-pct" value="100" min="0" max="100" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                                <div title="Frequenza di liquidazione dell'IVA">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Liquidazione</label>
-                                    <select id="input-vat-settlement" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
-                                        <option value="mensile" selected>Mensile</option>
-                                        <option value="trimestrale">Trimestrale</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="mt-2 pt-2 border-t border-slate-800/50">
-                                <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Aliquota IVA per ciascuna voce di spesa (default italiani: EPC/BESS 22%, Terreno e IMU esenti 0%, Assicurazione esente 0%). Le voci personalizzate hanno aliquota propria nella scheda impianto.">Aliquote IVA per voce di spesa (%) <i class="fa-solid fa-circle-info"></i></div>
-                                <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
-                                    <div title="EPC Fotovoltaico"><label class="block text-[8px] text-slate-400 mb-0.5">EPC FV</label><input type="number" id="vat-capex-epc-fv" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="EPC Accumulo (BESS)"><label class="block text-[8px] text-slate-400 mb-0.5">EPC BESS</label><input type="number" id="vat-capex-epc-bess" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="Connessione alla rete"><label class="block text-[8px] text-slate-400 mb-0.5">Connessione</label><input type="number" id="vat-capex-connection" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="Costi di sviluppo"><label class="block text-[8px] text-slate-400 mb-0.5">Sviluppo</label><input type="number" id="vat-capex-development" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="Acquisizione SPV"><label class="block text-[8px] text-slate-400 mb-0.5">SPV</label><input type="number" id="vat-capex-spv" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="Terreno (tipicamente esente IVA)"><label class="block text-[8px] text-slate-400 mb-0.5">Terreno</label><input type="number" id="vat-capex-land" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="O&M Fotovoltaico"><label class="block text-[8px] text-slate-400 mb-0.5">O&M FV</label><input type="number" id="vat-opex-om-fv" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="O&M Accumulo (BESS)"><label class="block text-[8px] text-slate-400 mb-0.5">O&M BESS</label><input type="number" id="vat-opex-om-bess" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="Assicurazione (tipicamente esente IVA)"><label class="block text-[8px] text-slate-400 mb-0.5">Assicurazione</label><input type="number" id="vat-opex-insurance" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="IMU / Tasse locali (fuori campo IVA)"><label class="block text-[8px] text-slate-400 mb-0.5">IMU/Tasse</label><input type="number" id="vat-opex-imu" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="Vigilanza e sicurezza"><label class="block text-[8px] text-slate-400 mb-0.5">Sicurezza</label><input type="number" id="vat-opex-security" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="Gestione amministrativa e Asset Management"><label class="block text-[8px] text-slate-400 mb-0.5">Asset Mgmt</label><input type="number" id="vat-opex-asset-mgmt" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="mb-3 pt-3 border-t border-slate-800/80">
-                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Pagamenti CAPEX con data certa per impianto (anche in anno 0, es. acquisto SPV, tranche EPC). Senza pagamenti configurati: 100% del CAPEX impianto alla data COD.">Esborsi CAPEX datati (per impianto) <i class="fa-solid fa-circle-info"></i></div>
-                            <div class="grid grid-cols-12 gap-2 items-end">
-                                <div class="col-span-4">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Impianto</label>
-                                    <select id="capex-plant-select" onchange="renderCapexPaymentRows()" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"></select>
-                                </div>
-                                <div class="col-span-3">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Data</label>
-                                    <input type="date" id="capex-pay-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                                <div class="col-span-2">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Importo €</label>
-                                    <input type="number" id="capex-pay-amount" min="0" step="1000" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                                <div class="col-span-2">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Voce CAPEX</label>
-                                    <select id="capex-pay-label" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
-                                        <option value="EPC FV">EPC FV</option>
-                                        <option value="EPC BESS">EPC BESS</option>
-                                        <option value="Connessione rete">Connessione rete</option>
-                                        <option value="Sviluppo">Sviluppo</option>
-                                        <option value="Acquisto SPV">Acquisto SPV</option>
-                                        <option value="Terreno">Terreno</option>
-                                        <option value="Altro">Altro</option>
-                                    </select>
-                                </div>
-                                <div class="col-span-1">
-                                    <button onclick="addCapexPayment()" class="w-full px-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] transition-colors" title="Aggiungi esborso"><i class="fa-solid fa-plus"></i></button>
-                                </div>
-                            </div>
-                            <div id="capex-pay-rows" class="mt-2 space-y-1"></div>
-                            <div class="flex justify-end mt-2">
-                                <button onclick="saveCapexPayments()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-floppy-disk mr-1"></i>Salva esborsi CAPEX</button>
-                            </div>
-                        </div>
-                        <div class="mb-3 pt-3 border-t border-slate-800/80">
-                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="OPEX ricorrenti con scadenza mensile per impianto (es. manutenzione, IMU, assicurazione). Gli eventi dichiarati sono allocati sul loro mese; il residuo OPEX annuo non allocato si spalma /12. Le imposte IRES/IRAP dal P&L sono pagate nel mese scelto dell'anno successivo.">Eventi OPEX ricorrenti (per impianto) <i class="fa-solid fa-circle-info"></i></div>
-                            <div class="grid grid-cols-12 gap-2 items-end">
-                                <div class="col-span-4">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Impianto</label>
-                                    <select id="opexev-plant-select" onchange="renderOpexEventRows()" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"></select>
-                                </div>
-                                <div class="col-span-3">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Mese scadenza</label>
-                                    <select id="opexev-month" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                        <option value="">—</option>
-                                        <option value="1">Gen</option><option value="2">Feb</option><option value="3">Mar</option>
-                                        <option value="4">Apr</option><option value="5">Mag</option><option value="6">Giu</option>
-                                        <option value="7">Lug</option><option value="8">Ago</option><option value="9">Set</option>
-                                        <option value="10">Ott</option><option value="11">Nov</option><option value="12">Dic</option>
-                                    </select>
-                                </div>
-                                <div class="col-span-2">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Importo €/anno</label>
-                                    <input type="number" id="opexev-amount" min="0" step="100" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                </div>
-                                <div class="col-span-2">
-                                    <label class="block text-[9px] text-slate-400 mb-0.5">Voce OPEX</label>
-                                    <select id="opexev-label" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
-                                        <option value="O&M FV">O&M FV</option>
-                                        <option value="O&M BESS">O&M BESS</option>
-                                        <option value="Assicurazione">Assicurazione</option>
-                                        <option value="IMU / Tasse locali">IMU / Tasse locali</option>
-                                        <option value="Sicurezza">Sicurezza</option>
-                                        <option value="Asset Management">Asset Management</option>
-                                        <option value="Manutenzione straordinaria">Manutenzione straordinaria</option>
-                                        <option value="Altro">Altro</option>
-                                    </select>
-                                </div>
-                                <div class="col-span-1">
-                                    <button onclick="addOpexEvent()" class="w-full px-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] transition-colors" title="Aggiungi evento"><i class="fa-solid fa-plus"></i></button>
-                                </div>
-                            </div>
-                            <div id="opexev-rows" class="mt-2 space-y-1"></div>
-                            <div class="flex justify-end mt-2">
-                                <button onclick="saveOpexEvents()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-floppy-disk mr-1"></i>Salva eventi OPEX</button>
-                            </div>
                         </div>
                         <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                             <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Cassa minima cumulata SENZA considerare i flussi in entrata di equity/soci/debito (fabbisogno lordo)">
@@ -1645,6 +1500,201 @@
                         Nello <strong>Scenario Ribassista con Floor</strong>, i prezzi PUN orari degli anni 2-20 decrescono annualmente in base al tasso specificato. Se il PUN medio ponderato sull'energia immessa netta (al netto di BESS e autoconsumo) scende sotto il floor impostato, viene applicato un fattore di scala compensativo per garantire che la media ponderata annuale rimanga esattamente al valore del floor. I ricavi da RID, arbitraggio e time shifting del BESS si adegueranno proporzionalmente.
                     </p>
                 </div>
+            </div>
+
+            <!-- Cash Flow Mensile — Configurazione (input spostati dalla Dashboard: la Dashboard resta in sola consultazione) -->
+            <div class="bg-[#0b0f19] border border-slate-850 p-5 rounded-2xl shadow-xl">
+                <div class="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
+                    <h3 class="font-bold text-white text-xs tracking-wide uppercase"><i class="fa-solid fa-calendar-days text-emerald-400 mr-1.5"></i>Cash Flow Mensile &mdash; Configurazione</h3>
+                    <span class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Lag incasso &middot; IVA &middot; Esborsi CAPEX &middot; Eventi OPEX</span>
+                </div>
+                <!-- CF11: indici budget CAPEX/OPEX (valori dai risultati del worker) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3">
+                        <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-1.5" title="Budget CAPEX dal modello (netto IVA): totale, quota allocata con esborsi datati salvati, IVA e lordo automatici per aliquota di categoria, residuo collocato al COD.">Indice Budget CAPEX</div>
+                        <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Totale (netto)</span><span id="fin-capex-total" class="font-mono text-white">—</span></div>
+                        <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Allocato (netto)</span><span id="fin-capex-alloc" class="font-mono text-sky-300">—</span></div>
+                        <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">IVA allocata (auto)</span><span id="fin-capex-vat" class="font-mono text-violet-300">—</span></div>
+                        <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Lordo allocato</span><span id="fin-capex-gross" class="font-mono text-slate-200">—</span></div>
+                        <div class="flex justify-between text-[10px] py-0.5 font-bold border-t border-slate-800 mt-1 pt-1"><span class="text-slate-300">Da allocare (va al COD)</span><span id="fin-capex-resid" class="font-mono">—</span></div>
+                    </div>
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3">
+                        <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-1.5" title="Budget OPEX Anno 1 dal modello (netto IVA). Dichiarato = somma degli eventi salvati; Effettivo Y1 = quota degli eventi attiva nell'Anno 1 secondo le regole temporali (es. > COD = strettamente dopo la data di COD); il residuo Y1 si spalma /12.">Indice Budget OPEX Anno 1</div>
+                        <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Totale (netto)</span><span id="fin-opex-total" class="font-mono text-white">—</span></div>
+                        <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Dichiarato (netto)</span><span id="fin-opex-alloc" class="font-mono text-sky-300">—</span></div>
+                        <div class="flex justify-between text-[10px] py-0.5" title="Quota degli eventi dichiarati effettivamente attiva nell'Anno 1 in base alle regole temporali"><span class="text-slate-400">Effettivo Y1 (con regole)</span><span id="fin-opex-eff" class="font-mono text-sky-300">—</span></div>
+                        <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">IVA dichiarata (auto)</span><span id="fin-opex-vat" class="font-mono text-violet-300">—</span></div>
+                        <div class="flex justify-between text-[10px] py-0.5"><span class="text-slate-400">Lordo dichiarato</span><span id="fin-opex-gross" class="font-mono text-slate-200">—</span></div>
+                        <div class="flex justify-between text-[10px] py-0.5 font-bold border-t border-slate-800 mt-1 pt-1" title="Budget Y1 meno eventi effettivi in Anno 1: questa quota si spalma uniformemente /12"><span class="text-slate-300">Da allocare Y1 (spalm. /12)</span><span id="fin-opex-resid" class="font-mono">—</span></div>
+                    </div>
+                </div>
+                        <div class="mb-3">
+                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Ritardo di incasso per regime di mercato: i ricavi maturati nel mese N dell'impianto sono incassati al mese N+lag. Ogni impianto segue il lag del proprio regime.">Lag di incasso per regime (mesi) <i class="fa-solid fa-circle-info"></i></div>
+                            <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                <div>
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">RID</label>
+                                    <input type="number" id="mc-lag-rid" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">BRP</label>
+                                    <input type="number" id="mc-lag-brp" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">CER</label>
+                                    <input type="number" id="mc-lag-cer" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">FER X</label>
+                                    <input type="number" id="mc-lag-ferx" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div title="Mese di pagamento di IRES/IRAP relative all'anno precedente (saldo)">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Imposte (mese)</label>
+                                    <input type="number" id="mc-tax-pay-month" value="6" min="1" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                            </div>
+                        </div>
+                        <!-- CF10/CF11: IVA di cassa — meccanismo, aliquota sui ricavi per regime, aliquote per voce di spesa -->
+                        <div class="mb-3">
+                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="IVA di cassa (solo timing di cassa, non tocca P&L né IRR): a DEBITO sui ricavi incassati con aliquota per regime di mercato; a CREDITO su CAPEX e OPEX pagati con le aliquote per voce di spesa qui sotto; liquidazione periodica con credito IVA portato a nuovo.">IVA di cassa nel Cash Flow <i class="fa-solid fa-circle-info"></i></div>
+                            <div class="grid grid-cols-2 gap-2 items-end">
+                                <div class="flex items-center gap-2 pb-1.5" title="Abilita/disabilita la modellazione dell'IVA nel cash flow">
+                                    <input type="checkbox" id="input-vat-enabled" checked class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
+                                    <span class="text-[10px] text-slate-300">Abilita IVA</span>
+                                </div>
+                                <div title="Frequenza di liquidazione dell'IVA">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Liquidazione</label>
+                                    <select id="input-vat-settlement" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
+                                        <option value="mensile" selected>Mensile</option>
+                                        <option value="trimestrale">Trimestrale</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-slate-800/50">
+                                <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Aliquota IVA a DEBITO applicata ai ricavi incassati, per regime di mercato. Reverse charge (RID GSE, PPA on-site, operazioni BRP): l'IVA è assolta dalla controparte, la SPV non incassa IVA → 0%. Corrispettivi CER soggetti a IVA 22%.">IVA sui ricavi per regime (%) <i class="fa-solid fa-circle-info"></i></div>
+                                <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                    <div title="Ritiro Dedicato GSE: regime di reverse charge → IVA 0% a debito per la SPV"><label class="block text-[8px] text-slate-400 mb-0.5">RID GSE</label><input type="number" id="vat-rev-rid" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="PPA on-site (cessione al cliente): regime di reverse charge → IVA 0% a debito per la SPV"><label class="block text-[8px] text-slate-400 mb-0.5">PPA on-site</label><input type="number" id="vat-rev-ppa" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Ricavi di mercato via BRP (arbitraggio, time-shifting): reverse charge → IVA 0% a debito per la SPV"><label class="block text-[8px] text-slate-400 mb-0.5">BRP (Arb/TS)</label><input type="number" id="vat-rev-brp" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Corrispettivi incassati in regime CER (incentivo GSE + PPA CER): soggetti a IVA 22%"><label class="block text-[8px] text-slate-400 mb-0.5">CER</label><input type="number" id="vat-rev-cer" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Impianti FER X: tariffa sul mercato; default reverse charge 0% (modificabile)"><label class="block text-[8px] text-slate-400 mb-0.5">FER X</label><input type="number" id="vat-rev-ferx" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                </div>
+                                <p class="text-[9px] text-slate-500 mt-1.5 leading-snug">Reverse charge = l'IVA è assolta dalla controparte (GSE/cliente/BRP): la SPV non incassa IVA a debito (0%). Solo i corrispettivi CER generano IVA a debito (22% di default).</p>
+                            </div>
+                            <div class="mt-2 pt-2 border-t border-slate-800/50">
+                                <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Aliquota IVA a CREDITO per ciascuna voce di spesa (default italiani: EPC/BESS 22%, Terreno e IMU esenti 0%, Assicurazione esente 0%). Le voci personalizzate hanno aliquota propria nella scheda impianto.">Aliquote IVA per voce di spesa — credito su CAPEX/OPEX (%) <i class="fa-solid fa-circle-info"></i></div>
+                                <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+                                    <div title="EPC Fotovoltaico"><label class="block text-[8px] text-slate-400 mb-0.5">EPC FV</label><input type="number" id="vat-capex-epc-fv" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="EPC Accumulo (BESS)"><label class="block text-[8px] text-slate-400 mb-0.5">EPC BESS</label><input type="number" id="vat-capex-epc-bess" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Connessione alla rete"><label class="block text-[8px] text-slate-400 mb-0.5">Connessione</label><input type="number" id="vat-capex-connection" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Costi di sviluppo"><label class="block text-[8px] text-slate-400 mb-0.5">Sviluppo</label><input type="number" id="vat-capex-development" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Acquisizione SPV"><label class="block text-[8px] text-slate-400 mb-0.5">SPV</label><input type="number" id="vat-capex-spv" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Terreno (tipicamente esente IVA)"><label class="block text-[8px] text-slate-400 mb-0.5">Terreno</label><input type="number" id="vat-capex-land" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="O&M Fotovoltaico"><label class="block text-[8px] text-slate-400 mb-0.5">O&M FV</label><input type="number" id="vat-opex-om-fv" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="O&M Accumulo (BESS)"><label class="block text-[8px] text-slate-400 mb-0.5">O&M BESS</label><input type="number" id="vat-opex-om-bess" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Assicurazione (tipicamente esente IVA)"><label class="block text-[8px] text-slate-400 mb-0.5">Assicurazione</label><input type="number" id="vat-opex-insurance" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="IMU / Tasse locali (fuori campo IVA)"><label class="block text-[8px] text-slate-400 mb-0.5">IMU/Tasse</label><input type="number" id="vat-opex-imu" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Vigilanza e sicurezza"><label class="block text-[8px] text-slate-400 mb-0.5">Sicurezza</label><input type="number" id="vat-opex-security" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Gestione amministrativa e Asset Management"><label class="block text-[8px] text-slate-400 mb-0.5">Asset Mgmt</label><input type="number" id="vat-opex-asset-mgmt" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3 pt-3 border-t border-slate-800/80">
+                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Pagamenti CAPEX con data certa per impianto (anche in anno 0, es. acquisto SPV, tranche EPC). Senza pagamenti configurati: 100% del CAPEX impianto alla data COD. Clicca una riga per modificarla.">Esborsi CAPEX datati (per impianto) <i class="fa-solid fa-circle-info"></i></div>
+                            <div id="capex-edit-banner" class="hidden mb-2 px-2 py-1 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[10px] font-bold flex items-center justify-between">
+                                <span id="capex-edit-banner-text" class="text-amber-300">Modifica riga</span>
+                                <button onclick="cancelCapexPaymentEdit()" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-bold" title="Annulla modifica"><i class="fa-solid fa-xmark mr-0.5"></i>Annulla</button>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2 items-end">
+                                <div class="col-span-4">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Impianto</label>
+                                    <select id="capex-plant-select" onchange="renderCapexPaymentRows()" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"></select>
+                                </div>
+                                <div class="col-span-3">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Data</label>
+                                    <input type="date" id="capex-pay-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Importo €</label>
+                                    <input type="number" id="capex-pay-amount" min="0" step="1000" oninput="updateCapexCategoryInfo()" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Voce CAPEX</label>
+                                    <select id="capex-pay-label" onchange="updateCapexCategoryInfo()" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
+                                        <option value="EPC FV">EPC FV</option>
+                                        <option value="EPC BESS">EPC BESS</option>
+                                        <option value="Connessione rete">Connessione rete</option>
+                                        <option value="Sviluppo">Sviluppo</option>
+                                        <option value="Acquisto SPV">Acquisto SPV</option>
+                                        <option value="Terreno">Terreno</option>
+                                        <option value="Altro">Altro</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-1">
+                                    <button id="capex-add-btn" onclick="addCapexPayment()" class="w-full px-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] transition-colors" title="Aggiungi esborso"><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                            </div>
+                            <div id="capex-pay-cat-info" class="mt-1.5 text-[10px] text-slate-400 bg-slate-950/60 border border-slate-800/60 rounded-lg px-2 py-1"></div>
+                            <div id="capex-pay-rows" class="mt-2 space-y-1"></div>
+                            <div class="flex justify-end mt-2">
+                                <button id="capex-save-btn" onclick="saveCapexPayments()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-floppy-disk mr-1"></i>Salva esborsi CAPEX</button>
+                            </div>
+                        </div>
+                        <div class="mb-3 pt-3 border-t border-slate-800/80">
+                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="OPEX ricorrenti con scadenza mensile per impianto (es. manutenzione, IMU, assicurazione). Gli eventi dichiarati sono allocati sul loro mese; il residuo OPEX annuo non allocato si spalma /12. Le imposte IRES/IRAP dal P&L sono pagate nel mese scelto dell'anno successivo. Regola: definisce da quando vale il costo (es. > COD = primo addebito nel primo mese utile dopo la data di COD: spesa con scadenza nel mese del COD slitta all'anno dopo). Clicca una riga per modificarla.">Eventi OPEX ricorrenti (per impianto) <i class="fa-solid fa-circle-info"></i></div>
+                            <div id="opexev-edit-banner" class="hidden mb-2 px-2 py-1 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[10px] font-bold flex items-center justify-between">
+                                <span id="opexev-edit-banner-text" class="text-amber-300">Modifica riga</span>
+                                <button onclick="cancelOpexEventEdit()" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-bold" title="Annulla modifica"><i class="fa-solid fa-xmark mr-0.5"></i>Annulla</button>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2 items-end">
+                                <div class="col-span-3">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Impianto</label>
+                                    <select id="opexev-plant-select" onchange="renderOpexEventRows()" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"></select>
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Mese scadenza</label>
+                                    <select id="opexev-month" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                        <option value="">—</option>
+                                        <option value="1">Gen</option><option value="2">Feb</option><option value="3">Mar</option>
+                                        <option value="4">Apr</option><option value="5">Mag</option><option value="6">Giu</option>
+                                        <option value="7">Lug</option><option value="8">Ago</option><option value="9">Set</option>
+                                        <option value="10">Ott</option><option value="11">Nov</option><option value="12">Dic</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Importo €/anno</label>
+                                    <input type="number" id="opexev-amount" min="0" step="100" oninput="updateOpexCategoryInfo()" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Voce OPEX</label>
+                                    <select id="opexev-label" onchange="updateOpexCategoryInfo()" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
+                                        <option value="O&M FV">O&M FV</option>
+                                        <option value="O&M BESS">O&M BESS</option>
+                                        <option value="Assicurazione">Assicurazione</option>
+                                        <option value="IMU / Tasse locali">IMU / Tasse locali</option>
+                                        <option value="Sicurezza">Sicurezza</option>
+                                        <option value="Asset Management">Asset Management</option>
+                                        <option value="Manutenzione straordinaria">Manutenzione straordinaria</option>
+                                        <option value="Altro">Altro</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-2" title="Condizione temporale: quando inizia a valere il costo. Sempre = ogni anno; > COD = strettamente dopo la data di COD (una spesa con scadenza nel mese del COD slitta all'anno successivo); < COD = solo i mesi solari strettamente precedenti il mese di COD.">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Regola</label>
+                                    <select id="opexev-rule" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
+                                        <option value="sempre" selected>Sempre (ogni anno)</option>
+                                        <option value="gt_cod">&gt; COD</option>
+                                        <option value="lt_cod">&lt; COD</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-1">
+                                    <button id="opexev-add-btn" onclick="addOpexEvent()" class="w-full px-1 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[11px] transition-colors" title="Aggiungi evento"><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                            </div>
+                            <div id="opexev-cat-info" class="mt-1.5 text-[10px] text-slate-400 bg-slate-950/60 border border-slate-800/60 rounded-lg px-2 py-1"></div>
+                            <div id="opexev-rows" class="mt-2 space-y-1"></div>
+                            <div class="flex justify-end mt-2">
+                                <button id="opexev-save-btn" onclick="saveOpexEvents()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-floppy-disk mr-1"></i>Salva eventi OPEX</button>
+                            </div>
+                        </div>
             </div>
         </div>
         
@@ -3529,7 +3579,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=29"></script>
+    <script src="./src/main.js?v=37"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

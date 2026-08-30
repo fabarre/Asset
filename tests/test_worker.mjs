@@ -564,8 +564,8 @@ check('Contatori budget CAPEX (CF9)', mc25.capexAllocated === 4500000 && Math.ab
 check('Il net del mese include gli esborsi CAPEX', Math.abs((mc25.revenueTotal[9] - mc25.opex[9] - mc25.taxes[9] - mc25.debtService[9] - 500000) - mc25.netCashflow[9]) < 1e-6);
 check('Nessun CAPEX prima dell\'orizzonte', mc25.capexBeforeHorizon === 0);
 
-// ── Test 26: OPEX modello budget — eventi allocati + residuo /12, imposte Y+1 (CF9) ──
-console.log('\n[Test 26] OPEX budget: evento manutenzione mar, residuo spalmato /12, imposte a giu Y+1');
+// ── Test 26: OPEX cash flow = solo eventi reali dichiarati, imposte Y+1 (CF9/CF11) ──
+console.log('\n[Test 26] OPEX: evento manutenzione mar (nessuna spalmatura), imposte a giu Y+1');
 const opexEv26 = { pA: [{ month: 3, amount: 30000, label: 'Manutenzione' }] };
 const r26 = run(buildState({
     inputs: { collectionLagRid: 0, taxPaymentMonth: 6 },
@@ -575,16 +575,15 @@ const r26 = run(buildState({
 }), null, opexEv26);
 const mc26 = r26.monthlyCashflow;
 const opexTotY1 = r26.matrix.opexTotal[0] || 0;
-const opexTotY2 = r26.matrix.opexTotal[1] || 0;
 const resid26Y1 = Math.max(0, opexTotY1 - 30000);
-const resid26Y2 = Math.max(0, opexTotY2 - 30000);
 // indici: mar-2027=14, giu-2027=17, mar-2028=26, giu-2028=29
-check('Evento mar-2027 = 30.000 + residuo Y1/12', Math.abs(mc26.opex[14] - (30000 + resid26Y1 / 12)) < 1e-6, `got=${mc26.opex[14].toFixed(2)}`);
-check('Mese senza eventi (giu-2027) = solo residuo Y1/12', Math.abs(mc26.opex[17] - resid26Y1 / 12) < 1e-6);
-check('Evento mar-2028 = 30.000 + residuo Y2/12', Math.abs(mc26.opex[26] - (30000 + resid26Y2 / 12)) < 1e-6, `got=${mc26.opex[26].toFixed(2)}`);
+check('Evento mar-2027 = 30.000 (solo uscita reale)', Math.abs(mc26.opex[14] - 30000) < 1e-6, `got=${mc26.opex[14].toFixed(2)}`);
+check('Mese senza eventi (giu-2027) = 0 (nessuna spalmatura)', mc26.opex[17] === 0);
+check('Evento mar-2028 ricorrente = 30.000', Math.abs(mc26.opex[26] - 30000) < 1e-6, `got=${mc26.opex[26].toFixed(2)}`);
 const sumOpexY1 = mc26.opex.slice(12, 24).reduce((a, b) => a + b, 0);
-check('Conservazione OPEX anno 1 (Σ 12 mesi = opexTotal)', Math.abs(sumOpexY1 - opexTotY1) < 1e-3, `sum=${sumOpexY1.toFixed(0)} tot=${opexTotY1.toFixed(0)}`);
-check('Contatori budget OPEX (CF9)', mc26.opexBudgetY1 === opexTotY1 && mc26.opexAllocated === 30000 && Math.abs(mc26.opexResidual - resid26Y1) < 1e-6,
+check('OPEX cassa anno 1 = soli eventi dichiarati (30.000)', Math.abs(sumOpexY1 - 30000) < 1e-3, `sum=${sumOpexY1.toFixed(0)}`);
+check('Contatori copertura OPEX (informativi, non generano cassa)', mc26.opexBudgetY1 === opexTotY1 && mc26.opexAllocated === 30000 &&
+    Math.abs(mc26.opexResidual - resid26Y1) < 1e-6 && mc26.opexAllocatedY1 === 30000,
     `budget=${mc26.opexBudgetY1} alloc=${mc26.opexAllocated} resid=${mc26.opexResidual}`);
 check('Imposte anno 1 pagate a giu-2028 (non a giu-2027)', mc26.taxes[17] === 0 && Math.abs(mc26.taxes[29] - (r26.matrix.currentTaxesSpv[0] || 0)) < 1e-6);
 check('Imposte anno 5 oltre orizzonte tracciate', Math.abs(mc26.taxesAfterHorizon - (r26.matrix.currentTaxesSpv[4] || 0)) < 1e-6);
@@ -602,13 +601,19 @@ const mc27 = r27.monthlyCashflow;
 check('Array Holding presenti (72 mesi)', mc27.holdcoNetCashflow.length === 72 && mc27.holdcoCashClosing.length === 72);
 check('Anno 0: nessun servizio soci/PD/oneri HoldCo', mc27.holdcoSociService.slice(0, 12).every(v => v === 0) &&
     mc27.holdcoPdService.slice(0, 12).every(v => v === 0) && mc27.holdcoOtherCosts.slice(0, 12).every(v => v === 0));
-// giu-2028 (idx 29): holdcoNet = spvNet - sociM - pdM - otherM
+// giu-2028 (idx 29): holdcoNet = spvNet - sociSvc(dato) - pdSvc(dato) - otherM
 const i27 = 29;
-const sociM27 = ((r27.debtSchedule.interestPaidSoci[1] || 0) + (r27.debtSchedule.principalPaidSoci[1] || 0)) / 12;
-const pdM27 = ((r27.matrix.pdInterestPaid[1] || 0) + (r27.matrix.pdPrincipalPaid[1] || 0) + (r27.matrix.pdBulletPayoff[1] || 0)) / 12;
+const sociM27 = mc27.sociService[i27];
+const pdM27 = mc27.pdService[i27];
 const otherM27 = ((r27.matrix.holdcoEarnoutPaid[1] || 0) + (r27.matrix.holdcoOpex[1] || 0) +
     (r27.matrix.holdcoIresTaxPaid[1] || 0) + (r27.matrix.holdcoIrapTaxPaid[1] || 0)) / 12;
-check('Netto Holding = SPV − soci − PD − oneri HoldCo (giu-2028)', Math.abs(mc27.holdcoNetCashflow[i27] - (mc27.netCashflow[i27] - sociM27 - pdM27 - otherM27)) < 1e-6);
+check('Netto Holding = SPV − soci (datato) − PD (datato) − oneri HoldCo (giu-2028)', Math.abs(mc27.holdcoNetCashflow[i27] - (mc27.netCashflow[i27] - sociM27 - pdM27 - otherM27)) < 1e-6);
+check('Servizio soci datato: parte dalla data finanziamento (non prima)', (() => {
+    // sociIdx = primo mese CAPEX (default senza date funding) → nessun servizio soci nei mesi precedenti
+    let firstSoci = mc27.sociService.findIndex(v => v > 0);
+    if (firstSoci === -1) return true; // cassa mai sufficiente: comunque coerente
+    return mc27.sociService.slice(0, firstSoci).every(v => v === 0);
+})());
 check('Identità di cassa Holding sui 72 mesi', (() => {
     for (let i = 0; i < 72; i++) {
         if (Math.abs((mc27.holdcoCashOpening[i] + mc27.holdcoNetCashflow[i]) - mc27.holdcoCashClosing[i]) > 1e-6) return false;
@@ -634,8 +639,10 @@ check('CAPEX personalizzato entra nel costo progetto (+100.000)', Math.abs((r28b
     `Δ=${(r28b.totalProjectCost - r28a.totalProjectCost).toFixed(0)}`);
 check('OPEX personalizzato entra in EBITDA anno 1 (−50.000)', Math.abs((r28b.matrix.ebitda[0] - r28a.matrix.ebitda[0]) + 50000) < 1e-6,
     `Δ=${(r28b.matrix.ebitda[0] - r28a.matrix.ebitda[0]).toFixed(0)}`);
-check('OPEX personalizzato nel cash flow mensile (+50.000/12 al mese da gen-2027)', Math.abs((r28b.monthlyCashflow.opex[12] - r28a.monthlyCashflow.opex[12]) - 50000 / 12) < 1e-6,
-    `Δ=${(r28b.monthlyCashflow.opex[12] - r28a.monthlyCashflow.opex[12]).toFixed(2)}`);
+check('OPEX personalizzato nel budget Y1 ma non genera cassa senza eventi dichiarati',
+    Math.abs((r28b.monthlyCashflow.opex[12] - r28a.monthlyCashflow.opex[12])) < 1e-6 &&
+    Math.abs((r28b.monthlyCashflow.opexBudgetY1 - r28a.monthlyCashflow.opexBudgetY1) - 50000) < 1e-6,
+    `Δcassa=${(r28b.monthlyCashflow.opex[12] - r28a.monthlyCashflow.opex[12]).toFixed(2)} Δbudget=${(r28b.monthlyCashflow.opexBudgetY1 - r28a.monthlyCashflow.opexBudgetY1).toFixed(0)}`);
 check('Totali esposti nei risultati', r28b.totalCustomCapex === 100000 && r28b.totalCustomOpex === 50000);
 
 // ── Test 29: date di funding + cassa finanziata + XIRR datato (CF8) ──
@@ -703,16 +710,16 @@ check('Contatori budget: IVA allocata CAPEX (0% vs 22%)', Math.abs(mc31a.capexVa
 check('Lordo allocato CAPEX = netto + IVA', Math.abs(mc31b.capexGrossAllocated - (mc31b.capexAllocated + mc31b.capexVatAllocated)) < 1e-6);
 check('Eventi OPEX: IMU 0% + Sicurezza 22% → IVA allocata 2.200', Math.abs(mc31a.opexVatAllocated - 2200) < 1e-6 && Math.abs(mc31a.opexGrossAllocated - 22200) < 1e-6,
     `vat=${mc31a.opexVatAllocated} gross=${mc31a.opexGrossAllocated}`);
-// Identità CF11 al mese di COD (idx 16): residuo CAPEX × blend impianto + residuo OPEX/12 × blend OPEX
+// Identità CF11 al mese di COD (idx 16): residuo CAPEX × blend impianto (nessun evento OPEX a maggio)
 const base31 = 8000 * 700 + 100000;
 const residCapex31 = base31 - 1000000;
 const blendCapex31a = (5600000 * 0.22 + 100000 * 0.10) / base31;
-const opexTot31 = r31a.matrix.opexTotal[0];
-const residOpex31 = Math.max(0, opexTot31 - 20000);
-const blendOpex31 = ((opexTot31 - 12000) * 0.22 + 12000 * 0.04) / opexTot31;
-check('VAT pagata al COD = residuo×blend impianto + residuo OPEX/12×blend OPEX',
-    Math.abs(mc31a.vatPaidToSuppliers[16] - (residCapex31 * blendCapex31a + (residOpex31 / 12) * blendOpex31)) < 1e-3,
-    `got=${mc31a.vatPaidToSuppliers[16].toFixed(0)} exp=${(residCapex31 * blendCapex31a + (residOpex31 / 12) * blendOpex31).toFixed(0)}`);
+check('VAT pagata al COD = residuo CAPEX × blend impianto (OPEX = solo eventi reali)',
+    Math.abs(mc31a.vatPaidToSuppliers[16] - residCapex31 * blendCapex31a) < 1e-3,
+    `got=${mc31a.vatPaidToSuppliers[16].toFixed(0)} exp=${(residCapex31 * blendCapex31a).toFixed(0)}`);
+check('IVA eventi OPEX nel loro mese: giu = IMU 0%, lug = Sicurezza 22%',
+    Math.abs(mc31a.vatPaidToSuppliers[17] - 0) < 1e-6 && Math.abs(mc31a.vatPaidToSuppliers[18] - 2200) < 1e-6,
+    `giu=${mc31a.vatPaidToSuppliers[17].toFixed(0)} lug=${mc31a.vatPaidToSuppliers[18].toFixed(0)}`);
 // Voce personalizzata con vat_rate 10 vs 22: il Δ sul credito IVA al COD = residuo/base × 100.000 × 12%
 const r31c = run(buildState({ inputs: vatAllButConn, plants: plants31(false) }), capexPay31, opexEv31);
 const mc31c = r31c.monthlyCashflow;
@@ -726,6 +733,181 @@ check('Identità IVA mensile ancora valida (CF11)', (() => {
     }
     return true;
 })());
+
+// ── Test 32: regole temporali eventi OPEX — > COD e < COD (CF11) ──
+console.log('\n[Test 32] Regole temporali eventi OPEX: > COD attiva solo i mesi dopo il COD, < COD solo prima');
+const plants32 = () => ([{
+    id: 'pA', name: 'Impianto A', capacity: 8000, zone: 'NORD', opex: 120000, enabled: true,
+    generation: gen24a, codDate: '2027-05-15', ...plantNoBess24
+}]);
+const r32gt = run(buildState({ inputs: { collectionLagRid: 0 }, plants: plants32() }), null,
+    { pA: [{ month: 3, amount: 30000, label: 'Sicurezza', rule: 'gt_cod' }] });
+const r32lt = run(buildState({ inputs: { collectionLagRid: 0 }, plants: plants32() }), null,
+    { pA: [{ month: 3, amount: 30000, label: 'Sicurezza', rule: 'lt_cod' }] });
+const mc32gt = r32gt.monthlyCashflow, mc32lt = r32lt.monthlyCashflow;
+// COD mag-2027 → mar-2027 (idx 14) è PRIMA del COD, mar-2028 (idx 26) è DOPO
+check('gt_cod: mar-2027 inattivo → OPEX 0 (nessuna spalmatura)', mc32gt.opex[14] === 0,
+    `got=${mc32gt.opex[14].toFixed(2)}`);
+check('gt_cod: mar-2028 attivo → OPEX = solo evento 30.000', Math.abs(mc32gt.opex[26] - 30000) < 1e-6,
+    `got=${mc32gt.opex[26].toFixed(2)}`);
+check('lt_cod: mar-2027 attivo → OPEX = solo evento 30.000', Math.abs(mc32lt.opex[14] - 30000) < 1e-6,
+    `got=${mc32lt.opex[14].toFixed(2)}`);
+check('lt_cod: mar-2028 inattivo → OPEX 0', mc32lt.opex[26] === 0,
+    `got=${mc32lt.opex[26].toFixed(2)}`);
+check('Eventi senza regola = sempre: attivi ogni anno nel loro mese', (() => {
+    const r32s = run(buildState({ inputs: { collectionLagRid: 0 }, plants: plants32() }), null,
+        { pA: [{ month: 3, amount: 30000, label: 'Sicurezza' }] });
+    return Math.abs(r32s.monthlyCashflow.opex[14] - 30000) < 1e-6 &&
+           Math.abs(r32s.monthlyCashflow.opex[26] - 30000) < 1e-6;
+})());
+
+// ── Test 33: IVA sui ricavi per regime — reverse charge 0%, RID 22%, legacy fallback (CF11) ──
+console.log('\n[Test 33] IVA sui ricavi per regime: reverse charge 0%, RID 22%, fallback aliquota globale');
+const vatRegimeBase = { collectionLagRid: 0, vatEnabled: true, vatSettlement: 'mensile' };
+const r33rc = run(buildState({ inputs: { ...vatRegimeBase, vatRevRid: 0, vatRevPpa: 0, vatRevBrp: 0, vatRevCer: 22, vatRevFerx: 0 }, plants: basePlants28() }));
+check('Reverse charge (RID 0%): nessuna IVA a debito sui ricavi incassati',
+    r33rc.monthlyCashflow.vatCollected.every(v => Math.abs(v) < 1e-9));
+const r33rid = run(buildState({ inputs: { ...vatRegimeBase, vatRevRid: 22, vatRevPpa: 0, vatRevBrp: 0, vatRevCer: 22, vatRevFerx: 0 }, plants: basePlants28() }));
+check('RID al 22%: vatCollected = 22% degli incassi mensili', (() => {
+    const mc = r33rid.monthlyCashflow;
+    for (let i = 0; i < 72; i++) {
+        if (Math.abs(mc.vatCollected[i] - 0.22 * mc.revenueCollected[i]) > 1e-6) return false;
+    }
+    return true;
+})());
+const r33legacy = run(buildState({ inputs: { ...vatRegimeBase, vatRate: 22, vatTaxableRevenuePct: 100 }, plants: basePlants28() }));
+check('Fallback legacy: senza campi per-regime vale aliquota globale × % imponibile', (() => {
+    const mc = r33legacy.monthlyCashflow;
+    for (let i = 0; i < 72; i++) {
+        if (Math.abs(mc.vatCollected[i] - 0.22 * mc.revenueCollected[i]) > 1e-6) return false;
+    }
+    return true;
+})());
+
+// ── Test 34: > COD = strettamente dopo la data di COD (mese del COD slitta all'anno dopo) (CF11) ──
+console.log('\n[Test 34] > COD stretto: spesa nel mese del COD prima occorrenza l anno successivo');
+const r34gt = run(buildState({ inputs: { collectionLagRid: 0 }, plants: plants32() }), null,
+    { pA: [{ month: 5, amount: 30000, label: 'Sicurezza', rule: 'gt_cod' }] }); // COD mag-2027
+check('gt_cod: mag-2027 (mese del COD) inattivo → OPEX 0', r34gt.monthlyCashflow.opex[16] === 0,
+    `got=${r34gt.monthlyCashflow.opex[16].toFixed(2)}`);
+check('gt_cod: mag-2028 primo addebito', Math.abs(r34gt.monthlyCashflow.opex[28] - 30000) < 1e-6,
+    `got=${r34gt.monthlyCashflow.opex[28].toFixed(2)}`);
+check('gt_cod su mese del COD: Effettivo Y1 = 0', Math.abs(r34gt.monthlyCashflow.opexAllocatedY1 - 0) < 1e-6);
+// Caso utente: scadenza luglio, COD 15/07/2027 → primo addebito luglio 2028
+const plants34jul = [{
+    id: 'pA', name: 'Impianto A', capacity: 8000, zone: 'NORD', opex: 120000, enabled: true,
+    generation: gen24a, codDate: '2027-07-15', ...plantNoBess24
+}];
+const r34jul = run(buildState({ inputs: { collectionLagRid: 0 }, plants: plants34jul }), null,
+    { pA: [{ month: 7, amount: 30000, label: 'Sicurezza', rule: 'gt_cod' }] });
+check('gt_cod: scadenza lug con COD 15/07/2027 → inattivo lug-2027, attivo lug-2028',
+    r34jul.monthlyCashflow.opex[18] === 0 && Math.abs(r34jul.monthlyCashflow.opex[30] - 30000) < 1e-6,
+    `lug27=${r34jul.monthlyCashflow.opex[18].toFixed(0)} lug28=${r34jul.monthlyCashflow.opex[30].toFixed(0)}`);
+const r34lt = run(buildState({ inputs: { collectionLagRid: 0 }, plants: plants32() }), null,
+    { pA: [{ month: 5, amount: 30000, label: 'Sicurezza', rule: 'lt_cod' }] });
+check('lt_cod sul mese di COD: mai attivo (mag-2027 e mag-2028 = 0)',
+    r34lt.monthlyCashflow.opex[16] === 0 && r34lt.monthlyCashflow.opex[28] === 0);
+
+// ── Test 35: servizio debito senior DATATO — erogazione, pro-rata giorni, preammortamento (CF11) ──
+console.log('\n[Test 35] Debito datato: decorrenza erogazione 15/11/2026, pro-rata giorni act/360, grace 2 mesi, rata francese');
+const r35 = run(buildState({
+    inputs: {
+        collectionLagRid: 0, interestRate: 0.05, loanTerm: 10,
+        seniorGracePeriodMonths: 2, fundingDebtDate: '2026-11-15'
+    },
+    plants: plants32()
+}));
+const mc35 = r35.monthlyCashflow;
+const P35 = mc35.fundingInflow[10]; // debito erogato a nov-2026 (idx 10)
+check('Debito erogato a nov-2026 (funding inflow presente)', P35 > 0, `P=${P35}`);
+check('Nessun servizio debito nel mese di erogazione e prima (gen–nov 2026)',
+    mc35.debtService.slice(0, 11).every(v => Math.abs(v) < 1e-9));
+const im35 = 0.05 / 12, n35 = 10 * 12 - 2;
+const annuity35 = P35 * im35 / (1 - Math.pow(1 + im35, -n35));
+const intDec35 = P35 * 0.05 * (16 + 31) / 360; // nov-15 → dic-31 = 16+31 giorni, act/360
+check('dic-2026: prima uscita = soli interessi pro-rata da erogazione (47/360), no capitale (grace)',
+    Math.abs(mc35.debtService[11] - intDec35) < 1e-6 && Math.abs(mc35.principal[11]) < 1e-9,
+    `got=${mc35.debtService[11].toFixed(2)} exp=${intDec35.toFixed(2)}`);
+const intGen35 = P35 * 0.05 * 31 / 360;
+check('gen-2027: preammortamento, interessi mese intero (31/360)',
+    Math.abs(mc35.debtService[12] - intGen35) < 1e-6 && Math.abs(mc35.principal[12]) < 1e-9,
+    `got=${mc35.debtService[12].toFixed(2)} exp=${intGen35.toFixed(2)}`);
+check('feb-2027: prima rata francese = annuity (capitale = annuity − interessi)',
+    Math.abs(mc35.debtService[13] - annuity35) < 1e-3 &&
+    Math.abs(mc35.principal[13] - (annuity35 - P35 * 0.05 * 28 / 360)) < 1e-3,
+    `got=${mc35.debtService[13].toFixed(2)} exp=${annuity35.toFixed(2)}`);
+check('mar-2027: interessi sul capitale residuo (31/360) + quota capitale', (() => {
+    const outFeb = P35 - mc35.principal[13];
+    const intMar = outFeb * 0.05 * 31 / 360;
+    return Math.abs(mc35.interest[14] - intMar) < 1e-3 && Math.abs(mc35.debtService[14] - annuity35) < 1e-3;
+})());
+
+// ── Test 36: Private Debt datato (amortizing) — decorrenza erogazione, rata francese mensile (CF11) ──
+console.log('\n[Test 36] Private Debt datato: erogazione 01/12/2026, ammortamento francese mensile, grace 0');
+const r36 = run(buildState({
+    inputs: {
+        collectionLagRid: 0, fundingDebtDate: '2026-12-20',
+        pdEnabled: true, pdAmountType: 'fixed_eur', pdAmountValue: 600000,
+        pdMode: 'amortizing', pdInterestRate: 8, pdLoanTerm: 10,
+        pdInterestGrace: 0, pdPrincipalGrace: 0, exitOption: '20'
+    },
+    plants: plants32()
+}));
+const mc36 = r36.monthlyCashflow;
+const im36 = 0.08 / 12, n36 = 10 * 12;
+const annuity36 = 600000 * im36 / (1 - Math.pow(1 + im36, -n36));
+check('PD: nessun servizio nel mese di erogazione e prima (gen–dic 2026)', mc36.pdService.slice(0, 12).every(v => Math.abs(v) < 1e-9));
+check('PD gen-2027: prima rata francese = annuity (interessi 43/360 da erogazione + capitale)',
+    Math.abs(mc36.pdService[12] - annuity36) < 1e-3,
+    `got=${mc36.pdService[12].toFixed(2)} exp=${annuity36.toFixed(2)}`);
+check('PD feb-2027: rata costante sul capitale residuo', (() => {
+    const intGen = 600000 * 0.08 * 43 / 360; // dic-20 → gen-31 = 12+31 giorni
+    const outGen = 600000 - (annuity36 - intGen);
+    return Math.abs(mc36.pdService[13] - annuity36) < 1e-3 &&
+           Math.abs(mc36.holdcoPdService[13] - annuity36) < 1e-3 && outGen > 0;
+})());
+check('PD: interessi primo periodo > annuity → pagati solo interessi (capitale slitta)', (() => {
+    const r36s = run(buildState({
+        inputs: {
+            collectionLagRid: 0, fundingDebtDate: '2026-12-01',
+            pdEnabled: true, pdAmountType: 'fixed_eur', pdAmountValue: 600000,
+            pdMode: 'amortizing', pdInterestRate: 8, pdLoanTerm: 10,
+            pdInterestGrace: 0, pdPrincipalGrace: 0, exitOption: '20'
+        },
+        plants: plants32()
+    }));
+    const intStub = 600000 * 0.08 * 62 / 360; // dic-01 → gen-31 = 62 giorni > annuity
+    return Math.abs(r36s.monthlyCashflow.pdService[12] - intStub) < 1e-3;
+})());
+check('PD bullet_exit: nessun esborso in orizzonte (PIK fino a exit anno 20)', (() => {
+    const r36b = run(buildState({
+        inputs: {
+            collectionLagRid: 0, fundingDebtDate: '2026-12-01',
+            pdEnabled: true, pdAmountType: 'fixed_eur', pdAmountValue: 600000,
+            pdMode: 'bullet_exit', pdInterestRate: 8, pdInterestGrace: 0, exitOption: '20'
+        },
+        plants: plants32()
+    }));
+    return r36b.monthlyCashflow.pdService.every(v => Math.abs(v) < 1e-9);
+})());
+
+// ── Test 37: gli esborsi datati coprono l'intero budget CAPEX, terreni inclusi (CF11) ──
+console.log('\n[Test 37] Esborso Terreno datato: nessun extra duplicato al COD');
+const capexPay37 = { pA: [
+    { date: '2026-10-15', amount: 100000, label: 'Terreno' },
+    { date: '2027-05-15', amount: 700000, label: 'EPC FV' }
+] };
+const r37 = run(buildState({
+    inputs: { collectionLagRid: 0, constructionMonths: 0 },
+    plants: [{ ...plantNoBess24, id: 'pA', name: 'Impianto A', capacity: 1000, capex: 700, opex: 20000,
+        generation: gen24a, codDate: '2027-05-15', landType: 'acquisto', landCost: 100000 }]
+}), capexPay37, null);
+const mc37 = r37.monthlyCashflow;
+check('Terreno datato ott-2026 in cassa', Math.abs(mc37.capexOutflow[9] - 100000) < 1e-6, `got=${mc37.capexOutflow[9]}`);
+check('COD mag-2027: solo EPC datato 700.000 (nessun extra terreni duplicato)',
+    Math.abs(mc37.capexOutflow[16] - 700000) < 1e-6, `got=${mc37.capexOutflow[16].toFixed(0)}`);
+check('Budget CAPEX coperto al 100% → residuo 0', Math.abs(mc37.capexResidual) < 1e-6 &&
+    Math.abs(mc37.capexBudget - 800000) < 1e-3, `budget=${mc37.capexBudget} resid=${mc37.capexResidual}`);
 
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);

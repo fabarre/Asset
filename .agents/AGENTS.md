@@ -40,6 +40,7 @@
   - **Modellazione Finanziaria ed Incentivi CER (cer.md):** Applicazione delle formule del corrispettivo unitario di valorizzazione TIAD ($CACV_t = TRAS + cPR \cdot P_{z,t}$) e della tariffa premio MASE (decreto CACER) al netto delle decurtazioni PNRR. Gestione e separazione rigida dei flussi di cassa RID (in capo alla SPV) da quelli di condivisione virtuale (in capo alla CER).
   - **DDL Supabase Database e Ottimizzazione PostgreSQL:** Progettazione e strutturazione dello schema di database per l'archiviazione contabile e delle metriche finanziarie orarie. Ottimizzazione dei tipi di dato (DECIMAL(12,4) o NUMERIC per evitare errori di virgola mobile) e creazione di indici composti per query ad alte prestazioni.
   - **Flussi Intra-Gruppo (SPV vs Holding):** Separazione rigorosa dei bilanci e dei flussi di cassa tra SPV (Società di Progetto) e Holding/Sponsor (es. allocazione e recupero OPEX per Asset Management).
+  - **IVA di cassa per voce di spesa (CF11):** IVA come pass-through nel solo cash flow mensile (non tocca P&L né IRR): a debito sui ricavi incassati, a credito su CAPEX+OPEX con **aliquote per categoria** (EPC FV/BESS, connessione, sviluppo, SPV, terreno / O&M FV/BESS, assicurazione, IMU, sicurezza, asset management — default italiani: terreno/IMU/assicurazione esenti 0%, resto 22%) e **aliquota per riga** sulle voci personalizzate (`plant_custom_costs.vat_rate`, NULL = 22%). Allocazione budget sempre netta con IVA e lordo calcolati automaticamente; residui CAPEX al COD e OPEX spalmati /12 valorizzati con aliquota media ponderata; liquidazione mensile/trimestrale con credito IVA portato a nuovo.
 * **Linee Guida di Output:** Script SQL di migrazione DDL, query SQL di aggregazione ad alte prestazioni e codice di calcolo quantitativo con equazioni espresse in LaTeX.
 
 ### **AGENT 3: Sviluppatore Senior Fotovoltaico ed Energy Management**
@@ -92,8 +93,7 @@
 
 # Architectural & Financial Engineering Rules (Learned Best Practices)
 - **ID:** worker_syntax_validation_rule
-- **Regola (Worker Silent Failure Prevention):** Prima di finalizzare e testare qualsiasi modifica a simulation.worker.js, � OBBLIGATORIO eseguire 
-ode -c src/worker/simulation.worker.js da terminale.
+- **Regola (Worker Silent Failure Prevention):** Prima di finalizzare e testare qualsiasi modifica a simulation.worker.js, è OBBLIGATORIO eseguire node -c src/worker/simulation.worker.js da terminale.
 - **Motivazione:** Il motore di calcolo gira su un thread separato (Web Worker). Qualsiasi errore di sintassi (es. parentesi mancante) fa fallire il worker silenziosamente, bloccando la Dashboard in stato di elaborazione con valori a 0 (nessun log di errore in UI).
 
 - **ID:** parametric_financial_model_rule
@@ -101,8 +101,20 @@ ode -c src/worker/simulation.worker.js da terminale.
 - **Azione:** Ogni nuovo parametro finanziario/M&A DEVE essere parametrizzato con uno slider nella UI, mappato nel database tramite domMap in main.js, estratto nei collectInputs() ed elaborato matematicamente in simulation.worker.js. La UI deve mostrare in real-time l'etichetta associata allo slider.
 
 - **ID:** dashboard_ui_layout_rule
-- **Regola (Integrit� del Layout):** La griglia principale dei KPI Dashboard in index.html deve essere mantenuta simmetrica per garantire leggibilit�.
+- **Regola (Integrità del Layout):** La griglia principale dei KPI Dashboard in index.html deve essere mantenuta simmetrica per garantire leggibilità.
 - **Azione:** La configurazione della grid deve rispettare i raggruppamenti (es. lg:grid-cols-5 per formare righe da 5 card). Evitare di aggiungere colonna su colonna (lg:grid-cols-9, 10, ecc.) per non comprimere i testi. Nuove metriche aggiunte (es. Payback) devono rispettare la gerarchia da EV, a Debito, a IRR.
+
+- **ID:** prod_migration_backup_rule
+- **Regola (Migrazioni PROD backup-first):** Nessuna migrazione DDL/DML sul progetto Supabase di produzione senza un backup fresco verificato.
+- **Azione:** Prima di applicare qualsiasi migrazione su prod: 1) eseguire `node tools/backup.mjs run prod` e annotare il nome del dump; 2) scrivere la migrazione come file versionato in root (es. `migration_cf11_vat_rate.sql`) con `BEGIN/COMMIT`, clausole idempotenti (`ADD COLUMN IF NOT EXISTS`) e blocco di ROLLBACK commentato in coda; 3) verificare l'esito (colonna/vincolo presente) prima di proseguire.
+
+- **ID:** shell_cache_bump_rule
+- **Regola (Cache-bust della shell PWA):** Ogni modifica a index.html, main.js o sw.js deve invalidare la cache del service worker, altrimenti il browser continua a servire la versione precedente.
+- **Azione:** Ad ogni modifica dell'app shell: incrementare `main.js?v=N` in index.html E bumpare `CACHE_NAME = 'asset-shell-vM'` in sw.js nello stesso commit. Le API Supabase non sono mai cachate; il versionamento riguarda solo il codice.
+
+- **ID:** budget_row_realtime_save_rule
+- **Regola (Salvataggio in tempo reale delle righe di dettaglio):** Le righe di dettaglio dichiarate dall'utente (esborsi CAPEX datati, eventi OPEX ricorrenti, voci CAPEX/OPEX personalizzate) devono aggiornare immediatamente i contatori e persistere su database alla conferma della riga, senza richiedere un salvataggio separato.
+- **Azione:** Alla conferma di una riga (aggiunta/rimozione): aggiornare lo stato, ri-renderizzare le righe con colonne derivate (es. Netto/IVA/Lordo) e chiamare subito la persistenza (gate `canWrite()` per il ruolo viewer). I contatori di budget restano netti; IVA e lordo sono sempre calcolati automaticamente dalle aliquote di categoria (CF11).
 
 # Procedura Operativa: Supabase Environment Cloning (Staging -> Prod)
 - **ID:** supabase_environment_cloning_rule
@@ -110,8 +122,7 @@ ode -c src/worker/simulation.worker.js da terminale.
 - **Procedura di Clonazione:**
   1. **Estrazione Schema (Struttura):** Utilizzare il Supabase CLI per estrarre lo schema dal Master DB. 
      *Comando critico:* 
-px supabase db dump --db-url "postgresql://postgres.[ID_PROGETTO]:[PASSWORD_URL_ENCODED]@[POOLER_HOST]:6543/postgres" > master_init_schema.sql
+npx supabase db dump --db-url "postgresql://postgres.[ID_PROGETTO]:[PASSWORD_URL_ENCODED]@[POOLER_HOST]:6543/postgres" > master_init_schema.sql
      *Nota:* Assicurarsi di usare l'host del Connection Pooler (es. aws-0-eu-central-1.pooler.supabase.com:6543) per aggirare i problemi di risoluzione IPv6 di Docker su macchine locali Windows. Codificare eventuali caratteri speciali (es. @ -> %40) nella password.
   2. **Iniezione Schema:** L'utente deve eseguire il file master_init_schema.sql generato all'interno del SQL Editor del nuovo progetto Supabase (Target DB).
-  3. **Travaso Dati:** Eseguire lo script locale 
-ode clone_supabase.js (assicurandosi che i file supabase_config.js e supabase_config copy.js puntino rispettivamente al Master e al Target). Lo script si occupa di leggere a blocchi di 1000 righe e fare l'upsert rispettando la gerarchia delle Foreign Key.
+  3. **Travaso Dati:** Eseguire lo script locale node clone_supabase.js (assicurandosi che i file supabase_config.js e supabase_config copy.js puntino rispettivamente al Master e al Target). Lo script si occupa di leggere a blocchi di 1000 righe e fare l'upsert rispettando la gerarchia delle Foreign Key.

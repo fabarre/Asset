@@ -3466,12 +3466,42 @@ function runSensitivityLoop(baseState, config) {
                     netCashflow: [], cashOpening: [], cashClosing: [],
                     fundedCashOpening: [], fundedCashClosing: [],
                     holdcoSociService: [], holdcoPdService: [], holdcoOtherCosts: [],
+                    sociService: [], pdService: [],
                     holdcoNetCashflow: [], holdcoCashOpening: [], holdcoCashClosing: [],
                     lagResidual: 0, capexBeforeHorizon: 0, taxesAfterHorizon: 0,
                     fundedMinCashClosing: 0, fundedMinMonth: 0, datedXirr: 0
                 };
                 const accrued = new Float64Array(totalMonths);
                 const collected = new Float64Array(totalMonths);
+
+                // CF10/CF11: meccanismo IVA di cassa. L'IVA a debito sui ricavi è per regime
+                // di mercato (reverse charge = 0%); se i campi per regime non sono definiti
+                // si ripiega sulla vecchia aliquota globale × % ricavi imponibili.
+                const vatEnabled = inputs.vatEnabled !== undefined ? !!inputs.vatEnabled : true;
+                const vatRate = (inputs.vatRate !== undefined ? inputs.vatRate : 22) / 100;
+                const vatTaxableRevenuePct = (inputs.vatTaxableRevenuePct !== undefined ? inputs.vatTaxableRevenuePct : 100) / 100;
+                const vatSettleEvery = (inputs.vatSettlement === 'trimestrale') ? 3 : 1;
+                const _vatRevPct = (v, def) => ((v !== undefined && v !== null && isFinite(v)) ? v : def) / 100;
+                const hasStreamVat = ['vatRevPpa', 'vatRevRid', 'vatRevBrp', 'vatRevCer', 'vatRevFerx']
+                    .some(k => inputs[k] !== undefined && inputs[k] !== null);
+                const legacyOutRate = vatRate * vatTaxableRevenuePct;
+                const vatRevRateFor = (pl, stream) => {
+                    if (!hasStreamVat) return legacyOutRate;
+                    const rPpa = _vatRevPct(inputs.vatRevPpa, 0);
+                    const rRid = _vatRevPct(inputs.vatRevRid, 0);
+                    const rBrp = _vatRevPct(inputs.vatRevBrp, 0);
+                    const rCer = _vatRevPct(inputs.vatRevCer, 22);
+                    const rFerx = _vatRevPct(inputs.vatRevFerx, 0);
+                    if (pl.marketType === 'cer') return rCer; // corrispettivi CER soggetti a IVA 22%
+                    if (stream === 'ppa') return rPpa;        // PPA on-site: reverse charge
+                    if (stream === 'rid') {
+                        if (pl.marketType === 'fer_x') return rFerx;
+                        if (pl.marketType === 'brp') return rBrp;
+                        return rRid;                          // RID GSE: reverse charge
+                    }
+                    return rBrp;                              // arbitraggio/time-shifting via BRP: reverse charge
+                };
+                const vatOutPre = new Float64Array(totalMonths);
 
                 // Forme orarie anno 1 per impianto e per stream di ricavo
                 const plantShapes = plantsList.map(pl => {
@@ -3493,7 +3523,15 @@ function runSensitivityLoop(baseState, config) {
                         ts: shapes.ts.reduce((a, b) => a + b, 0)
                     };
                     const hasCer = !!(pl._stab && pl._stab.ppaType === 'cer');
-                    return { shapes, totals, lag: collectionLagForPlant(pl, inputs, hasCer), cod: pl._codParsed || null };
+                    return {
+                        shapes, totals,
+                        lag: collectionLagForPlant(pl, inputs, hasCer),
+                        cod: pl._codParsed || null,
+                        revVat: {
+                            ppa: vatRevRateFor(pl, 'ppa'), rid: vatRevRateFor(pl, 'rid'),
+                            arb: vatRevRateFor(pl, 'arb'), ts: vatRevRateFor(pl, 'ts')
+                        }
+                    };
                 });
 
                 const STREAMS = ['ppa', 'rid', 'arb', 'ts'];
@@ -3528,8 +3566,10 @@ function runSensitivityLoop(baseState, config) {
                                 const gi = 12 + yi * 12 + m; // l'anno 0 occupa i primi 12 slot
                                 accrued[gi] += val;
                                 const ci = gi + ps.lag;
-                                if (ci < totalMonths) collected[ci] += val;
-                                else out.lagResidual += val;
+                                if (ci < totalMonths) {
+                                    collected[ci] += val;
+                                    vatOutPre[ci] += val * ps.revVat[sName];
+                                } else out.lagResidual += val;
                             }
                         });
                     });
@@ -3594,6 +3634,7 @@ function runSensitivityLoop(baseState, config) {
                 let capexVatAllocated = 0;
                 let sumPlantCapex = 0;
                 let sumPlantCapexVat = 0;
+                let residualPlantsSum = 0;
                 const plantBases = [];
                 plantsList.forEach(pl => {
                     const base = (pl.capacity || 0) * (pl.capex || 0) + ((pl.bessMwh || 0) * 1000) * (pl.bessCapexKwh || 0) +
@@ -3628,14 +3669,18 @@ function runSensitivityLoop(baseState, config) {
                     });
                     // Residuo impianto (CAPEX non ancora allocato) collocato al COD
                     const residual = Math.max(0, base - outlaysSum);
+                    residualPlantsSum += residual;
                     if (residual > 0) {
                         if (codIdx >= 0 && codIdx < totalMonths) { capexOut[codIdx] += residual; capexVat[codIdx] += residual * plantVatBlend; }
                         else if (codIdx < 0) out.capexBeforeHorizon += residual;
                     }
                 });
-                // Costi non attribuibili al singolo impianto (IDC, terreni, ecc.): pro-quota al COD
+                // Costi non attribuibili al singolo impianto (IDC, terreni, ecc.):
+                // gli esborsi datati coprono l'INTERO budget (anche terreni/IDC, che non
+                // sono nelle basi impianto) — al COD va solo il residuo davvero scoperto.
                 const totalProjCost = (funding && funding.totalProjectCost) || mtx.totalProjectCost || 0;
-                const extra = Math.max(0, totalProjCost - sumPlantCapex);
+                const totalResidualAll = Math.max(0, totalProjCost - capexAllocated);
+                const extra = Math.max(0, totalResidualAll - residualPlantsSum);
                 const projectVatBlend = sumPlantCapex > 0 ? sumPlantCapexVat / sumPlantCapex : vatCapexRateByLabel['EPC FV'];
                 if (extra > 0 && sumPlantCapex > 0) {
                     plantBases.forEach(pb => {
@@ -3656,58 +3701,51 @@ function runSensitivityLoop(baseState, config) {
 
                 // CF9: budget OPEX = OPEX Anno 1; eventi dichiarati sul loro mese,
                 // il residuo non allocato si spalma uniformemente (/12).
-                const opexEvMonthly = new Float64Array(12);
-                const opexVatEvMonthly = new Float64Array(12); // CF11: IVA sugli eventi OPEX
+                // CF11: regola temporale per evento: 'sempre' (default) | 'gt_cod'
+                // (strettamente dopo la data di COD: spesa nel mese del COD slitta
+                // all'anno dopo) | 'lt_cod' (solo mesi solari prima del mese di COD).
+                const opexEvMonthlyY = Array.from({ length: YEARS }, () => new Float64Array(12));
+                const opexVatEvMonthlyY = Array.from({ length: YEARS }, () => new Float64Array(12));
+                const opexEvTotalY = new Float64Array(YEARS);
                 let opexEvTotal = 0;
                 let opexVatEvTotal = 0;
                 plantsList.forEach(pl => {
+                    const cod = pl._codParsed || null;
                     const evs = (opexEvents && opexEvents[pl.id]) || [];
                     evs.forEach(ev => {
                         const m = parseInt(ev.month, 10);
                         const amt = parseFloat(ev.amount) || 0;
-                        if (m >= 1 && m <= 12 && amt > 0) {
-                            opexEvMonthly[m - 1] += amt;
-                            opexEvTotal += amt;
-                            const rate = vatOpexRateByLabel[ev.label] !== undefined ? vatOpexRateByLabel[ev.label] : _vatPct(inputs.vatOpexAssetMgmt, 22);
-                            opexVatEvMonthly[m - 1] += amt * rate;
-                            opexVatEvTotal += amt * rate;
+                        if (!(m >= 1 && m <= 12) || !(amt > 0)) return;
+                        const rule = ev.rule === 'gt_cod' || ev.rule === 'lt_cod' ? ev.rule : 'sempre';
+                        const rate = vatOpexRateByLabel[ev.label] !== undefined ? vatOpexRateByLabel[ev.label] : _vatPct(inputs.vatOpexAssetMgmt, 22);
+                        opexEvTotal += amt;
+                        opexVatEvTotal += amt * rate;
+                        for (let yi = 0; yi < YEARS; yi++) {
+                            const calYear = anchorYearIn + yi;
+                            let active = true;
+                            if (rule === 'gt_cod' && cod) active = (calYear > cod.y) || (calYear === cod.y && m > cod.m);
+                            else if (rule === 'lt_cod' && cod) active = (calYear < cod.y) || (calYear === cod.y && m < cod.m);
+                            if (!active) continue;
+                            opexEvMonthlyY[yi][m - 1] += amt;
+                            opexVatEvMonthlyY[yi][m - 1] += amt * rate;
+                            opexEvTotalY[yi] += amt;
                         }
                     });
                 });
                 out.opexBudgetY1 = (mtx.opexTotal && mtx.opexTotal[0]) || 0;
-                out.opexAllocated = opexEvTotal;
-                out.opexResidual = Math.max(0, out.opexBudgetY1 - opexEvTotal);
+                out.opexAllocated = opexEvTotal;                        // dichiarato (tutti gli eventi)
+                out.opexAllocatedY1 = opexEvTotalY[0] || 0;             // effettivo in Anno 1 (regole temporali)
+                out.opexResidual = Math.max(0, out.opexBudgetY1 - (opexEvTotalY[0] || 0)); // indicatore di copertura (non genera cassa)
                 out.opexVatAllocated = opexVatEvTotal;
                 out.opexGrossAllocated = opexEvTotal + opexVatEvTotal;
 
-                // CF11: aliquota media ponderata dell'OPEX Anno 1 (per il residuo spal /12).
-                // Composizione dalle matrici Y1; voci personalizzate con vat_rate proprio;
-                // il delta residuo (royalty/AF fee/ecc.) assume aliquota Asset Management.
-                let opexVatWeighted = 0;
-                let opexCovered = 0;
-                const _addOpexComp = (net, rate) => { const n = net || 0; opexVatWeighted += n * rate; opexCovered += n; };
-                let customOpexNet = 0;
-                plantsList.forEach(pl => { const cc = customVatByType(pl, 'opex'); customOpexNet += cc.net; opexVatWeighted += cc.vat; opexCovered += cc.net; });
-                _addOpexComp((mtx.opexPlants && mtx.opexPlants[0] || 0) - customOpexNet, vatOpexRateByLabel['O&M FV']);
-                _addOpexComp(mtx.opexBess && mtx.opexBess[0], vatOpexRateByLabel['O&M BESS']);
-                _addOpexComp(mtx.opexGridCharging && mtx.opexGridCharging[0], vatOpexRateByLabel['O&M BESS']);
-                _addOpexComp(mtx.opexLandDds && mtx.opexLandDds[0], 0);
-                _addOpexComp(mtx.opexInsurance && mtx.opexInsurance[0], vatOpexRateByLabel['Assicurazione']);
-                _addOpexComp(mtx.opexTaxes && mtx.opexTaxes[0], vatOpexRateByLabel['IMU / Tasse locali']);
-                _addOpexComp(mtx.opexSecurity && mtx.opexSecurity[0], vatOpexRateByLabel['Sicurezza']);
-                _addOpexComp((mtx.opexAssetManagement && mtx.opexAssetManagement[0] || 0) + (mtx.opexServiceContract && mtx.opexServiceContract[0] || 0), vatOpexRateByLabel['Asset Management']);
-                const opexResto = out.opexBudgetY1 - opexCovered;
-                if (opexResto > 0) opexVatWeighted += opexResto * vatOpexRateByLabel['Asset Management'];
-                const blendedOpexVatRate = out.opexBudgetY1 > 0 ? opexVatWeighted / out.opexBudgetY1 : 0;
-
-                // CF6: vista Holding mensile (flussi annui Holding ripartiti /12)
-                const sociM = new Float64Array(YEARS);
-                const pdM = new Float64Array(YEARS);
+                // CF6/CF11: vista Holding mensile — servizi Soci e PD sono DATATI
+                // (calcolati sotto, senza ripartizioni /12); gli oneri Holding annuali
+                // (earnout, OPEX HoldCo, imposte Holding) restano spalmati /12 perché
+                // aggregati annui senza scadenza dichiarata.
                 const otherM = new Float64Array(YEARS);
                 for (let y = 1; y <= YEARS; y++) {
                     const yi = y - 1;
-                    sociM[yi] = (((ds.interestPaidSoci && ds.interestPaidSoci[yi]) || 0) + ((ds.principalPaidSoci && ds.principalPaidSoci[yi]) || 0)) / 12;
-                    pdM[yi] = (((mtx.pdInterestPaid && mtx.pdInterestPaid[yi]) || 0) + ((mtx.pdPrincipalPaid && mtx.pdPrincipalPaid[yi]) || 0) + ((mtx.pdBulletPayoff && mtx.pdBulletPayoff[yi]) || 0)) / 12;
                     otherM[yi] = (((mtx.holdcoEarnoutPaid && mtx.holdcoEarnoutPaid[yi]) || 0) + ((mtx.holdcoOpex && mtx.holdcoOpex[yi]) || 0) +
                         ((mtx.holdcoIresTaxPaid && mtx.holdcoIresTaxPaid[yi]) || 0) + ((mtx.holdcoIrapTaxPaid && mtx.holdcoIrapTaxPaid[yi]) || 0)) / 12;
                 }
@@ -3735,14 +3773,122 @@ function runSensitivityLoop(baseState, config) {
                 fundingInflow[sociIdx] += (funding && funding.sociLoan) || 0;
                 fundingInflow[debtIdx] += (funding && funding.debtAmount) || 0;
 
-                // ═══ CF10: IVA solo cash flow (pass-through, non tocca P&L né IRR) ═══
-                // IVA a debito sui ricavi incassati, IVA a credito su CAPEX+OPEX pagati,
-                // liquidazione periodica con credito IVA portato a nuovo. Effetto sul
-                // cash flow = incassata − pagata ai fornitori − versata all'erario.
-                const vatEnabled = inputs.vatEnabled !== undefined ? !!inputs.vatEnabled : true;
-                const vatRate = (inputs.vatRate !== undefined ? inputs.vatRate : 22) / 100;
-                const vatTaxableRevenuePct = (inputs.vatTaxableRevenuePct !== undefined ? inputs.vatTaxableRevenuePct : 100) / 100;
-                const vatSettleEvery = (inputs.vatSettlement === 'trimestrale') ? 3 : 1;
+                // CF11: servizio debito SENIOR DATATO — decorre dalla data di erogazione
+                // (primo mese con pro-rata giorni, convenzione act/360), preammortamento
+                // (seniorGracePeriodMonths) solo interessi, poi ammortamento francese
+                // mensile (rata costante) fino a scadenza (loanTerm). Cash sweep/DSRA
+                // (componente volontaria) resta annuale /12 perché path-dependent.
+                const interestDated = new Float64Array(totalMonths);
+                const principalDated = new Float64Array(totalMonths);
+                {
+                    const P0 = (funding && funding.debtAmount) || 0;
+                    const rate = inputs.interestRate !== undefined ? inputs.interestRate : 0.045;
+                    const termYears = parseInt(inputs.loanTerm, 10) || 0;
+                    const graceM = Math.max(0, parseInt(inputs.seniorGracePeriodMonths, 10) || 0);
+                    const dIdx = debtIdx; // stessa data dell'afflusso CF8
+                    const dParsed = parseCodDate(inputs.fundingDebtDate);
+                    if (P0 > 0 && termYears > 0 && dIdx >= 0 && dIdx < totalMonths) {
+                        const im = rate / 12;
+                        const firstIdx = dIdx + 1; // prima rata nel mese successivo all'erogazione
+                        const startIdx = Math.min(totalMonths, firstIdx + graceM);
+                        const nMonths = Math.max(1, termYears * 12 - graceM);
+                        const annuity = im > 0 ? P0 * im / (1 - Math.pow(1 + im, -nMonths)) : P0 / nMonths;
+                        let outstanding = P0;
+                        for (let i = firstIdx; i < totalMonths && outstanding > 1e-9; i++) {
+                            const yy = anchorYearIn - 1 + Math.floor(i / 12);
+                            const mm = (i % 12) + 1;
+                            const dim = codDaysInMonth(yy, mm);
+                            // Primo pagamento: interessi dal giorno di erogazione a fine mese
+                            let days = dim;
+                            if (i === firstIdx && dParsed) {
+                                days = Math.max(1, codDaysInMonth(dParsed.y, dParsed.m) - dParsed.d + 1) + dim;
+                            }
+                            const intM = outstanding * rate * days / 360;
+                            let prinM = 0;
+                            if (i >= startIdx) {
+                                prinM = (i === startIdx + nMonths - 1) ? outstanding : Math.max(0, annuity - intM);
+                                prinM = Math.min(prinM, outstanding);
+                                outstanding -= prinM;
+                            }
+                            interestDated[i] = intM;
+                            principalDated[i] = prinM;
+                        }
+                    }
+                }
+
+                // CF11: servizio PRIVATE DEBT DATATO — decorre dall'erogazione (cluster
+                // debito), pro-rata giorni act/360, grace in FINANZA (anni → mesi), poi
+                // stessa semantica dell'annuale: bullet_exit = PIK composto + bullet a
+                // exit; annual_interest = interessi in cassa + bullet a exit;
+                // amortizing = rata mensile francese + bullet del residuo a exit.
+                const pdSvcDated = new Float64Array(totalMonths);
+                {
+                    const pdP0 = pdAmount || 0;
+                    if (p.pdEnabled && pdP0 > 0 && debtIdx >= 0 && debtIdx < totalMonths) {
+                        const pdRate = (p.pdInterestRate || 0) / 100;
+                        const pdParsed = parseCodDate(inputs.fundingDebtDate);
+                        const graceIntM = Math.max(0, (p.pdInterestGrace || 0)) * 12;
+                        const gracePrinM = Math.max(0, (p.pdPrincipalGrace || 0)) * 12;
+                        const exitY = exitOptionYear > 0 ? exitOptionYear : exitYear;
+                        const exitIdx = 12 + (exitY - 1) * 12 + 11; // dic dell'anno di exit
+                        const pdDaysAt = (i) => {
+                            const yy = anchorYearIn - 1 + Math.floor(i / 12);
+                            const mm = (i % 12) + 1;
+                            const dim = codDaysInMonth(yy, mm);
+                            // Primo pagamento: interessi dal giorno di erogazione a fine mese
+                            if (i === debtIdx + 1 && pdParsed) {
+                                return Math.max(1, codDaysInMonth(pdParsed.y, pdParsed.m) - pdParsed.d + 1) + dim;
+                            }
+                            return dim;
+                        };
+                        let outstanding = pdP0;
+                        const im = pdRate / 12;
+                        const termM = Math.max(1, (p.pdLoanTerm || 10) * 12);
+                        const pdFirstIdx = debtIdx + 1; // primo pagamento nel mese successivo all'erogazione
+                        const startIdx = Math.min(totalMonths, pdFirstIdx + gracePrinM);
+                        const nM = Math.max(1, termM - gracePrinM);
+                        const pdAnnuity = im > 0 ? pdP0 * im / (1 - Math.pow(1 + im, -nM)) : pdP0 / nM;
+                        for (let i = pdFirstIdx; i < totalMonths && outstanding > 1e-9; i++) {
+                            if (exitIdx >= 0 && exitIdx < totalMonths && i === exitIdx) {
+                                pdSvcDated[i] += outstanding; outstanding = 0; break;
+                            }
+                            const intDue = (i >= pdFirstIdx + graceIntM) ? outstanding * pdRate * pdDaysAt(i) / 360 : 0;
+                            let svc = 0;
+                            if (p.pdMode === 'amortizing') {
+                                svc = intDue;
+                                if (i >= startIdx) {
+                                    let prin = (i === startIdx + nM - 1) ? outstanding : Math.max(0, pdAnnuity - intDue);
+                                    prin = Math.min(prin, outstanding);
+                                    outstanding -= prin;
+                                    svc += prin;
+                                }
+                            } else if (p.pdMode === 'annual_interest') {
+                                svc = intDue; // interessi pagati in cassa, capitale bullet a exit
+                            } else { // bullet_exit: PIK composto, nessun esborso fino a exit
+                                outstanding += intDue;
+                            }
+                            pdSvcDated[i] += svc;
+                        }
+                    }
+                }
+
+                // CF11: FINANZIAMENTO SOCI DATATO — waterfall mensile sulla cassa
+                // disponibile (interessi dal termine della grazia interessi, capitale
+                // dal termine della grazia capitale; interessi non pagati capitalizzati).
+                const sociSvcDated = new Float64Array(totalMonths);
+                const sociState = {
+                    outstanding: (funding && funding.sociLoan) || 0,
+                    rate: (inputs.sociInterestRate !== undefined ? inputs.sociInterestRate : 0) / 100,
+                    graceIntM: Math.max(0, parseInt(inputs.sociInterestGrace, 10) || 0) * 12,
+                    gracePrinM: Math.max(0, parseInt(inputs.sociPrincipalGrace, 10) || 0) * 12,
+                    parsed: parseCodDate(inputs.fundingSociDate)
+                };
+
+                // ═══ CF10/CF11: IVA solo cash flow (pass-through, non tocca P&L né IRR) ═══
+                // IVA a debito sui ricavi incassati (per regime, calcolata in vatOutPre),
+                // IVA a credito su CAPEX+OPEX pagati (per categoria), liquidazione periodica
+                // con credito IVA portato a nuovo. Effetto sul cash flow = incassata −
+                // pagata ai fornitori − versata all'erario. Costanti IVA dichiarate sopra.
                 let vatCredit = 0;
                 out.vatEnabled = vatEnabled;
 
@@ -3751,20 +3897,22 @@ function runSensitivityLoop(baseState, config) {
                     const yi = isYear0 ? -1 : Math.floor((i - 12) / 12);
                     const m = i % 12;
                     const calYear = anchorYearIn - 1 + Math.floor(i / 12);
-                    // CF9: OPEX = eventi dichiarati sul mese + residuo annuo spal /12
-                    const opexResidualY = Math.max(0, (mtx.opexTotal[yi] || 0) - opexEvTotal);
-                    const opex = isYear0 ? 0 : (opexEvMonthly[m] + opexResidualY / 12);
+                    // CF9/CF11: OPEX di cassa = SOLO eventi dichiarati attivi nel mese
+                    // (con regole temporali). Nessuna spalmatura fittizia: il cash flow
+                    // riflette esclusivamente le uscite reali dichiarate dall'utente.
+                    const opex = isYear0 ? 0 : opexEvMonthlyY[yi][m];
                     const taxes = taxesOut[i];
-                    const interest = isYear0 ? 0 : (ds.interestAccrued[yi] || 0) / 12;
-                    const principal = isYear0 ? 0 : ((ds.principalScheduled[yi] || 0) + (ds.principalVoluntary[yi] || 0)) / 12;
+                    // CF11: debito senior datato (erogazione + preammortamento + pro-rata giorni)
+                    const interest = interestDated[i];
+                    const principal = principalDated[i] + (isYear0 ? 0 : (ds.principalVoluntary[yi] || 0) / 12);
                     const debtSvc = interest + principal;
                     // CF10: IVA di cassa del mese
                     let vatOut = 0, vatIn = 0, vatRemit = 0;
                     if (vatEnabled) {
-                        vatOut = vatRate * vatTaxableRevenuePct * collected[i];
+                        vatOut = vatOutPre[i];
                         // CF11: IVA a credito per categoria: esborsi CAPEX con aliquota della
-                        // voce + eventi OPEX con aliquota della voce + residuo OPEX ponderato.
-                        const vatInOpex = isYear0 ? 0 : (opexVatEvMonthly[m] + (opexResidualY / 12) * blendedOpexVatRate);
+                        // voce + eventi OPEX con aliquota della voce (solo uscite reali).
+                        const vatInOpex = isYear0 ? 0 : opexVatEvMonthlyY[yi][m];
                         vatIn = capexVat[i] + vatInOpex;
                         vatCredit += vatIn - vatOut;
                         const isSettle = ((i % vatSettleEvery) === (vatSettleEvery - 1)) || (i === totalMonths - 1);
@@ -3798,11 +3946,34 @@ function runSensitivityLoop(baseState, config) {
                     out.fundedCashOpening.push(fundedCash);
                     fundedCash += net + fundingInflow[i];
                     out.fundedCashClosing.push(fundedCash);
-                    // CF6: cascata Holding = netto SPV - servizio soci - servizio PD - oneri HoldCo
-                    const hSoci = isYear0 ? 0 : sociM[yi];
-                    const hPd = isYear0 ? 0 : pdM[yi];
+                    // CF6/CF11: cascata Holding = netto SPV − servizio soci (datato,
+                    // waterfall sulla cassa del mese) − servizio PD (datato) − oneri HoldCo
+                    let sociSvc = 0;
+                    if (sociState.outstanding > 1e-9 && i >= sociIdx + 1) { // primo pagamento nel mese successivo all'erogazione
+                        const yy = anchorYearIn - 1 + Math.floor(i / 12);
+                        const mm = (i % 12) + 1;
+                        const dim = codDaysInMonth(yy, mm);
+                        let days = dim;
+                        if (i === sociIdx + 1 && sociState.parsed) {
+                            days = Math.max(1, codDaysInMonth(sociState.parsed.y, sociState.parsed.m) - sociState.parsed.d + 1) + dim;
+                        }
+                        let intDue = 0;
+                        if (sociState.rate > 0 && i >= sociIdx + 1 + sociState.graceIntM) intDue = sociState.outstanding * sociState.rate * days / 360;
+                        const cashAvail = Math.max(0, net);
+                        const payInt = Math.min(intDue, cashAvail);
+                        sociState.outstanding += intDue - payInt; // interessi non pagati capitalizzati
+                        let payPrin = 0;
+                        if (i >= sociIdx + 1 + sociState.gracePrinM) payPrin = Math.min(sociState.outstanding, Math.max(0, cashAvail - payInt));
+                        sociState.outstanding -= payPrin;
+                        sociSvc = payInt + payPrin;
+                    }
+                    sociSvcDated[i] = sociSvc;
+                    const hSoci = sociSvc;
+                    const hPd = pdSvcDated[i];
                     const hOther = isYear0 ? 0 : otherM[yi];
                     const hNet = net - hSoci - hPd - hOther;
+                    out.sociService.push(sociSvc);
+                    out.pdService.push(pdSvcDated[i]);
                     out.holdcoSociService.push(hSoci);
                     out.holdcoPdService.push(hPd);
                     out.holdcoOtherCosts.push(hOther);
