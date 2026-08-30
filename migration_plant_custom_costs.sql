@@ -37,11 +37,12 @@ DROP POLICY IF EXISTS "owner delete" ON public.plant_custom_costs;
 CREATE POLICY "owner read"   ON public.plant_custom_costs FOR SELECT TO authenticated
     USING ((select auth.uid()) = user_id);
 CREATE POLICY "owner insert" ON public.plant_custom_costs FOR INSERT TO authenticated
-    WITH CHECK ((select auth.uid()) = user_id);
+    WITH CHECK ((select auth.uid()) = user_id AND (select get_my_role()) <> 'viewer');
 CREATE POLICY "owner update" ON public.plant_custom_costs FOR UPDATE TO authenticated
-    USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+    USING ((select auth.uid()) = user_id AND (select get_my_role()) <> 'viewer')
+    WITH CHECK ((select auth.uid()) = user_id);
 CREATE POLICY "owner delete" ON public.plant_custom_costs FOR DELETE TO authenticated
-    USING ((select auth.uid()) = user_id);
+    USING ((select auth.uid()) = user_id AND (select get_my_role()) <> 'viewer');
 
 COMMIT;
 
