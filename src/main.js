@@ -9822,8 +9822,9 @@ window.renderCapexPaymentOptions = function() {
     const sel = document.getElementById('capex-plant-select');
     if (!sel) return;
     const prev = sel.value;
-    sel.innerHTML = (State.plants || []).map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
-    if (prev && (State.plants || []).some(p => p.id === prev)) sel.value = prev;
+    const enabledPlants = (State.plants || []).filter(p => p.enabled !== false);
+    sel.innerHTML = enabledPlants.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+    if (prev && enabledPlants.some(p => p.id === prev)) sel.value = prev;
     renderCapexPaymentRows();
 };
 
@@ -9931,8 +9932,9 @@ window.renderOpexEventOptions = function() {
     const sel = document.getElementById('opexev-plant-select');
     if (!sel) return;
     const prev = sel.value;
-    sel.innerHTML = (State.plants || []).map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
-    if (prev && (State.plants || []).some(p => p.id === prev)) sel.value = prev;
+    const enabledPlants = (State.plants || []).filter(p => p.enabled !== false);
+    sel.innerHTML = enabledPlants.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+    if (prev && enabledPlants.some(p => p.id === prev)) sel.value = prev;
     renderOpexEventRows();
 };
 
