@@ -499,6 +499,10 @@
                                 <div class="flex justify-between text-[10px] py-0.5 font-bold border-t border-slate-800 mt-1 pt-1"><span class="text-slate-300">Residuo (spalm. /12)</span><span id="mc-opex-residual" class="font-mono">—</span></div>
                             </div>
                         </div>
+                        <!-- CF10: indicatore IVA di cassa -->
+                        <div id="mc-vat-info" class="hidden mb-3 px-3 py-2 rounded-xl border border-violet-500/30 bg-violet-500/10 text-[10px] text-violet-200">
+                            <i class="fa-solid fa-percent mr-1"></i><span id="mc-vat-info-text">—</span>
+                        </div>
                         <div class="mb-3">
                             <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Ritardo di incasso per regime di mercato: i ricavi maturati nel mese N dell'impianto sono incassati al mese N+lag. Ogni impianto segue il lag del proprio regime.">Lag di incasso per regime (mesi) <i class="fa-solid fa-circle-info"></i></div>
                             <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
@@ -521,6 +525,31 @@
                                 <div title="Mese di pagamento di IRES/IRAP relative all'anno precedente (saldo)">
                                     <label class="block text-[9px] text-slate-400 mb-0.5">Imposte (mese)</label>
                                     <input type="number" id="mc-tax-pay-month" value="6" min="1" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                            </div>
+                        </div>
+                        <!-- CF10: IVA solo cash flow -->
+                        <div class="mb-3">
+                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="IVA di cassa: a debito sui ricavi incassati, a credito su CAPEX e OPEX pagati, con liquidazione periodica e credito IVA portato a nuovo. Incide SOLO sul timing della cassa (non su P&L né IRR).">IVA nel Cash Flow <i class="fa-solid fa-circle-info"></i></div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
+                                <div class="flex items-center gap-2 pb-1.5" title="Abilita/disabilita la modellazione dell'IVA nel cash flow">
+                                    <input type="checkbox" id="input-vat-enabled" checked class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
+                                    <span class="text-[10px] text-slate-300">Abilita IVA</span>
+                                </div>
+                                <div title="Aliquota IVA applicata a ricavi imponibili e acquisti">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Aliquota IVA (%)</label>
+                                    <input type="number" id="input-vat-rate" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div title="Quota dei ricavi soggetta a IVA (es. tariffa incentivante fuori campo IVA)">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Ricavi imponibili IVA (%)</label>
+                                    <input type="number" id="input-vat-taxable-pct" value="100" min="0" max="100" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-white font-bold text-[11px] outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                </div>
+                                <div title="Frequenza di liquidazione dell'IVA">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5">Liquidazione</label>
+                                    <select id="input-vat-settlement" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
+                                        <option value="mensile" selected>Mensile</option>
+                                        <option value="trimestrale">Trimestrale</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -561,7 +590,7 @@
                             </div>
                         </div>
                         <div class="mb-3 pt-3 border-t border-slate-800/80">
-                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="OPEX ricorrenti con scadenza mensile per impianto (es. manutenzione). IMU (da OPEX imposte) è applicata automaticamente: acconto giugno + saldo dicembre. Le imposte IRES/IRAP dal P&L sono pagate nel mese scelto dell'anno successivo.">Eventi OPEX ricorrenti (per impianto) <i class="fa-solid fa-circle-info"></i></div>
+                            <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="OPEX ricorrenti con scadenza mensile per impianto (es. manutenzione, IMU, assicurazione). Gli eventi dichiarati sono allocati sul loro mese; il residuo OPEX annuo non allocato si spalma /12. Le imposte IRES/IRAP dal P&L sono pagate nel mese scelto dell'anno successivo.">Eventi OPEX ricorrenti (per impianto) <i class="fa-solid fa-circle-info"></i></div>
                             <div class="grid grid-cols-12 gap-2 items-end">
                                 <div class="col-span-4">
                                     <label class="block text-[9px] text-slate-400 mb-0.5">Impianto</label>
@@ -3437,7 +3466,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=25"></script>
+    <script src="./src/main.js?v=26"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

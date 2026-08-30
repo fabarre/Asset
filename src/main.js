@@ -2870,6 +2870,11 @@
             p.collectionLagFerx = Math.max(0, parseInt(getVal('mc-lag-ferx'), 10) || 0);
             // CF5: mese di pagamento imposte (IRES/IRAP) dell'anno successivo
             p.taxPaymentMonth = Math.min(12, Math.max(1, parseInt(getVal('mc-tax-pay-month'), 10) || 6));
+            // CF10: IVA solo cash flow
+            p.vatEnabled = document.getElementById('input-vat-enabled') ? document.getElementById('input-vat-enabled').checked : true;
+            p.vatRate = parseFloat(getVal('input-vat-rate')); if (isNaN(p.vatRate)) p.vatRate = 22;
+            p.vatTaxableRevenuePct = parseFloat(getVal('input-vat-taxable-pct')); if (isNaN(p.vatTaxableRevenuePct)) p.vatTaxableRevenuePct = 100;
+            p.vatSettlement = getVal('input-vat-settlement') || 'mensile';
             // CF8: date di messa a disposizione dei capitali (vuote = default al COD/anno 1)
             p.fundingEquityDate = getVal('input-funding-equity-date') || '';
             p.fundingSociDate = getVal('input-funding-soci-date') || '';
@@ -3206,6 +3211,10 @@
                         'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
                         'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
                         'taxPaymentMonth': { id: 'mc-tax-pay-month', mult: 1 },
+                        'vatEnabled': { id: 'input-vat-enabled', mult: 1 },
+                        'vatRate': { id: 'input-vat-rate', mult: 1 },
+                        'vatTaxableRevenuePct': { id: 'input-vat-taxable-pct', mult: 1 },
+                        'vatSettlement': { id: 'input-vat-settlement', mult: 1 },
                         'fundingEquityDate': { id: 'input-funding-equity-date', mult: 1 },
                         'fundingSociDate': { id: 'input-funding-soci-date', mult: 1 },
                         'fundingDebtDate': { id: 'input-funding-debt-date', mult: 1 },
@@ -3655,6 +3664,10 @@
                         'fundingEquityDate': { id: 'input-funding-equity-date', mult: 1 },
                         'fundingSociDate': { id: 'input-funding-soci-date', mult: 1 },
                         'fundingDebtDate': { id: 'input-funding-debt-date', mult: 1 },
+                        'vatEnabled': { id: 'input-vat-enabled', mult: 1 },
+                        'vatRate': { id: 'input-vat-rate', mult: 1 },
+                        'vatTaxableRevenuePct': { id: 'input-vat-taxable-pct', mult: 1 },
+                        'vatSettlement': { id: 'input-vat-settlement', mult: 1 },
                                 'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
                                 'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                                 'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
@@ -6507,6 +6520,17 @@
                     budgetPanel.style.display = 'none';
                 }
             }
+            // CF10: indicatore IVA di cassa
+            const vatInfo = document.getElementById('mc-vat-info');
+            const vatInfoTxt = document.getElementById('mc-vat-info-text');
+            if (vatInfo && vatInfoTxt) {
+                if (dated && mc.vatEnabled) {
+                    vatInfo.classList.remove('hidden');
+                    vatInfoTxt.textContent = `IVA di cassa attiva: credito IVA massimo ${_fmtE(mc.vatMaxCredit || 0)} · effetto netto cumulato ${_fmtE(mc.vatNetCumulative || 0)} (solo timing, non tocca P&L/IRR)`;
+                } else {
+                    vatInfo.classList.add('hidden');
+                }
+            }
             const periodEl = document.getElementById('mc-period-label');
             if (periodEl) {
                 periodEl.textContent = dated
@@ -8873,6 +8897,19 @@
                     el.addEventListener('change', triggerRecalculate);
                     el.addEventListener('input', () => triggerRecalculateDebounced(350));
                 }
+            });
+            // CF10: campi IVA (solo cash flow)
+            ['input-vat-enabled'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', triggerRecalculate);
+            });
+            ['input-vat-rate', 'input-vat-taxable-pct'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
+            });
+            ['input-vat-settlement'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', triggerRecalculate);
             });
             const inputs = [
                 'input-ke-val', 'input-wacc', 'input-inflation', 'input-ires-rate', 'input-irap-rate', 'input-pun-zonal-floor', 'input-pun-bearish-decay-rate', 'input-ts-bearish-decay-rate', 'input-arb-bearish-decay-rate', 'input-dividend-lock',

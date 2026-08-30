@@ -545,7 +545,7 @@ const capexPay25 = {
     // pB: nessun pagamento -> default 100% del CAPEX alla data COD
 };
 const r25 = run(buildState({
-    inputs: { collectionLagRid: 0 },
+    inputs: { collectionLagRid: 0, vatEnabled: false },
     plants: [
         { id: 'pA', name: 'Impianto A', capacity: 8000, zone: 'NORD', opex: 120000, enabled: true, generation: gen24a, codDate: '2027-05-15', ...plantNoBess24, capex: 700 },
         { id: 'pB', name: 'Impianto B', capacity: 4000, zone: 'SUD', opex: 60000, enabled: true, generation: gen24b, codDate: '2028-02-15', ...plantNoBess24, capex: 750 }
@@ -652,6 +652,27 @@ check('Debito erogato a gen-2027 (idx 12)', mc29.fundingInflow[12] > 0, `inflow[
 check('Cassa con funding ≥ cassa senza funding (min)', mc29.fundedMinCashClosing >= mc29.minCashClosing - 1e-6,
     `funded=${mc29.fundedMinCashClosing.toFixed(0)} unfunded=${mc29.minCashClosing.toFixed(0)}`);
 check('XIRR datato finito', Number.isFinite(mc29.datedXirr) && !isNaN(mc29.datedXirr), `xirr=${mc29.datedXirr}`);
+
+// ── Test 30: IVA solo cash flow — pass-through con credito IVA e liquidazione (CF10) ──
+console.log('\n[Test 30] IVA di cassa: pass-through con credito IVA e liquidazione');
+const r30 = run(buildState({
+    inputs: { collectionLagRid: 0, vatEnabled: true, vatRate: 22, vatTaxableRevenuePct: 100, vatSettlement: 'mensile' },
+    plants: basePlants28()
+}));
+const mc30 = r30.monthlyCashflow;
+check('IVA abilitata e array presenti (72 mesi)', mc30.vatEnabled === true && mc30.vatCashFlow.length === 72 && mc30.vatCreditEnd.length === 72);
+let vatIdOk = true;
+for (let i = 0; i < 72; i++) {
+    if (Math.abs(mc30.vatCashFlow[i] - (mc30.vatCollected[i] - mc30.vatPaidToSuppliers[i] - mc30.vatRemitted[i])) > 1e-6) { vatIdOk = false; break; }
+}
+check('Identità IVA mensile (incassata − pagata − versata)', vatIdOk);
+const capexMonth30 = mc30.capexOutflow.findIndex(v => v > 0);
+check('IVA a credito = 22% di (CAPEX+OPEX) nel mese di esborso', capexMonth30 >= 0 && Math.abs(mc30.vatPaidToSuppliers[capexMonth30] - 0.22 * (mc30.capexOutflow[capexMonth30] + mc30.opex[capexMonth30])) < 1e-6,
+    `mese=${capexMonth30} vatPaid=${mc30.vatPaidToSuppliers[capexMonth30].toFixed(0)}`);
+check('Credito IVA massimo ≥ 0 e coerente', mc30.vatMaxCredit >= 0 && Math.abs(mc30.vatMaxCredit - Math.max.apply(null, mc30.vatCreditEnd)) < 1e-6);
+check('Effetto netto cumulato = Σ vatCashFlow', Math.abs(mc30.vatNetCumulative - mc30.vatCashFlow.reduce((a, b) => a + b, 0)) < 1e-6);
+const r30off = run(buildState({ inputs: { collectionLagRid: 0, vatEnabled: false }, plants: basePlants28() }));
+check('IVA disabilitata: nessun effetto sul cash flow', r30off.monthlyCashflow.vatCashFlow.every(v => v === 0));
 
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);

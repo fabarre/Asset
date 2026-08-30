@@ -3461,6 +3461,8 @@ function runSensitivityLoop(baseState, config) {
                     opex: [], taxes: [], interest: [], principal: [], debtService: [],
                     capexOutflow: [],
                     fundingInflow: [],
+                    vatCollected: [], vatPaidToSuppliers: [], vatRemitted: [], vatCreditEnd: [], vatCashFlow: [],
+                    vatMaxCredit: 0, vatNetCumulative: 0, vatEnabled: false,
                     netCashflow: [], cashOpening: [], cashClosing: [],
                     fundedCashOpening: [], fundedCashClosing: [],
                     holdcoSociService: [], holdcoPdService: [], holdcoOtherCosts: [],
@@ -3648,6 +3650,17 @@ function runSensitivityLoop(baseState, config) {
                 fundingInflow[sociIdx] += (funding && funding.sociLoan) || 0;
                 fundingInflow[debtIdx] += (funding && funding.debtAmount) || 0;
 
+                // ═══ CF10: IVA solo cash flow (pass-through, non tocca P&L né IRR) ═══
+                // IVA a debito sui ricavi incassati, IVA a credito su CAPEX+OPEX pagati,
+                // liquidazione periodica con credito IVA portato a nuovo. Effetto sul
+                // cash flow = incassata − pagata ai fornitori − versata all'erario.
+                const vatEnabled = inputs.vatEnabled !== undefined ? !!inputs.vatEnabled : true;
+                const vatRate = (inputs.vatRate !== undefined ? inputs.vatRate : 22) / 100;
+                const vatTaxableRevenuePct = (inputs.vatTaxableRevenuePct !== undefined ? inputs.vatTaxableRevenuePct : 100) / 100;
+                const vatSettleEvery = (inputs.vatSettlement === 'trimestrale') ? 3 : 1;
+                let vatCredit = 0;
+                out.vatEnabled = vatEnabled;
+
                 for (let i = 0; i < totalMonths; i++) {
                     const isYear0 = i < 12;
                     const yi = isYear0 ? -1 : Math.floor((i - 12) / 12);
@@ -3660,7 +3673,22 @@ function runSensitivityLoop(baseState, config) {
                     const interest = isYear0 ? 0 : (ds.interestAccrued[yi] || 0) / 12;
                     const principal = isYear0 ? 0 : ((ds.principalScheduled[yi] || 0) + (ds.principalVoluntary[yi] || 0)) / 12;
                     const debtSvc = interest + principal;
-                    const net = collected[i] - opex - taxes - debtSvc - capexOut[i];
+                    // CF10: IVA di cassa del mese
+                    let vatOut = 0, vatIn = 0, vatRemit = 0;
+                    if (vatEnabled) {
+                        vatOut = vatRate * vatTaxableRevenuePct * collected[i];
+                        vatIn = vatRate * (capexOut[i] + opex);
+                        vatCredit += vatIn - vatOut;
+                        const isSettle = ((i % vatSettleEvery) === (vatSettleEvery - 1)) || (i === totalMonths - 1);
+                        if (isSettle && vatCredit < 0) { vatRemit = -vatCredit; vatCredit = 0; }
+                    }
+                    const vatCashFlow = vatEnabled ? (vatOut - vatIn - vatRemit) : 0;
+                    out.vatCollected.push(vatOut);
+                    out.vatPaidToSuppliers.push(vatIn);
+                    out.vatRemitted.push(vatRemit);
+                    out.vatCreditEnd.push(vatCredit);
+                    out.vatCashFlow.push(vatCashFlow);
+                    const net = collected[i] - opex - taxes - debtSvc - capexOut[i] + vatCashFlow;
                     out.months.push(i + 1);
                     out.labels.push(MONTHS_IT[m] + ' ' + calYear + (isYear0 ? ' (Y0)' : ''));
                     out.calendarYears.push(calYear);
@@ -3705,6 +3733,10 @@ function runSensitivityLoop(baseState, config) {
                 out.minCashMonth = minMonth;
                 out.negativeMonths = negCount;
                 out.negativeNetMonths = negNetCount;
+
+                // CF10: aggregati IVA
+                out.vatMaxCredit = out.vatCreditEnd.length ? Math.max.apply(null, out.vatCreditEnd) : 0;
+                out.vatNetCumulative = out.vatCashFlow.reduce((a, b) => a + b, 0);
 
                 // CF8: minimo della cassa finanziata + XIRR equity datato
                 let fMin = Infinity, fMinMonth = 0;
