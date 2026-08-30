@@ -3450,7 +3450,7 @@ function runSensitivityLoop(baseState, config) {
             // CF4: esborsi CAPEX datati per impianto (capexPayments), con default 100% al COD.
             // CF5: OPEX con scadenze (eventi ricorrenti per impianto + IMU giu/dic) e
             //      imposte IRES/IRAP dal P&L pagate l'anno successivo (taxPaymentMonth).
-            function buildMonthlyCashflowDated(plantsList, mtx, ds, inputs, anchorYearIn, capexPayments, opexEvents) {
+            function buildMonthlyCashflowDated(plantsList, mtx, ds, inputs, anchorYearIn, capexPayments, opexEvents, funding) {
                 const YEARS = 5;
                 const MONTHS_IT = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
                 const totalMonths = (YEARS + 1) * 12;
@@ -3460,10 +3460,13 @@ function runSensitivityLoop(baseState, config) {
                     revenueAccrued: [], revenueCollected: [], revenueTotal: [],
                     opex: [], taxes: [], interest: [], principal: [], debtService: [],
                     capexOutflow: [],
+                    fundingInflow: [],
                     netCashflow: [], cashOpening: [], cashClosing: [],
+                    fundedCashOpening: [], fundedCashClosing: [],
                     holdcoSociService: [], holdcoPdService: [], holdcoOtherCosts: [],
                     holdcoNetCashflow: [], holdcoCashOpening: [], holdcoCashClosing: [],
-                    lagResidual: 0, capexBeforeHorizon: 0, taxesAfterHorizon: 0
+                    lagResidual: 0, capexBeforeHorizon: 0, taxesAfterHorizon: 0,
+                    fundedMinCashClosing: 0, fundedMinMonth: 0, datedXirr: 0
                 };
                 const accrued = new Float64Array(totalMonths);
                 const collected = new Float64Array(totalMonths);
@@ -3611,6 +3614,27 @@ function runSensitivityLoop(baseState, config) {
 
                 let cash = 0;
                 let holdcoCash = 0;
+                let fundedCash = 0;
+
+                // CF8: flussi in entrata di equity/soci/debito sulle date di messa a disposizione
+                const dateToIdx = (dstr) => {
+                    if (!dstr) return null;
+                    const parts = String(dstr).split('-');
+                    const y = parseInt(parts[0], 10), mo = parseInt(parts[1], 10);
+                    if (!y || !mo) return null;
+                    const idx = (y - (anchorYearIn - 1)) * 12 + (mo - 1);
+                    return (idx >= 0 && idx < totalMonths) ? idx : null;
+                };
+                let firstCapexIdx = 12;
+                for (let i = 0; i < totalMonths; i++) { if (capexOut[i] > 0) { firstCapexIdx = i; break; } }
+                const fundingInflow = new Float64Array(totalMonths);
+                const eqIdx = dateToIdx(inputs.fundingEquityDate) !== null ? dateToIdx(inputs.fundingEquityDate) : firstCapexIdx;
+                const sociIdx = dateToIdx(inputs.fundingSociDate) !== null ? dateToIdx(inputs.fundingSociDate) : firstCapexIdx;
+                const debtIdx = dateToIdx(inputs.fundingDebtDate) !== null ? dateToIdx(inputs.fundingDebtDate) : firstCapexIdx;
+                fundingInflow[eqIdx] += (funding && funding.equityAmount) || 0;
+                fundingInflow[sociIdx] += (funding && funding.sociLoan) || 0;
+                fundingInflow[debtIdx] += (funding && funding.debtAmount) || 0;
+
                 for (let i = 0; i < totalMonths; i++) {
                     const isYear0 = i < 12;
                     const yi = isYear0 ? -1 : Math.floor((i - 12) / 12);
@@ -3635,10 +3659,15 @@ function runSensitivityLoop(baseState, config) {
                     out.principal.push(principal);
                     out.debtService.push(debtSvc);
                     out.capexOutflow.push(capexOut[i]);
+                    out.fundingInflow.push(fundingInflow[i]);
                     out.netCashflow.push(net);
                     out.cashOpening.push(cash);
                     cash += net;
                     out.cashClosing.push(cash);
+                    // CF8: cassa "finanziata" = operativa + flussi in entrata equity/soci/debito
+                    out.fundedCashOpening.push(fundedCash);
+                    fundedCash += net + fundingInflow[i];
+                    out.fundedCashClosing.push(fundedCash);
                     // CF6: cascata Holding = netto SPV - servizio soci - servizio PD - oneri HoldCo
                     const hSoci = isYear0 ? 0 : sociM[yi];
                     const hPd = isYear0 ? 0 : pdM[yi];
@@ -3662,6 +3691,24 @@ function runSensitivityLoop(baseState, config) {
                 out.minCashMonth = minMonth;
                 out.negativeMonths = negCount;
                 out.negativeNetMonths = negNetCount;
+
+                // CF8: minimo della cassa finanziata + XIRR equity datato
+                let fMin = Infinity, fMinMonth = 0;
+                out.fundedCashClosing.forEach((c, i) => { if (c < fMin) { fMin = c; fMinMonth = out.months[i]; } });
+                out.fundedMinCashClosing = isFinite(fMin) ? fMin : 0;
+                out.fundedMinMonth = fMinMonth;
+
+                const eqParsed = parseCodDate(inputs.fundingEquityDate);
+                const baseY = eqParsed ? eqParsed.y : anchorYearIn;
+                const baseM = eqParsed ? eqParsed.m : 1;
+                const toYears = (y, m) => (y - baseY) + ((m - 1) - (baseM - 1)) / 12;
+                const xflows = [{ t: 0, amount: -((funding && funding.equityAmount) || 0) }];
+                const nYr = (mtx.holdcoFCFE || []).length;
+                for (let yr = 1; yr <= nYr; yr++) {
+                    const v = mtx.holdcoFCFE[yr - 1] || 0;
+                    if (Math.abs(v) > 1e-9) xflows.push({ t: toYears(anchorYearIn + yr - 1, 12), amount: v });
+                }
+                out.datedXirr = calculateXIRR(xflows);
                 return out;
             }
 
@@ -3672,7 +3719,9 @@ function runSensitivityLoop(baseState, config) {
                 calculatedIrr, calculatedProjectIrr, holdcoNpv, holdcoMoic, paybackPeriod, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
                 matrix, debtSchedule, combinedSolarProfile, generalMedionePrices, bessSimulation,
                 monthlyCashflow: anchorYear !== null
-                    ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear, State.capexPayments || null, State.opexEvents || null)
+                    ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear, State.capexPayments || null, State.opexEvents || null, {
+                        equityAmount, debtAmount, sociLoan: initialShareholderLoan
+                    })
                     : buildMonthlyCashflow(activePlants, matrix, debtSchedule),
                 totalBessMw, totalBessMwh,
                 totalSelfConsMwh, totalPpaRev_y1, totalStabLoadMwh,
@@ -4011,4 +4060,33 @@ function runSensitivityLoop(baseState, config) {
             const sum = cashFlows.reduce((a, b) => a + b, 0);
             if (sum === 0) return 0;
             return sum < 0 ? -99.99 : 999.99;
+        }
+
+        // CF8: XIRR datato — flussi [{ t: anni frazionari, amount }] con Newton+bisezione.
+        // t è espresso in anni frazionari dalla prima data.
+        function calculateXIRR(datedFlows) {
+            const flows = datedFlows.filter(f => Math.abs(f.amount) > 1e-9);
+            if (flows.length < 2) return 0;
+            const hasNeg = flows.some(f => f.amount < 0);
+            const hasPos = flows.some(f => f.amount > 0);
+            if (!hasNeg || !hasPos) return 0;
+            const t0 = Math.min(...flows.map(f => f.t));
+            const npvAt = (rate) => flows.reduce((a, f) => a + f.amount / Math.pow(1 + rate, f.t - t0), 0);
+
+            let low = -0.99, high = 1.0;
+            let npvLow = npvAt(low), npvHigh = npvAt(high);
+            // espandi high finché il segno cambia
+            let guard = 0;
+            while (npvLow * npvHigh > 0 && high < 100 && guard < 60) {
+                high *= 2; npvHigh = npvAt(high); guard++;
+            }
+            if (npvLow * npvHigh > 0) return 0;
+            for (let i = 0; i < 120; i++) {
+                const mid = (low + high) / 2;
+                const npvMid = npvAt(mid);
+                if (Math.abs(npvMid) < 1e-7 || (high - low) < 1e-9) return mid * 100;
+                if (npvMid * npvLow > 0) { low = mid; npvLow = npvMid; }
+                else { high = mid; npvHigh = npvMid; }
+            }
+            return ((low + high) / 2) * 100;
         }

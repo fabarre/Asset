@@ -630,6 +630,21 @@ check('OPEX personalizzato nel cash flow mensile (+50.000/12 al mese da gen-2027
     `Δ=${(r28b.monthlyCashflow.opex[12] - r28a.monthlyCashflow.opex[12]).toFixed(2)}`);
 check('Totali esposti nei risultati', r28b.totalCustomCapex === 100000 && r28b.totalCustomOpex === 50000);
 
+// ── Test 29: date di funding + cassa finanziata + XIRR datato (CF8) ──
+console.log('\n[Test 29] Funding datato: equity 2026-06, debito 2027-01; cassa finanziata e XIRR');
+const r29 = run(buildState({
+    inputs: { collectionLagRid: 0, fundingEquityDate: '2026-06-01', fundingSociDate: '2026-06-01', fundingDebtDate: '2027-01-01' },
+    plants: basePlants28()
+}));
+const mc29 = r29.monthlyCashflow;
+// anno 0 = 2026 -> idx giu-2026 = 5; gen-2027 = 12
+check('Equity+soci erogati a giu-2026 (idx 5)', Math.abs(mc29.fundingInflow[5] - (r29.equityAmount + 0)) < 1e-6 || mc29.fundingInflow[5] > 0,
+    `inflow[5]=${mc29.fundingInflow[5].toFixed(0)} equity=${r29.equityAmount.toFixed(0)}`);
+check('Debito erogato a gen-2027 (idx 12)', mc29.fundingInflow[12] > 0, `inflow[12]=${mc29.fundingInflow[12].toFixed(0)}`);
+check('Cassa con funding ≥ cassa senza funding (min)', mc29.fundedMinCashClosing >= mc29.minCashClosing - 1e-6,
+    `funded=${mc29.fundedMinCashClosing.toFixed(0)} unfunded=${mc29.minCashClosing.toFixed(0)}`);
+check('XIRR datato finito', Number.isFinite(mc29.datedXirr) && !isNaN(mc29.datedXirr), `xirr=${mc29.datedXirr}`);
+
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);

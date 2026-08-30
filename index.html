@@ -571,10 +571,18 @@
                                 <button onclick="saveOpexEvents()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-floppy-disk mr-1"></i>Salva eventi OPEX</button>
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Valore minimo della cassa finale cumulata sull'orizzonte">
-                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Cassa Minima</div>
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Cassa minima cumulata SENZA considerare i flussi in entrata di equity/soci/debito (fabbisogno lordo)">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Cassa Minima (senza funding)</div>
                                 <div id="mc-kpi-min-cash" class="text-sm font-black text-white mt-1">—</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Cassa minima cumulata DOPO i flussi in entrata di equity/soci/debito sulle date impostate">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Cassa Minima (con funding)</div>
+                                <div id="mc-kpi-min-cash-funded" class="text-sm font-black text-white mt-1">—</div>
+                            </div>
+                            <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="IRR equity calcolato con date reali di funding e distribuzioni (XIRR)">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">XIRR Equity (datato)</div>
+                                <div id="mc-kpi-xirr" class="text-sm font-black text-emerald-400 mt-1">—</div>
                             </div>
                             <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3" title="Mese in cui si registra la cassa minima">
                                 <div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Mese Cassa Minima</div>
@@ -1068,6 +1076,22 @@
                                     <span class="font-bold text-blue-400" id="val-idc-drawdown">50 %</span>
                                 </div>
                                 <input type="range" id="slide-idc-drawdown" min="0" max="100" value="50" step="1" class="w-full">
+                            </div>
+                        </div>
+
+                        <!-- CF8: Date di messa a disposizione dei capitali -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-3 border-t border-slate-800">
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1" title="Data in cui l'equity sponsor/Holding è disponibile">Equity Sponsor / Holding</label>
+                                <input type="date" id="input-funding-equity-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-emerald-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1" title="Data in cui il finanziamento soci SPV è disponibile">Finanziamento Soci SPV</label>
+                                <input type="date" id="input-funding-soci-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-amber-300 font-bold text-xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1" title="Data di erogazione del debito senior bancario">Debito Senior (Banca)</label>
+                                <input type="date" id="input-funding-debt-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-cyan-300 font-bold text-xs focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none">
                             </div>
                         </div>
 
@@ -3381,7 +3405,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=22"></script>
+    <script src="./src/main.js?v=23"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

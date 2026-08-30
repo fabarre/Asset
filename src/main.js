@@ -2870,6 +2870,10 @@
             p.collectionLagFerx = Math.max(0, parseInt(getVal('mc-lag-ferx'), 10) || 0);
             // CF5: mese di pagamento imposte (IRES/IRAP) dell'anno successivo
             p.taxPaymentMonth = Math.min(12, Math.max(1, parseInt(getVal('mc-tax-pay-month'), 10) || 6));
+            // CF8: date di messa a disposizione dei capitali (vuote = default al COD/anno 1)
+            p.fundingEquityDate = getVal('input-funding-equity-date') || null;
+            p.fundingSociDate = getVal('input-funding-soci-date') || null;
+            p.fundingDebtDate = getVal('input-funding-debt-date') || null;
             p.bessOptimizer = getVal('select-bess-optimizer') || 'dp';
             p.punZonalFloor = getNum('input-pun-zonal-floor', 60.0);
             p.punBearishDecayRate = getNum('input-pun-bearish-decay-rate', 5) / 100;
@@ -3202,6 +3206,9 @@
                         'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
                         'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
                         'taxPaymentMonth': { id: 'mc-tax-pay-month', mult: 1 },
+                        'fundingEquityDate': { id: 'input-funding-equity-date', mult: 1 },
+                        'fundingSociDate': { id: 'input-funding-soci-date', mult: 1 },
+                        'fundingDebtDate': { id: 'input-funding-debt-date', mult: 1 },
                         'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
                         'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                         'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
@@ -3645,6 +3652,9 @@
                                 'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
                                 'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
                                 'taxPaymentMonth': { id: 'mc-tax-pay-month', mult: 1 },
+                        'fundingEquityDate': { id: 'input-funding-equity-date', mult: 1 },
+                        'fundingSociDate': { id: 'input-funding-soci-date', mult: 1 },
+                        'fundingDebtDate': { id: 'input-funding-debt-date', mult: 1 },
                                 'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
                                 'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
                                 'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
@@ -6398,6 +6408,8 @@
 
         function renderMonthlyCashflow(mc) {
             const kMin = document.getElementById('mc-kpi-min-cash');
+            const kMinFunded = document.getElementById('mc-kpi-min-cash-funded');
+            const kXirr = document.getElementById('mc-kpi-xirr');
             const kMinM = document.getElementById('mc-kpi-min-month');
             const kNegNet = document.getElementById('mc-kpi-neg-net');
             const kNeg = document.getElementById('mc-kpi-neg-months');
@@ -6408,6 +6420,8 @@
             updateMonthlyViewToggle();
             if (!mc || !mc.months || mc.months.length === 0) {
                 if (kMin) kMin.textContent = '—';
+                if (kMinFunded) kMinFunded.textContent = '—';
+                if (kXirr) kXirr.textContent = '—';
                 if (kMinM) kMinM.textContent = '—';
                 if (kNegNet) kNegNet.textContent = '—';
                 if (kNeg) kNeg.textContent = '—';
@@ -6430,6 +6444,16 @@
                 kMin.textContent = _fmtE(minClosing);
                 kMin.className = 'text-sm font-black mt-1 ' + (minClosing < 0 ? 'text-rose-400' : 'text-emerald-400');
             }
+            if (kMinFunded) {
+                const fMin = (mc.fundedMinCashClosing !== undefined ? mc.fundedMinCashClosing : minClosing);
+                kMinFunded.textContent = _fmtE(fMin);
+                kMinFunded.className = 'text-sm font-black mt-1 ' + (fMin < 0 ? 'text-rose-400' : 'text-emerald-400');
+            }
+            if (kXirr) {
+                const x = (mc.datedXirr !== undefined ? mc.datedXirr : 0);
+                kXirr.textContent = (x !== 0 ? fmtDec(x, 2) + ' %' : '—');
+                kXirr.className = 'text-sm font-black mt-1 ' + (x < 0 ? 'text-rose-400' : 'text-emerald-400');
+            }
             if (kMinM) kMinM.textContent = minIdx >= 0 ? (mc.labels[minIdx] || ('Mese ' + (minIdx + 1))) : '—';
             if (kNegNet) {
                 kNegNet.textContent = String(negNet);
@@ -6440,8 +6464,12 @@
                 kNeg.className = 'text-sm font-black mt-1 ' + (negCash > 0 ? 'text-rose-400' : 'text-emerald-400');
             }
             if (banner) {
-                if (minClosing < 0) {
-                    banner.textContent = `Fabbisogno di cassa: ${_fmtE(minClosing)} a ${mc.labels[minIdx]} (${s.holding ? 'Holding' : 'SPV'}) — valutare copertura (apporto soci, linea liquidità, ridistribuzione esborsi).`;
+                const fMin = (mc.fundedMinCashClosing !== undefined ? mc.fundedMinCashClosing : minClosing);
+                if (fMin < 0) {
+                    banner.textContent = `Cassa negativa anche dopo funding: ${_fmtE(fMin)} — aumentare equity/debito o spostare le date di erogazione.`;
+                    banner.classList.remove('hidden');
+                } else if (minClosing < 0) {
+                    banner.textContent = `Fabbisogno lordo ${_fmtE(minClosing)} a ${mc.labels[minIdx]}, coperto dai capitali erogati (cassa con funding ≥ 0).`;
                     banner.classList.remove('hidden');
                 } else {
                     banner.classList.add('hidden');
@@ -6534,6 +6562,16 @@
                                 tension: 0.25,
                                 yAxisID: 'y'
                             },
+                            ...(mc.fundedCashClosing ? [{
+                                label: 'Cassa con Funding (€)',
+                                data: mc.fundedCashClosing.map(v => Math.round(v)),
+                                type: 'line',
+                                borderColor: '#a78bfa',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                tension: 0.25,
+                                yAxisID: 'y'
+                            }] : []),
                             {
                                 label: 'Zero',
                                 data: mc.months.map(() => 0),
