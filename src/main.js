@@ -2871,9 +2871,9 @@
             // CF5: mese di pagamento imposte (IRES/IRAP) dell'anno successivo
             p.taxPaymentMonth = Math.min(12, Math.max(1, parseInt(getVal('mc-tax-pay-month'), 10) || 6));
             // CF8: date di messa a disposizione dei capitali (vuote = default al COD/anno 1)
-            p.fundingEquityDate = getVal('input-funding-equity-date') || null;
-            p.fundingSociDate = getVal('input-funding-soci-date') || null;
-            p.fundingDebtDate = getVal('input-funding-debt-date') || null;
+            p.fundingEquityDate = getVal('input-funding-equity-date') || '';
+            p.fundingSociDate = getVal('input-funding-soci-date') || '';
+            p.fundingDebtDate = getVal('input-funding-debt-date') || '';
             p.bessOptimizer = getVal('select-bess-optimizer') || 'dp';
             p.punZonalFloor = getNum('input-pun-zonal-floor', 60.0);
             p.punBearishDecayRate = getNum('input-pun-bearish-decay-rate', 5) / 100;
@@ -6426,7 +6426,7 @@
                 if (kNegNet) kNegNet.textContent = '—';
                 if (kNeg) kNeg.textContent = '—';
                 if (banner) banner.classList.add('hidden');
-                if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="py-4 text-center text-slate-500">Esegui un calcolo per visualizzare il cash flow mensile.</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="py-4 text-center text-slate-500">Esegui un calcolo per visualizzare il cash flow mensile.</td></tr>';
                 if (State.monthlyChartInstance) { State.monthlyChartInstance.destroy(); State.monthlyChartInstance = null; }
                 return;
             }
@@ -6502,6 +6502,7 @@
                         <th class="px-2 py-2 text-right">Imposte</th>
                         <th class="px-2 py-2 text-right">Serv. Debito</th>
                         ${dated ? '<th class="px-2 py-2 text-right" title="Esborsi CAPEX datati">CAPEX</th>' : ''}
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Flussi in entrata equity/soci/debito sulle date di FINANZA">Funding</th>' : ''}
                         <th class="px-2 py-2 text-right">Net Cashflow</th>
                         <th class="px-2 py-2 text-right">Cassa Finale</th>
                     </tr>`;
@@ -6531,6 +6532,7 @@
                             <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(mc.taxes[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(mc.debtService[i], 0)}</td>
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(mc.capexOutflow[i], 0)}</td>` : ''}
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.fundingInflow[i] > 0 ? 'text-violet-300 font-bold' : 'text-slate-600'}">${fmtDec(mc.fundingInflow[i], 0)}</td>` : ''}
                             <td class="px-2 py-1.5 text-right font-mono ${s.net[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(s.net[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(s.closing[i], 0)}</td>
                         </tr>`;
@@ -8830,6 +8832,15 @@
             exitChangeInputs.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', triggerRecalculate);
+            });
+            // CF8: date di messa a disposizione capitali -> salvataggio + ricalcolo in tempo reale
+            const fundingDateInputs = ['input-funding-equity-date', 'input-funding-soci-date', 'input-funding-debt-date'];
+            fundingDateInputs.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('change', triggerRecalculate);
+                    el.addEventListener('input', () => triggerRecalculateDebounced(350));
+                }
             });
             const inputs = [
                 'input-ke-val', 'input-wacc', 'input-inflation', 'input-ires-rate', 'input-irap-rate', 'input-pun-zonal-floor', 'input-pun-bearish-decay-rate', 'input-ts-bearish-decay-rate', 'input-arb-bearish-decay-rate', 'input-dividend-lock',
