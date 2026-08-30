@@ -1,6 +1,6 @@
 # TODO — backlog operativo
 
-Aggiornato: 2026-08-30 (post Fasi A-E + CF7-CF10 del piano di sviluppo 2026-08).
+Aggiornato: 2026-08-30 (post Fasi A-E + CF7-CF11 del piano di sviluppo 2026-08).
 
 ## Aperti
 - [ ] **Rotazione PAT Supabase**: il personal access token usato nelle sessioni di agosto è transitato in chat → revocare e rigenerare da https://supabase.com/dashboard/account/tokens, poi aggiornare `scratch/.sbp_token`.
@@ -31,4 +31,5 @@ Aggiornato: 2026-08-30 (post Fasi A-E + CF7-CF10 del piano di sviluppo 2026-08).
 - [x] Date funding capitali + XIRR datato (CF8)
 - [x] Modello budget CAPEX/OPEX con contatori residuo e categorie (CF9)
 - [x] IVA solo cash flow (pass-through, non tocca P&L/IRR) (CF10)
+- [x] IVA per voce: aliquote per categoria CAPEX/OPEX (default IT), vat_rate per voce personalizzata, righe budget Netto/IVA/Lordo con IVA allocata automatica (CF11, suite 136→143)
 - [x] README aggiornato + docs/PROJECT_SPEC.md + docs/TODO.md (E1)
