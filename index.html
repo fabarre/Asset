@@ -348,6 +348,10 @@
                     <i class="fa-solid fa-chart-line text-sm"></i>
                     <span>SENSITIVITY</span>
                 </button>
+                <button onclick="switchTab('tab-dataquality')" id="btn-tab-dataquality" class="border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2">
+                    <i class="fa-solid fa-clipboard-check text-sm"></i>
+                    <span>QUALITÀ DATI</span>
+                </button>
                 <button onclick="switchTab('tab-users')" id="btn-tab-users" class="hidden border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2">
                     <i class="fa-solid fa-users-gear text-sm"></i>
                     <span>UTENTI</span>
@@ -3287,6 +3291,40 @@
             </div>
         </div>
 
+        <!-- Tab: Qualità Dati (D4) -->
+        <div id="tab-dataquality" class="tab-content space-y-6">
+            <div class="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-2">
+                <div>
+                    <h2 class="text-base font-bold text-white tracking-tight uppercase flex items-center space-x-2">
+                        <i class="fa-solid fa-clipboard-check text-emerald-400 text-sm"></i>
+                        <span>Qualità Dati & Copertura</span>
+                    </h2>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Controlli automatici su listini PUN, curve di produzione, carichi e quadrature energetiche.</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="renderDataQuality()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[11px] transition-colors"><i class="fa-solid fa-rotate mr-1"></i>Aggiorna</button>
+                    <button onclick="downloadDataQualityCSV()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[11px] transition-colors"><i class="fa-solid fa-file-csv mr-1"></i>Esporta CSV</button>
+                </div>
+            </div>
+            <div id="dq-summary" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+            <div class="bg-[#0b0f19] border border-slate-850 rounded-2xl overflow-hidden">
+                <div class="overflow-auto max-h-[520px]">
+                    <table class="w-full text-[11px]">
+                        <thead class="sticky top-0 bg-[#0b0f19] z-10">
+                            <tr class="text-slate-400 uppercase tracking-wider">
+                                <th class="px-3 py-2 text-left">Area</th>
+                                <th class="px-3 py-2 text-left">Controllo</th>
+                                <th class="px-3 py-2 text-center">Esito</th>
+                                <th class="px-3 py-2 text-right">Valore</th>
+                                <th class="px-3 py-2 text-left">Dettaglio</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dq-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- Tab 7: Sensitivity Analysis -->
         <div id="tab-sensitivity" class="tab-content space-y-8">
             <div class="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
@@ -3466,7 +3504,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=26"></script>
+    <script src="./src/main.js?v=27"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

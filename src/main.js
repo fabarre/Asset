@@ -563,6 +563,7 @@
                 'tab-financials': 'btn-tab-financials',
                 'tab-stabilimenti': 'btn-tab-stabilimenti',
                 'tab-sensitivity': 'btn-tab-sensitivity',
+                'tab-dataquality': 'btn-tab-dataquality',
                 'tab-users': 'btn-tab-users'
             };
             
@@ -583,8 +584,120 @@
                 setTimeout(() => renderHourlyProfileChart(), 50);
             } else if (tabId === 'tab-gme') {
                 setTimeout(() => renderGmeDashboard(), 50);
+            } else if (tabId === 'tab-dataquality') {
+                setTimeout(() => renderDataQuality(), 50);
             }
         }
+
+        // ═══ D4: Qualità Dati & Copertura ═══
+        window.computeDataQuality = function() {
+            const checks = [];
+            const add = (area, name, status, value, detail) => checks.push({ area, check: name, status, value, detail });
+            const ZONES = ['NORD', 'CNOR', 'CSUD', 'SUD', 'SICI', 'SARD'];
+            const fmtInt = (v) => (v === null || v === undefined) ? '—' : Number(v).toLocaleString('it-IT');
+
+            // 1. Listini PUN zonali: copertura 8760h, NaN, negativi, ore a zero
+            ZONES.forEach(z => {
+                const arr = (State.zonalPun && State.zonalPun[z]) || null;
+                if (!arr || arr.length === 0) { add('Listini PUN', `Copertura ${z}`, 'err', 'assente', 'Listino non caricato'); return; }
+                let nan = 0, neg = 0, zero = 0;
+                for (let i = 0; i < arr.length; i++) { const v = arr[i]; if (v === null || isNaN(v)) nan++; else if (v < 0) neg++; else if (v === 0) zero++; }
+                const cov = arr.length;
+                if (cov < 8760) add('Listini PUN', `Copertura ${z}`, 'err', fmtInt(cov) + '/8760', 'Ore mancanti: ' + (8760 - cov));
+                else if (nan > 0 || neg > 0) add('Listini PUN', `Valori anomali ${z}`, 'err', nan + ' NaN, ' + neg + ' neg.', 'Correggere i valori non validi');
+                else if (zero > 168) add('Listini PUN', `Ore a zero ${z}`, 'warn', fmtInt(zero) + ' ore', 'Possibile dato mancante');
+                else add('Listini PUN', `Copertura ${z}`, 'ok', fmtInt(cov) + '/8760', zero > 0 ? (zero + ' ore a zero') : 'Completo');
+            });
+
+            // 2. Curve di produzione per impianto attivo
+            (State.plants || []).forEach(p => {
+                if (p.enabled === false) return;
+                const g = p.generation;
+                if (!g || g.length === 0) { add('Produzione', `Curva ${p.name}`, 'err', 'assente', 'Nessuna curva di generazione'); return; }
+                let nan = 0, neg = 0, sum = 0;
+                for (let i = 0; i < g.length; i++) { const v = g[i]; if (v === null || isNaN(v)) nan++; else { if (v < 0) neg++; else sum += v; } }
+                const mwh = sum / 1000;
+                const capMw = (p.capacity || 0) / 1000;
+                const yieldKwhKw = capMw > 0 ? (mwh / capMw) : 0; // MWh / MW = kWh/kW
+                if (g.length < 8760) add('Produzione', `Copertura ${p.name}`, 'err', fmtInt(g.length) + '/8760', 'Ore mancanti: ' + (8760 - g.length));
+                else if (nan > 0 || neg > 0) add('Produzione', `Valori anomali ${p.name}`, 'err', nan + ' NaN, ' + neg + ' neg.', 'Correggere la curva');
+                else if (mwh <= 0) add('Produzione', `Produzione ${p.name}`, 'err', '0 MWh', 'Produzione annua nulla');
+                else if (yieldKwhKw < 700 || yieldKwhKw > 2300) add('Produzione', `Resa ${p.name}`, 'warn', fmtInt(yieldKwhKw) + ' kWh/kW', 'Fuori range tipico 700-2300');
+                else add('Produzione', `Curva ${p.name}`, 'ok', fmtInt(mwh) + ' MWh', fmtInt(yieldKwhKw) + ' kWh/kW');
+            });
+
+            // 3. Carichi stabilimenti
+            (State.stabilimenti || []).forEach(s => {
+                if (s.enabled === false) return;
+                const l = s.load;
+                if (!l || l.length === 0) { add('Carichi', `Carico ${s.name}`, 'err', 'assente', 'Nessuna curva di carico'); return; }
+                let nan = 0, neg = 0, sum = 0;
+                for (let i = 0; i < l.length; i++) { const v = l[i]; if (v === null || isNaN(v)) nan++; else { if (v < 0) neg++; else sum += v; } }
+                const mwh = sum / 1000;
+                if (l.length < 8760) add('Carichi', `Copertura ${s.name}`, 'err', fmtInt(l.length) + '/8760', 'Ore mancanti: ' + (8760 - l.length));
+                else if (nan > 0 || neg > 0) add('Carichi', `Valori anomali ${s.name}`, 'err', nan + ' NaN, ' + neg + ' neg.', 'Correggere la curva');
+                else if (mwh <= 0) add('Carichi', `Consumo ${s.name}`, 'warn', '0 MWh', 'Consumo annuo nullo');
+                else add('Carichi', `Carico ${s.name}`, 'ok', fmtInt(mwh) + ' MWh/anno', 'Curva completa');
+            });
+
+            // 4. Quadratura energetica anno 1 (se disponibili risultati)
+            const m = State.results && State.results.matrix;
+            if (m && m.qtySolarGen && m.qtySolarGen.length) {
+                const gen = m.qtySolarGen[0] || 0;
+                const alloc = (m.qtySolarPpa[0] || 0) + (m.qtySolarRid[0] || 0) + (m.qtySolarToBess[0] || 0);
+                const diff = gen > 0 ? Math.abs(gen - alloc) / gen : 0;
+                if (diff > 0.01) add('Quadrature', 'Bilancio energetico Y1', 'err', (diff * 100).toFixed(2) + '%', 'Gen ≠ PPA+RID+toBESS');
+                else add('Quadrature', 'Bilancio energetico Y1', 'ok', (diff * 100).toFixed(2) + '%', 'Generazione = allocazione');
+            } else {
+                add('Quadrature', 'Bilancio energetico Y1', 'warn', 'n/d', 'Esegui un calcolo per verificare');
+            }
+
+            return checks;
+        };
+
+        window.renderDataQuality = function() {
+            const summary = document.getElementById('dq-summary');
+            const rows = document.getElementById('dq-rows');
+            if (!rows) return;
+            const checks = window.computeDataQuality();
+            const nOk = checks.filter(c => c.status === 'ok').length;
+            const nWarn = checks.filter(c => c.status === 'warn').length;
+            const nErr = checks.filter(c => c.status === 'err').length;
+            if (summary) {
+                summary.innerHTML = `
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3 text-center"><div class="text-lg font-black text-slate-200">${checks.length}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Controlli</div></div>
+                    <div class="bg-slate-900/60 border border-emerald-500/30 rounded-xl p-3 text-center"><div class="text-lg font-black text-emerald-400">${nOk}</div><div class="text-[9px] text-emerald-400 uppercase tracking-wider font-bold">OK</div></div>
+                    <div class="bg-slate-900/60 border border-amber-500/30 rounded-xl p-3 text-center"><div class="text-lg font-black text-amber-400">${nWarn}</div><div class="text-[9px] text-amber-400 uppercase tracking-wider font-bold">Avvisi</div></div>
+                    <div class="bg-slate-900/60 border border-rose-500/30 rounded-xl p-3 text-center"><div class="text-lg font-black text-rose-400">${nErr}</div><div class="text-[9px] text-rose-400 uppercase tracking-wider font-bold">Errori</div></div>`;
+            }
+            const badge = { ok: ['OK', 'text-emerald-400 bg-emerald-500/10'], warn: ['AVVISO', 'text-amber-400 bg-amber-500/10'], err: ['ERRORE', 'text-rose-400 bg-rose-500/10'] };
+            rows.innerHTML = checks.map(c => {
+                const b = badge[c.status] || badge.err;
+                const rowCls = c.status === 'err' ? 'bg-rose-950/10' : (c.status === 'warn' ? 'bg-amber-950/10' : '');
+                return `<tr class="${rowCls} border-t border-slate-850/60">
+                    <td class="px-3 py-1.5 text-slate-400 font-semibold">${escapeHtml(c.area)}</td>
+                    <td class="px-3 py-1.5 text-slate-200">${escapeHtml(c.check)}</td>
+                    <td class="px-3 py-1.5 text-center"><span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${b[1]}">${b[0]}</span></td>
+                    <td class="px-3 py-1.5 text-right font-mono text-slate-300">${escapeHtml(c.value)}</td>
+                    <td class="px-3 py-1.5 text-slate-400">${escapeHtml(c.detail)}</td>
+                </tr>`;
+            }).join('');
+        };
+
+        window.downloadDataQualityCSV = function() {
+            const checks = window.computeDataQuality();
+            const esc = (v) => '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"';
+            let csv = 'Report Qualità Dati;' + new Date().toLocaleString('it-IT') + '\n';
+            csv += 'Area;Controllo;Esito;Valore;Dettaglio\n';
+            checks.forEach(c => { csv += [esc(c.area), esc(c.check), esc(c.status), esc(c.value), esc(c.detail)].join(';') + '\n'; });
+            const blob = new Blob([String.fromCharCode(0xFEFF) + csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'Report_Qualita_Dati.csv';
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            if (typeof showToast === 'function') showToast('Report qualità dati esportato.', 'success');
+        };
 
         // Update BESS parameters on dropdown change (Add Plant form)
         function updatePlantBessParameters() {
