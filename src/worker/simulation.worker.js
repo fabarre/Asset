@@ -1307,6 +1307,8 @@ function runSensitivityLoop(baseState, config) {
             let totalOpexTaxes = 0;
             let totalOpexSecurity = 0;
             let totalOpexAssetManagement = 0;
+            let totalCustomCapex = 0;
+            let totalCustomOpex = 0;
 
             // ── No plants loaded: zero out all results and return early ──
             if (State.plants.length === 0) {
@@ -1343,7 +1345,7 @@ function runSensitivityLoop(baseState, config) {
 
                 // Accumulate other non-storage costs
                 totalEpcCapex += (plant.capacity * plant.capex);
-                totalOpexPlants += (plant.opex || 0);
+                totalOpexPlants += (plant.opex || 0) + (plant.customOpexEur || 0);
                 totalOpexInsurance += (plant.opexInsurance || 0);
                 totalOpexTaxes += (plant.opexTaxes || 0);
                 totalOpexSecurity += (plant.opexSecurity || 0);
@@ -1351,6 +1353,9 @@ function runSensitivityLoop(baseState, config) {
                 totalConnectionCapex += (plant.connectionCost || 0);
                 totalDevelopmentCapex += (plant.developmentCost || 0);
                 totalSpvAcquisitionCapex += (plant.spvAcquisitionCost || 0);
+                // CF7: voci CAPEX/OPEX personalizzate
+                totalCustomCapex += (plant.customCapexEur || 0);
+                totalCustomOpex += (plant.customOpexEur || 0);
                 
                 const landType = plant.landType || 'acquisto';
                 const landCost = plant.landCost || 0;
@@ -1377,14 +1382,16 @@ function runSensitivityLoop(baseState, config) {
                     connectionCapex: plantConnectionCapex, developmentCapex: plantDevelopmentCapex,
                     spvAcquisitionCapex: plantSpvAcquisitionCapex,
                     landPurchaseCapex: plantLandPurchase, landDdsAttualizzatoCapex: plantLandDdsAttualizzato,
-                    totalCapex: plantEpcCapex + plantBessCAPEX + plantConnectionCapex + plantDevelopmentCapex + plantSpvAcquisitionCapex + plantLandPurchase + plantLandDdsAttualizzato
+                    customCapex: plant.customCapexEur || 0,
+                    totalCapex: plantEpcCapex + plantBessCAPEX + plantConnectionCapex + plantDevelopmentCapex + plantSpvAcquisitionCapex + plantLandPurchase + plantLandDdsAttualizzato + (plant.customCapexEur || 0)
                 });
                 opexBreakdown.push({
                     name: plant.name, capacity: plant.capacity,
                     bessMwh: plantBessMwh, bessMw: plantBessMw, bessType: plantBessType,
+                    customOpex: plant.customOpexEur || 0,
                     years: []
                 });
-                plant._remainingCivilBase = plantEpcCapex + plantBessCAPEX + plantConnectionCapex + plantDevelopmentCapex + plantLandDdsAttualizzato;
+                plant._remainingCivilBase = plantEpcCapex + plantBessCAPEX + plantConnectionCapex + plantDevelopmentCapex + plantLandDdsAttualizzato + (plant.customCapexEur || 0);
                 plant._remainingBessAug = 0;
 
                 // Link plant to its active stabilimento
@@ -1873,7 +1880,7 @@ function runSensitivityLoop(baseState, config) {
 
             // BESS Capex & parameters
             const bessCAPEX = totalBessCAPEX;
-            const totalProjectCost = totalEpcCapex + bessCAPEX + totalConnectionCapex + totalLandPurchaseCapex + totalLandDdsAttualizzatoCapex + totalDevelopmentCapex + totalSpvAcquisitionCapex;
+            const totalProjectCost = totalEpcCapex + bessCAPEX + totalConnectionCapex + totalLandPurchaseCapex + totalLandDdsAttualizzatoCapex + totalDevelopmentCapex + totalSpvAcquisitionCapex + totalCustomCapex;
 
             // Debt sizing
             let bankableBase = totalProjectCost;
@@ -2055,16 +2062,16 @@ function runSensitivityLoop(baseState, config) {
             let cumulativeCfads = 0;
             let cumulativeHoldcoFCFE = 0;
 
-            // Depreciable base calculation includes IDC capitalized
-            const depreciablePlantBaseCivil = totalEpcCapex + bessCAPEX + totalConnectionCapex + totalLandDdsAttualizzatoCapex + totalDevelopmentCapex + idcAmount;
+            // Depreciable base calculation includes IDC capitalized; CF7: custom CAPEX ammortizzabile
+            const depreciablePlantBaseCivil = totalEpcCapex + bessCAPEX + totalConnectionCapex + totalLandDdsAttualizzatoCapex + totalDevelopmentCapex + idcAmount + totalCustomCapex;
             let remainingCapexToDepreciateFiscal = depreciablePlantBaseCivil;
-            
+
 
             let remainingBessAugmentationFiscal = 0;
             let remainingSolarCivil = totalEpcCapex + totalLandDdsAttualizzatoCapex;
             let remainingBessCivil = bessCAPEX;
             let remainingBessAugCivil = 0;
-            let remainingOtherCivil = totalConnectionCapex + totalDevelopmentCapex;
+            let remainingOtherCivil = totalConnectionCapex + totalDevelopmentCapex + totalCustomCapex;
 
             const exitOptionYear = (p.exitOption && p.exitOption !== 'none') ? parseInt(p.exitOption) : 0;
             const exitYear = 20;
@@ -2551,7 +2558,7 @@ function runSensitivityLoop(baseState, config) {
                     yLcosEnergyTotal += pShiftedMwh;
                     yLcosCostsTotal += pBessOpex;
                     
-                    const pOpexPlants = (plant.opex || 0) * inflationMultiplier;
+                    const pOpexPlants = ((plant.opex || 0) + (plant.customOpexEur || 0)) * inflationMultiplier;
                     const pOpexInsurance = (plant.opexInsurance || 0) * inflationMultiplier;
                     const pOpexTaxes = (plant.opexTaxes || 0) * inflationMultiplier;
                     const pOpexSecurity = (plant.opexSecurity || 0) * inflationMultiplier;
@@ -2667,7 +2674,7 @@ function runSensitivityLoop(baseState, config) {
                 
                 let yDeprOther = 0;
                 if (remainingOtherCivil > 0) {
-                    yDeprOther = Math.min((totalConnectionCapex + totalDevelopmentCapex) * p.fiscalDeprRate, remainingOtherCivil);
+                    yDeprOther = Math.min((totalConnectionCapex + totalDevelopmentCapex + totalCustomCapex) * p.fiscalDeprRate, remainingOtherCivil);
                     remainingOtherCivil -= yDeprOther;
                 }
                 
@@ -3554,6 +3561,7 @@ function runSensitivityLoop(baseState, config) {
                 const fixedOpexAnnual = plantsList.reduce((a, pl) => a +
                     (pl.opex || 0) + (pl.opexOmBess || 0) + (pl.opexInsurance || 0) +
                     (pl.opexTaxes || 0) + (pl.opexSecurity || 0) + (pl.opexAssetManagement || 0), 0);
+                const customOpexAnnual = plantsList.reduce((a, pl) => a + (pl.customOpexEur || 0), 0);
                 const taxesOut = new Float64Array(totalMonths);
                 for (let y = 1; y <= YEARS; y++) {
                     const tax = (mtx.currentTaxesSpv && mtx.currentTaxesSpv[y - 1]) || 0;
@@ -3608,7 +3616,7 @@ function runSensitivityLoop(baseState, config) {
                     const yi = isYear0 ? -1 : Math.floor((i - 12) / 12);
                     const m = i % 12;
                     const calYear = anchorYearIn - 1 + Math.floor(i / 12);
-                    const flatOpex = isYear0 ? 0 : Math.max(0, ((mtx.opexTotal[yi] || 0) - fixedOpexAnnual)) / 12;
+                    const flatOpex = isYear0 ? 0 : Math.max(0, ((mtx.opexTotal[yi] || 0) - fixedOpexAnnual - customOpexAnnual)) / 12 + (isYear0 ? 0 : customOpexAnnual / 12);
                     const opex = flatOpex + (isYear0 ? 0 : opexScheduled[i]);
                     const taxes = taxesOut[i];
                     const interest = isYear0 ? 0 : (ds.interestAccrued[yi] || 0) / 12;
@@ -3660,6 +3668,7 @@ function runSensitivityLoop(baseState, config) {
             const finalResults = {
                 medioneKpiText: medioneKpiText,
                 totalProjectCost, debtAmount, equityAmount,
+                totalCustomCapex, totalCustomOpex,
                 calculatedIrr, calculatedProjectIrr, holdcoNpv, holdcoMoic, paybackPeriod, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
                 matrix, debtSchedule, combinedSolarProfile, generalMedionePrices, bessSimulation,
                 monthlyCashflow: anchorYear !== null

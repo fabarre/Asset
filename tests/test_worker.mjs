@@ -611,6 +611,25 @@ check('Identità di cassa Holding sui 72 mesi', (() => {
 const r27legacy = run(buildState());
 check('Modalità legacy senza COD: nessuna serie Holding', !r27legacy.monthlyCashflow.holdcoNetCashflow);
 
+// ── Test 28: voci CAPEX/OPEX personalizzate entrano in tutti i calcoli (CF7) ──
+console.log('\n[Test 28] Voci personalizzate: CAPEX in investimento/ammortamenti, OPEX in EBITDA/mensile');
+const basePlants28 = () => ([{
+    id: 'pA', name: 'Impianto A', capacity: 8000, zone: 'NORD', opex: 120000, enabled: true,
+    generation: gen24a, codDate: '2027-05-15', ...plantNoBess24
+}]);
+const r28a = run(buildState({ inputs: { collectionLagRid: 0 }, plants: basePlants28() }));
+const withCustom = basePlants28();
+withCustom[0].customCapexEur = 100000;
+withCustom[0].customOpexEur = 50000;
+const r28b = run(buildState({ inputs: { collectionLagRid: 0 }, plants: withCustom }));
+check('CAPEX personalizzato entra nel costo progetto (+100.000)', Math.abs((r28b.totalProjectCost - r28a.totalProjectCost) - 100000) < 1e-6,
+    `Δ=${(r28b.totalProjectCost - r28a.totalProjectCost).toFixed(0)}`);
+check('OPEX personalizzato entra in EBITDA anno 1 (−50.000)', Math.abs((r28b.matrix.ebitda[0] - r28a.matrix.ebitda[0]) + 50000) < 1e-6,
+    `Δ=${(r28b.matrix.ebitda[0] - r28a.matrix.ebitda[0]).toFixed(0)}`);
+check('OPEX personalizzato nel cash flow mensile (+50.000/12 al mese da gen-2027)', Math.abs((r28b.monthlyCashflow.opex[12] - r28a.monthlyCashflow.opex[12]) - 50000 / 12) < 1e-6,
+    `Δ=${(r28b.monthlyCashflow.opex[12] - r28a.monthlyCashflow.opex[12]).toFixed(2)}`);
+check('Totali esposti nei risultati', r28b.totalCustomCapex === 100000 && r28b.totalCustomOpex === 50000);
+
 console.log(`\n═══════════════════════════════════`);
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);

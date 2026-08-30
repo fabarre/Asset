@@ -767,9 +767,12 @@
                 }
             }
 
-            // Exclude BESS CAPEX from Solar LCOE initial cost
-            const totalCapexExBess = (capexPerKwp * cap) + connCost + devCost + spvCost + landCapex;
-            
+            // Exclude BESS CAPEX from Solar LCOE initial cost; CF7: include custom CAPEX/OPEX
+            const editPlantForKpi = State.plants.find(p => p.id === editingPlantId);
+            const customCapexKpi = editPlantForKpi ? (editPlantForKpi.customCapexEur || 0) : 0;
+            const customOpexKpi = editPlantForKpi ? (editPlantForKpi.customOpexEur || 0) : 0;
+            const totalCapexExBess = (capexPerKwp * cap) + connCost + devCost + spvCost + landCapex + customCapexKpi;
+
             let lcoeSumDiscountedCosts = totalCapexExBess;
             let lcoeSumDiscountedEnergy = 0;
             const wacc = State.inputs.wacc || 0.06;
@@ -780,7 +783,7 @@
                 const discountFactor = Math.pow(1 + wacc, yr);
 
                 // Exclude BESS Opex and BESS maintenance reserve
-                let yOpex = (opexAnnual + opexIns + opexTax + opexSec + opexAsset + landOpex) * inflationMultiplier;
+                let yOpex = (opexAnnual + opexIns + opexTax + opexSec + opexAsset + landOpex + customOpexKpi) * inflationMultiplier;
                 if (yr <= serviceYears) {
                     yOpex += serviceOpexAnnual * inflationMultiplier;
                 }
@@ -1113,7 +1116,10 @@
             
             // Re-render list to show active edit background highlight
             renderPlantsList();
-            
+
+            // CF7: elenco voci CAPEX/OPEX personalizzate dell'impianto in modifica
+            renderCustomCostsUI();
+
             updateFormSubmitButtonState();
         };
 
@@ -3463,6 +3469,25 @@
                         }
                     }
                     if (loadedPlants.length > 0) {
+                        // CF7: voci CAPEX/OPEX personalizzate per impianto (tabella plant_custom_costs)
+                        try {
+                            const { data: ccRows, error: ccErr } = await supabaseClient
+                                .from('plant_custom_costs')
+                                .select('*');
+                            if (ccErr) throw ccErr;
+                            const byPlant = {};
+                            (ccRows || []).forEach(r => {
+                                if (!byPlant[r.plant_id]) byPlant[r.plant_id] = [];
+                                byPlant[r.plant_id].push(r);
+                            });
+                            loadedPlants.forEach(pl => {
+                                pl.customCosts = byPlant[pl.id] || [];
+                                applyCustomCostTotals(pl);
+                            });
+                        } catch (ccErr) {
+                            console.warn('Caricamento voci CAPEX/OPEX personalizzate fallito:', ccErr.message);
+                            loadedPlants.forEach(pl => { pl.customCosts = []; applyCustomCostTotals(pl); });
+                        }
                         State.plants = loadedPlants;
                         console.log(`${loadedPlants.length} impianti caricati da Supabase.`);
                         renderPlantsList();
@@ -4737,7 +4762,7 @@
                         <td class="py-2.5 font-semibold ${isEnabled ? 'text-white' : 'text-slate-500'}">${escapeHtml(p.name)}</td>
                         <td>${p.capacity.toLocaleString('it-IT')} kWp</td>
                         <td><span class="px-2 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px] font-bold">${p.zone}</span></td>
-                        <td>${formatEuro(p.capacity * p.capex)} (${formatEuro(p.capex)}/kWp)</td>
+                        <td>${formatEuro(p.capacity * p.capex + (p.customCapexEur || 0))} (${formatEuro(p.capex)}/kWp${(p.customCapexEur || 0) > 0 ? ' + voci' : ''})</td>
                         <td>${formatEuro(connectionCost)}</td>
                         <td>${landCostStr}</td>
                         <td>${formatEuro(devCost)}</td>
@@ -9982,6 +10007,96 @@ window.saveOpexEvents = async function() {
     }
 };
 
+// ═══ CF7: voci CAPEX/OPEX personalizzate per impianto ═══
+// Le voci vivono nella tabella plant_custom_costs e entrano in tutti i calcoli:
+// customCapexEur somma al CAPEX impianto (debito, IDC, ammortamenti, LCOE),
+// customOpexEur somma all'OPEX annuo (EBITDA, P&L, imposte, cash flow mensile).
+function customCostEur(row, plant) {
+    const amt = parseFloat(row.amount_eur !== undefined ? row.amount_eur : row.amountEur) || 0;
+    if (row.unit === 'per_kwp') return amt * (plant.capacity || 0);
+    return amt;
+}
+function applyCustomCostTotals(plant) {
+    const rows = plant.customCosts || [];
+    plant.customCapexEur = rows.filter(r => r.cost_type === 'capex').reduce((a, r) => a + customCostEur(r, plant), 0);
+    plant.customOpexEur = rows.filter(r => r.cost_type === 'opex').reduce((a, r) => a + customCostEur(r, plant), 0);
+}
+
+window.renderCustomCostsUI = function() {
+    const box = document.getElementById('custom-costs-rows');
+    if (!box) return;
+    const plant = State.plants.find(p => p.id === editingPlantId);
+    if (!plant) { box.innerHTML = ''; return; }
+    const rows = plant.customCosts || [];
+    if (!rows.length) {
+        box.innerHTML = '<div class="text-[10px] text-slate-500 italic py-1">Nessuna voce personalizzata per questo impianto.</div>';
+        return;
+    }
+    box.innerHTML = rows.map((r, i) => `
+        <div class="flex items-center gap-2 text-[10px] bg-slate-900/50 border border-slate-850 rounded-lg px-2 py-1">
+            <span class="font-bold ${r.cost_type === 'capex' ? 'text-orange-400' : 'text-emerald-400'} uppercase w-12">${r.cost_type === 'capex' ? 'CAPEX' : 'OPEX'}</span>
+            <span class="text-slate-300 flex-1 truncate">${escapeHtml(r.label || '')}</span>
+            <span class="font-mono text-white">${new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(customCostEur(r, plant))}</span>
+            <span class="text-slate-500 whitespace-nowrap">${r.unit === 'per_kwp' ? '€/kWp' : (r.cost_type === 'capex' ? '€ una tantum' : '€/anno')}</span>
+            <button onclick="removeCustomCost(${i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi voce"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('');
+};
+
+window.addCustomCost = function() {
+    const plant = State.plants.find(p => p.id === editingPlantId);
+    if (!plant) { showToast('Apri un impianto in modifica per aggiungere voci.', 'warning'); return; }
+    const type = (document.getElementById('custom-cost-type') || {}).value;
+    const label = ((document.getElementById('custom-cost-label') || {}).value || '').trim();
+    const amount = parseFloat((document.getElementById('custom-cost-amount') || {}).value);
+    const unit = (document.getElementById('custom-cost-unit') || {}).value || 'total';
+    if (!label) { showToast('Inserisci la descrizione della voce.', 'warning'); return; }
+    if (!isFinite(amount) || amount <= 0) { showToast('Importo non valido.', 'warning'); return; }
+    plant.customCosts = plant.customCosts || [];
+    plant.customCosts.push({ cost_type: type, label, amount_eur: amount, unit });
+    applyCustomCostTotals(plant);
+    renderCustomCostsUI();
+    if (typeof recalcPlantKpis === 'function') recalcPlantKpis();
+};
+
+window.removeCustomCost = function(i) {
+    const plant = State.plants.find(p => p.id === editingPlantId);
+    if (!plant || !plant.customCosts) return;
+    plant.customCosts.splice(i, 1);
+    applyCustomCostTotals(plant);
+    renderCustomCostsUI();
+    if (typeof recalcPlantKpis === 'function') recalcPlantKpis();
+};
+
+window.saveCustomCosts = async function() {
+    if (!canWrite()) return;
+    const plant = State.plants.find(p => p.id === editingPlantId);
+    if (!plant) { showToast('Apri un impianto in modifica.', 'warning'); return; }
+    if (!supabaseClient) { showToast('Database non connesso.', 'warning'); return; }
+    try {
+        await supabaseClient.from('plant_custom_costs').delete().eq('plant_id', plant.id);
+        const rows = (plant.customCosts || []).map(r => ({
+            plant_id: plant.id,
+            cost_type: r.cost_type,
+            label: r.label || '',
+            amount_eur: parseFloat(r.amount_eur !== undefined ? r.amount_eur : r.amountEur) || 0,
+            unit: r.unit || 'total',
+            user_id: currentUserId()
+        }));
+        if (rows.length) {
+            const { error } = await supabaseClient.from('plant_custom_costs').insert(rows);
+            if (error) throw error;
+        }
+        const { data } = await supabaseClient.from('plant_custom_costs').select('*').eq('plant_id', plant.id);
+        plant.customCosts = data || [];
+        applyCustomCostTotals(plant);
+        renderCustomCostsUI();
+        Audit.log('customcosts.save', `${plant.name}: ${rows.length} voci`);
+        showToast('Voci CAPEX/OPEX personalizzate salvate nel database.', 'success');
+    } catch (err) {
+        showToast('Errore salvataggio voci: ' + err.message, 'error');
+    }
+};
+
 // ── Copertina PDF (report portrait) ──
 function _pdfCover(doc, reportTitle) {
     const W = doc.internal.pageSize.getWidth();
@@ -10621,10 +10736,11 @@ function _repStrutturaFinanziaria(doc) {
             ['DDS Terreno (attualizzato)', _fmtEFull(r.totalLandDdsAttualizzatoCapex || 0), _fmtPct(r.totalProjectCost ? r.totalLandDdsAttualizzatoCapex/r.totalProjectCost*100 : 0)],
             ['Costi di Sviluppo', _fmtEFull(r.totalDevelopmentCapex || 0), _fmtPct(r.totalProjectCost ? r.totalDevelopmentCapex/r.totalProjectCost*100 : 0)],
             ['Acquisizione SPV', _fmtEFull(r.totalSpvAcquisitionCapex || 0), _fmtPct(r.totalProjectCost ? r.totalSpvAcquisitionCapex/r.totalProjectCost*100 : 0)],
+            ...((r.totalCustomCapex || 0) > 0 ? [['Voci CAPEX personalizzate', _fmtEFull(r.totalCustomCapex), _fmtPct(r.totalProjectCost ? r.totalCustomCapex/r.totalProjectCost*100 : 0)]] : []),
             ['TOTALE PROGETTO', _fmtEFull(r.totalProjectCost || 0), '100,00%']
         ],
         margin: { left: 14, right: 14 },
-        willDrawCell: function(data) { if (data.row.index === 7) doc.setFont('helvetica', 'bold'); }
+        willDrawCell: function(data) { if (data.row.index === ((r.totalCustomCapex || 0) > 0 ? 8 : 7)) doc.setFont('helvetica', 'bold'); }
     });
     y = doc.lastAutoTable.finalY + 6;
 
