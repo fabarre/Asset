@@ -33,11 +33,12 @@ const PROJECTS = {
 const TABLES = [
     { name: 'simulation_config', pk: ['parameter_key', 'user_id'] },
     { name: 'zonal_pun', pk: ['hour_index'] },
-    { name: 'plants', pk: ['id'] },
-    { name: 'plant_generation', pk: ['plant_id', 'hour_index'] },
+    { name: 'plants', pk: ['id', 'user_id'] },
+    { name: 'plant_custom_costs', pk: ['id'] },
+    { name: 'plant_generation', pk: ['plant_id', 'hour_index', 'user_id'] },
     { name: 'hourly_telemetry', pk: ['hour_index', 'user_id'] },
-    { name: 'stabilimenti', pk: ['id'] },
-    { name: 'stabilimento_load', pk: ['stabilimento_id', 'hour_index'] }
+    { name: 'stabilimenti', pk: ['id', 'user_id'] },
+    { name: 'stabilimento_load', pk: ['stabilimento_id', 'hour_index', 'user_id'] }
 ];
 
 function getToken() {
@@ -139,6 +140,14 @@ async function restore(dir, target, only = null, dryRun = false) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     console.log(`Restore da ${dir} (${manifest.created_at}) verso ${target} [${ref}]${dryRun ? ' — DRY RUN' : ''}`);
 
+    if (!dryRun) {
+        // Pulizia preventiva in ordine inverso di dipendenza (reverse FK)
+        for (const t of [...TABLES].reverse()) {
+            if (only && !only.includes(t.name)) continue;
+            await runSql(ref, `DELETE FROM public.${t.name}`);
+        }
+    }
+
     for (const t of TABLES) {
         if (only && !only.includes(t.name)) continue;
         const file = path.join(dir, t.name + '.jsonl');
@@ -151,7 +160,6 @@ async function restore(dir, target, only = null, dryRun = false) {
         console.log(`  ${t.name}: ${lines.length} righe da ripristinare`);
         if (dryRun) continue;
 
-        await runSql(ref, `DELETE FROM public.${t.name}`);
         const CHUNK = 500;
         for (let i = 0; i < lines.length; i += CHUNK) {
             const rows = lines.slice(i, i + CHUNK).map((l) => JSON.parse(l));

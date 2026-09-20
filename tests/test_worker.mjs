@@ -103,15 +103,23 @@ console.log('\n[Test 1] Scenario base (IRES/IRAP assenti -> default 24%/3.9%)');
 const r1 = run(buildState());
 check('EBITDA senza NaN', !anyNaN(r1.matrix.ebitda));
 check('Imposte correnti senza NaN', !anyNaN(r1.matrix.currentTaxesSpv));
-check('IRAP anno 1 > 0 (motore fiscale attivo)', r1.matrix.irapTaxSpv[0] > 0, `val=${r1.matrix.irapTaxSpv[0]}`);
-check('IRES > 0 dopo assorbimento NOL (anno >= 12)', r1.matrix.iresTaxSpv.slice(11).some(v => v > 0),
+check('IRAP anno 1 > 0 (motore fiscale attivo)', r1.matrix.irapTaxSpv[1] > 0, `val=${r1.matrix.irapTaxSpv[1]}`);
+check('IRES > 0 dopo assorbimento NOL (anno >= 12)', r1.matrix.iresTaxSpv.slice(12).some(v => v > 0),
     `ires=${r1.matrix.iresTaxSpv.map(v=>v.toFixed(0)).join(',')}`);
 check('NOL riportata coerente (Art. 84)', r1.matrix.taxLossCF.every(v => v >= 0));
 check('Utile netto senza NaN', !anyNaN(r1.matrix.netProfitSpv));
 check('CFADS senza NaN', !anyNaN(r1.matrix.cfads));
 check('IRR finito', isFinite(r1.calculatedIrr), `IRR=${r1.calculatedIrr}`);
+check('SPV Equity IRR finito e coerente', isFinite(r1.calculatedSpvEquityIrr) && r1.calculatedSpvEquityIrr > 0, `spvEquityIrr=${r1.calculatedSpvEquityIrr}`);
+check('SPV Project IRR finito e coerente', isFinite(r1.calculatedProjectIrr) && r1.calculatedProjectIrr > 0, `spvProjectIrr=${r1.calculatedProjectIrr}`);
+check('Payback Levered definito e coerente', r1.paybackPeriod !== '-' && !r1.paybackPeriod.includes('NaN'), `leveredPayback=${r1.paybackPeriod}`);
+check('Payback Unlevered definito e coerente', r1.paybackPeriodUnlevered !== '-' && !r1.paybackPeriodUnlevered.includes('NaN'), `unleveredPayback=${r1.paybackPeriodUnlevered}`);
 check('NPV finito', isFinite(r1.holdcoNpv));
 check('DSCR medio > 0', r1.avgDscr > 0, `avgDscr=${r1.avgDscr}`);
+check('Ricavi Anno 0 pari a 0', r1.matrix.revenueTotal[0] === 0);
+check('Ammortamento Anno 0 pari a 0', r1.matrix.depreciationCivil[0] === 0);
+check('EBT Anno 0 negativo o nullo', r1.matrix.ebt[0] <= 0);
+check('NOL Art. 84 include perdita Anno 0', r1.matrix.taxLossCF[0] >= Math.abs(r1.matrix.ebt[0]));
 check('SoC rispetta SoC Max 95%', Math.max(...r1.plantsMetrics[0].sim.hourlySoC) <= 4000 * 0.95 + 1e-6,
     `maxSoC=${Math.max(...r1.plantsMetrics[0].sim.hourlySoC)}`);
 check('SoC rispetta SoC Min 5%', Math.min(...r1.plantsMetrics[0].sim.hourlySoC) >= 4000 * 0.05 - 1e-6,
@@ -119,10 +127,10 @@ check('SoC rispetta SoC Min 5%', Math.min(...r1.plantsMetrics[0].sim.hourlySoC) 
 
 // ── Test 2: conservazione energia anno 1 (tolleranza 1% per discretizzazione DP) ──
 console.log('\n[Test 2] Conservazione energia FV anno 1');
-const genY1 = r1.matrix.qtySolarGen[0];
-const ppaY1 = r1.matrix.qtySolarPpa[0];
-const ridY1 = r1.matrix.qtySolarRid[0];
-const toBessY1 = r1.matrix.qtySolarToBess[0];
+const genY1 = r1.matrix.qtySolarGen[1];
+const ppaY1 = r1.matrix.qtySolarPpa[1];
+const ridY1 = r1.matrix.qtySolarRid[1];
+const toBessY1 = r1.matrix.qtySolarToBess[1];
 const balance = ppaY1 + ridY1 + toBessY1;
 check('gen = PPA + RID + toBESS (±1%)', Math.abs(balance - genY1) / genY1 < 0.01,
     `gen=${genY1.toFixed(1)} vs somma=${balance.toFixed(1)}`);
@@ -131,15 +139,17 @@ check('gen = PPA + RID + toBESS (±1%)', Math.abs(balance - genY1) / genY1 < 0.0
 console.log('\n[Test 3] Preammortamento 18 mesi (> 12, prima troncato)');
 const r3 = run(buildState({ inputs: { seniorGracePeriodMonths: 18 } }));
 check('Nessun NaN nel piano debito', !anyNaN(r3.debtSchedule.endingBalance));
-check('Anno 1: nessuna quota capitale (grace 18m)', Math.abs(r3.debtSchedule.principalScheduled[0]) < 1e-6,
-    `principalY1=${r3.debtSchedule.principalScheduled[0]}`);
-check('Anno 2: ammortamento parziale attivo', r3.debtSchedule.principalScheduled[1] > 0,
-    `principalY2=${r3.debtSchedule.principalScheduled[1]}`);
+check('Anno 1: nessuna quota capitale (grace 18m)', Math.abs(r3.debtSchedule.principalScheduled[1]) < 1e-6,
+    `principalY1=${r3.debtSchedule.principalScheduled[1]}`);
+check('Anno 2: ammortamento parziale attivo', r3.debtSchedule.principalScheduled[2] > 0,
+    `principalY2=${r3.debtSchedule.principalScheduled[2]}`);
 
 // ── Test 4: Nessun Exit ──
 console.log("\n[Test 4] exitOption '0' (Nessun Exit)");
 const r4 = run(buildState({ inputs: { exitOption: '0' } }));
-check('20 anni di risultati', r4.matrix.years.length === 20, `years=${r4.matrix.years.length}`);
+check('21 anni di risultati', r4.matrix.years.length === 21, `years=${r4.matrix.years.length}`);
+check('Anno 0 presente a indice 0', r4.matrix.years[0] === 0);
+check('Anno 1 presente a indice 1', r4.matrix.years[1] === 1);
 check('Nessun EV di exit', r4.matrix.exitEnterpriseValue.every(v => v === 0));
 
 // ── Test 5: Project IRR su 20 anni anche con loanTerm=11 ──
@@ -165,7 +175,7 @@ const r7 = run(buildState({
         load, enabled: true, loadSource: 'csv'
     }]
 }));
-check('Ricavi PPA anno 1 > 0', r7.matrix.revenuePpa[0] > 0, `revPPA=${r7.matrix.revenuePpa[0]}`);
+check('Ricavi PPA anno 1 > 0', r7.matrix.revenuePpa[1] > 0, `revPPA=${r7.matrix.revenuePpa[1]}`);
 check('Autoconsumo > 0', r7.totalSelfConsMwh > 0, `selfCons=${r7.totalSelfConsMwh}`);
 check('Nessun NaN con PPA', !anyNaN(r7.matrix.holdcoFCFE));
 
@@ -173,20 +183,20 @@ check('Nessun NaN con PPA', !anyNaN(r7.matrix.holdcoFCFE));
 console.log('\n[Test 8] DSCR Sculpting (target 1.30x)');
 const r8 = run(buildState({ inputs: { sculptingEnabled: true, targetDscr: 1.30 } }));
 // Anni 1..loanTerm-1: DSCR = target; anno loanTerm: balloon -> DSCR < target ammesso
-const dscrYearsSculpt = r8.debtSchedule.dscr.slice(0, 10).filter(v => v > 0);
+const dscrYearsSculpt = r8.debtSchedule.dscr.slice(1, 11).filter(v => v > 0);
 check('DSCR ≈ target 1.30x negli anni di ammortamento', dscrYearsSculpt.every(v => Math.abs(v - 1.30) < 0.05),
     `dscr=${dscrYearsSculpt.map(v=>v.toFixed(2)).join(',')}`);
-check('Debito rimborsato entro loanTerm (balloon finale)', r8.debtSchedule.endingBalance[10] <= 1e-6,
-    `residuoY11=${r8.debtSchedule.endingBalance[10]}`);
+check('Debito rimborsato entro loanTerm (balloon finale)', r8.debtSchedule.endingBalance[11] <= 1e-6,
+    `residuoY11=${r8.debtSchedule.endingBalance[11]}`);
 
 // ── Test 9: Ricavi MSD BESS ──
 console.log('\n[Test 9] Ricavi servizi ancillari BESS (MSD)');
 const r9 = run(buildState({ inputs: { msdEurMwYr: 50000 } }));
-check('Revenue MSD anno 1 = BESS MW × €/MW', Math.abs(r9.matrix.revenueMsd[0] - 2 * 50000) < 1e-6,
-    `msdY1=${r9.matrix.revenueMsd[0]}`);
-check('MSD incluso nei ricavi totali', Math.abs(r9.matrix.revenueTotal[0] - (r9.matrix.revenueRid[0] + r9.matrix.revenuePpa[0] + r9.matrix.revenueTimeshifting[0] + r9.matrix.revenueArbitrage[0] + r9.matrix.revenueMsd[0])) < 1e-6);
+check('Revenue MSD anno 1 = BESS MW × €/MW', Math.abs(r9.matrix.revenueMsd[1] - 2 * 50000) < 1e-6,
+    `msdY1=${r9.matrix.revenueMsd[1]}`);
+check('MSD incluso nei ricavi totali', Math.abs(r9.matrix.revenueTotal[1] - (r9.matrix.revenueRid[1] + r9.matrix.revenuePpa[1] + r9.matrix.revenueTimeshifting[1] + r9.matrix.revenueArbitrage[1] + r9.matrix.revenueMsd[1])) < 1e-6);
 const r9base = run(buildState());
-check('EBITDA anno 1 maggiore con MSD attivo', r9.matrix.ebitda[0] > r9base.matrix.ebitda[0]);
+check('EBITDA anno 1 maggiore con MSD attivo', r9.matrix.ebitda[1] > r9base.matrix.ebitda[1]);
 
 // ── Test 10: Monte Carlo ──
 console.log('\n[Test 10] Monte Carlo P50/P90');
@@ -210,9 +220,9 @@ const targetDsra = 0.5 * (r11.debtAmount * (0.045 * Math.pow(1.045, 10.5)) / (Ma
 const peakDsra = Math.max(...r11.debtSchedule.dsraBalance);
 check('Saldo DSRA raggiunge il target (6 mesi)', Math.abs(peakDsra - targetDsra) / targetDsra < 0.02,
     `peak=${peakDsra.toFixed(0)} target=${targetDsra.toFixed(0)}`);
-check('Accantonamento DSRA anno 1 > 0', r11.matrix.dsraFunding[0] > 0, `fundingY1=${r11.matrix.dsraFunding[0]}`);
-check('Saldo DSRA = 0 dopo estinzione debito (release)', r11.debtSchedule.dsraBalance[10] <= 1e-6,
-    `saldoY11=${r11.debtSchedule.dsraBalance[10]}`);
+check('Accantonamento DSRA anno 1 > 0', r11.matrix.dsraFunding[1] > 0, `fundingY1=${r11.matrix.dsraFunding[1]}`);
+check('Saldo DSRA = 0 dopo estinzione debito (release)', r11.debtSchedule.dsraBalance[11] <= 1e-6,
+    `saldoY11=${r11.debtSchedule.dsraBalance[11]}`);
 check('Rilascio DSRA registrato', r11.matrix.dsraRelease.some(v => v > 0));
 check('FCFE senza NaN con DSRA', !anyNaN(r11.matrix.holdcoFCFE));
 check('DSRA coerente: funding+draw-balance conservata', r11.matrix.dsraFunding.every(v => v >= 0) && r11.matrix.dsraDraw.every(v => v >= 0));
@@ -220,13 +230,13 @@ check('DSRA coerente: funding+draw-balance conservata', r11.matrix.dsraFunding.e
 // ── Test 12: Refinancing / Miniperm ──
 console.log('\n[Test 12] Refinancing (anno 6, tasso 6%, durata 8 anni)');
 const r12 = run(buildState({ inputs: { refiEnabled: true, refiYear: 6, refiInterestRate: 6.0, refiLoanTerm: 8 } }));
-check('Interessi anno 6 al nuovo tasso 6%', Math.abs(r12.debtSchedule.interestAccrued[5] - r12.debtSchedule.beginningBalance[5] * 0.06) < 1e-6,
-    `intY6=${r12.debtSchedule.interestAccrued[5]} vs ${r12.debtSchedule.beginningBalance[5] * 0.06}`);
-check('Interessi anno 5 al tasso originale 4.5%', Math.abs(r12.debtSchedule.interestAccrued[4] - r12.debtSchedule.beginningBalance[4] * 0.045) < 1e-6);
-check('Debito estinto entro nuova scadenza (anno 13)', r12.debtSchedule.endingBalance[12] <= 1e-6,
-    `residuoY13=${r12.debtSchedule.endingBalance[12]}`);
+check('Interessi anno 6 al nuovo tasso 6%', Math.abs(r12.debtSchedule.interestAccrued[6] - r12.debtSchedule.beginningBalance[6] * 0.06) < 1e-6,
+    `intY6=${r12.debtSchedule.interestAccrued[6]} vs ${r12.debtSchedule.beginningBalance[6] * 0.06}`);
+check('Interessi anno 5 al tasso originale 4.5%', Math.abs(r12.debtSchedule.interestAccrued[5] - r12.debtSchedule.beginningBalance[5] * 0.045) < 1e-6);
+check('Debito estinto entro nuova scadenza (anno 13)', r12.debtSchedule.endingBalance[13] <= 1e-6,
+    `residuoY13=${r12.debtSchedule.endingBalance[13]}`);
 check('Piano debito senza NaN con refi', !anyNaN(r12.debtSchedule.endingBalance));
-check('Debt service cambia dopo refi', Math.abs(r12.debtSchedule.totalDebtService[5] - r12.debtSchedule.totalDebtService[4]) > 1e-6);
+check('Debt service cambia dopo refi', Math.abs(r12.debtSchedule.totalDebtService[6] - r12.debtSchedule.totalDebtService[5]) > 1e-6);
 
 // ── Test 13: Tornado ──
 console.log('\n[Test 13] Tornado deterministico');
@@ -259,13 +269,13 @@ const r14 = run(buildState({
         { id: 'p2', name: 'Impianto B', capacity: 4000, zone: 'SUD', capex: 700, opex: 60000, enabled: true, generation: gen14b, gridVoltage: 'mt', gridConnectionKw: 4000, marketType: 'rid', traderContractType: 'pun_orario', ...plantNoBess }
     ]
 }));
-check('Generazione consolidata = somma impianti (±1%)', Math.abs(r14.matrix.qtySolarGen[0] - totGenKwh14 / 1000) / (totGenKwh14 / 1000) < 0.01,
-    `cons=${r14.matrix.qtySolarGen[0].toFixed(1)} vs atteso=${(totGenKwh14 / 1000).toFixed(1)}`);
-const balance14 = r14.matrix.qtySolarPpa[0] + r14.matrix.qtySolarRid[0] + r14.matrix.qtySolarToBess[0];
-check('Conservazione portafoglio: gen = PPA+RID+toBESS (±1%)', Math.abs(balance14 - r14.matrix.qtySolarGen[0]) / r14.matrix.qtySolarGen[0] < 0.01,
-    `gen=${r14.matrix.qtySolarGen[0].toFixed(1)} somma=${balance14.toFixed(1)}`);
-check('Ricavi RID = gen × 100 €/MWh (±2%)', Math.abs(r14.matrix.revenueRid[0] - totGenKwh14 * 0.1) / (totGenKwh14 * 0.1) < 0.02,
-    `rev=${r14.matrix.revenueRid[0].toFixed(0)} atteso=${(totGenKwh14 * 0.1).toFixed(0)}`);
+check('Generazione consolidata = somma impianti (±1%)', Math.abs(r14.matrix.qtySolarGen[1] - totGenKwh14 / 1000) / (totGenKwh14 / 1000) < 0.01,
+    `cons=${r14.matrix.qtySolarGen[1].toFixed(1)} vs atteso=${(totGenKwh14 / 1000).toFixed(1)}`);
+const balance14 = r14.matrix.qtySolarPpa[1] + r14.matrix.qtySolarRid[1] + r14.matrix.qtySolarToBess[1];
+check('Conservazione portafoglio: gen = PPA+RID+toBESS (±1%)', Math.abs(balance14 - r14.matrix.qtySolarGen[1]) / r14.matrix.qtySolarGen[1] < 0.01,
+    `gen=${r14.matrix.qtySolarGen[1].toFixed(1)} somma=${balance14.toFixed(1)}`);
+check('Ricavi RID = gen × 100 €/MWh (±2%)', Math.abs(r14.matrix.revenueRid[1] - totGenKwh14 * 0.1) / (totGenKwh14 * 0.1) < 0.02,
+    `rev=${r14.matrix.revenueRid[1].toFixed(0)} atteso=${(totGenKwh14 * 0.1).toFixed(0)}`);
 check('plantsMetrics: 2 impianti con produzione coerente', r14.plantsMetrics.length === 2 &&
     Math.abs((r14.plantsMetrics[0].annualSolarProductionMWh + r14.plantsMetrics[1].annualSolarProductionMWh) - totGenKwh14 / 1000) / (totGenKwh14 / 1000) < 0.005,
     `metrics=${r14.plantsMetrics.map(m => m.annualSolarProductionMWh.toFixed(1)).join('+')}`);
@@ -278,9 +288,9 @@ const r15 = run(buildState({ plant: {
     marketType: 'brp', brpFee1: 2, brpFee1Months: 18, brpFee2: 1, brpFee2Months: 6, brpFee3: 0,
     degradeRidPct: 0, ...plantNoBess
 } }));
-check('Anno 1: ricavi RID con fee1=2 (±1%)', Math.abs(r15.matrix.revenueRid[0] - genKwh15 * 0.102) / (genKwh15 * 0.102) < 0.01,
-    `rev=${r15.matrix.revenueRid[0].toFixed(0)} atteso=${(genKwh15 * 0.102).toFixed(0)}`);
-const rev15y2 = r15.matrix.revenueRid[1], rev15y3 = r15.matrix.revenueRid[2];
+check('Anno 1: ricavi RID con fee1=2 (±1%)', Math.abs(r15.matrix.revenueRid[1] - genKwh15 * 0.102) / (genKwh15 * 0.102) < 0.01,
+    `rev=${r15.matrix.revenueRid[1].toFixed(0)} atteso=${(genKwh15 * 0.102).toFixed(0)}`);
+const rev15y2 = r15.matrix.revenueRid[2], rev15y3 = r15.matrix.revenueRid[3];
 check('Anno 2: prezzo medio tra fee1 e fee2', rev15y2 / (genKwh15 * 0.9965) > 0.100 && rev15y2 / (genKwh15 * 0.9965) < 0.102,
     `prezzoMedioY2=${(rev15y2 / (genKwh15 * 0.9965)).toFixed(4)}`);
 check('Anno 3: fee3=0 su tutti i mesi (±1%)', Math.abs(rev15y3 - genKwh15 * Math.pow(0.9965, 2) * 0.100) / (genKwh15 * Math.pow(0.9965, 2) * 0.100) < 0.01,
@@ -300,17 +310,17 @@ const r16 = run(buildState({
         bessDegradation: 0, traderSpread: 0, traderDisp: 0
     }
 }));
-check('Arbitraggio anno 1 > 0 (PUN variabile 50/150)', r16.matrix.revenueArbitrage[0] > 0,
-    `arbY1=${r16.matrix.revenueArbitrage[0].toFixed(0)}`);
-check('Arbitraggio anno 3 < anno 1 (fee 2→0 riduce il prezzo)', r16.matrix.revenueArbitrage[2] < r16.matrix.revenueArbitrage[0],
-    `arbY1=${r16.matrix.revenueArbitrage[0].toFixed(0)} arbY3=${r16.matrix.revenueArbitrage[2].toFixed(0)}`);
+check('Arbitraggio anno 1 > 0 (PUN variabile 50/150)', r16.matrix.revenueArbitrage[1] > 0,
+    `arbY1=${r16.matrix.revenueArbitrage[1].toFixed(0)}`);
+check('Arbitraggio anno 3 < anno 1 (fee 2→0 riduce il prezzo)', r16.matrix.revenueArbitrage[3] < r16.matrix.revenueArbitrage[1],
+    `arbY1=${r16.matrix.revenueArbitrage[1].toFixed(0)} arbY3=${r16.matrix.revenueArbitrage[3].toFixed(0)}`);
 check('Nessun NaN nei ricavi con BRP+BESS', !anyNaN(r16.matrix.revenueRid) && !anyNaN(r16.matrix.revenueArbitrage));
 
 // ── Test 17: decay personalizzati (degradeRidPct 10%/anno) ──
 console.log('\n[Test 17] Decay RID 10%/anno applicato una volta (+ degrado solare)');
 const r17 = run(buildState({ plant: { degradeRidPct: 10, ...plantNoBess } }));
-const ratio17a = r17.matrix.revenueRid[1] / r17.matrix.revenueRid[0];
-const ratio17b = r17.matrix.revenueRid[2] / r17.matrix.revenueRid[1];
+const ratio17a = r17.matrix.revenueRid[2] / r17.matrix.revenueRid[1];
+const ratio17b = r17.matrix.revenueRid[3] / r17.matrix.revenueRid[2];
 const expected17 = 0.9965 * 0.9; // degrado solare 0.35% × decay RID 10%
 check('Y2/Y1 ≈ 0.9965 × 0.90 (±1%)', Math.abs(ratio17a - expected17) < 0.01 * expected17,
     `rapporto=${ratio17a.toFixed(4)} atteso=${expected17.toFixed(4)}`);
@@ -335,8 +345,8 @@ check('Energia condivisa ≈ intera generazione immessa', sharedMwh18 > 0.5 * ge
     `shared=${sharedMwh18.toFixed(1)} gen=${genMwh18.toFixed(1)}`);
 check('Prezzo CER effettivo = CACV+TIP = 57.3 €/MWh (±0.5)', Math.abs(incentive18 / sharedMwh18 - 57.3) < 0.5,
     `prezzo=${(incentive18 / sharedMwh18).toFixed(2)}`);
-check('PPA privato su energia condivisa = 80 €/MWh (±2%)', Math.abs(r18.matrix.revenuePpa[0] - sharedMwh18 * 80) / (sharedMwh18 * 80) < 0.02,
-    `revPpa=${r18.matrix.revenuePpa[0].toFixed(0)} atteso=${(sharedMwh18 * 80).toFixed(0)}`);
+check('PPA privato su energia condivisa = 80 €/MWh (±2%)', Math.abs(r18.matrix.revenuePpa[1] - sharedMwh18 * 80) / (sharedMwh18 * 80) < 0.02,
+    `revPpa=${r18.matrix.revenuePpa[1].toFixed(0)} atteso=${(sharedMwh18 * 80).toFixed(0)}`);
 check('Nessun NaN nei ricavi totali con CER', !anyNaN(r18.matrix.revenueTotal));
 
 // ── Test 19: edge case zero impianti / tutti disabilitati ──
@@ -455,14 +465,14 @@ if (mc23 && mc23.months.length === 60) {
     let quadOk = true; let detail = '';
     for (let y = 1; y <= 5 && quadOk; y++) {
         const pairs = [
-            ['revenueRid', mc23.revenueRid, r23.matrix.revenueRid[y - 1]],
-            ['revenuePpa', mc23.revenuePpa, r23.matrix.revenuePpa[y - 1]],
-            ['revenueArbitrage', mc23.revenueArbitrage, r23.matrix.revenueArbitrage[y - 1]],
-            ['revenueTimeshifting', mc23.revenueTimeshifting, r23.matrix.revenueTimeshifting[y - 1]],
-            ['revenueTotal', mc23.revenueTotal, r23.matrix.revenueTotal[y - 1]],
-            ['opex', mc23.opex, r23.matrix.opexTotal[y - 1]],
+            ['revenueRid', mc23.revenueRid, r23.matrix.revenueRid[y]],
+            ['revenuePpa', mc23.revenuePpa, r23.matrix.revenuePpa[y]],
+            ['revenueArbitrage', mc23.revenueArbitrage, r23.matrix.revenueArbitrage[y]],
+            ['revenueTimeshifting', mc23.revenueTimeshifting, r23.matrix.revenueTimeshifting[y]],
+            ['revenueTotal', mc23.revenueTotal, r23.matrix.revenueTotal[y]],
+            ['opex', mc23.opex, r23.matrix.opexTotal[y]],
             ['debtService', mc23.debtService,
-                (r23.debtSchedule.interestAccrued[y - 1] || 0) + (r23.debtSchedule.principalScheduled[y - 1] || 0) + (r23.debtSchedule.principalVoluntary[y - 1] || 0)]
+                (r23.debtSchedule.interestAccrued[y] || 0) + (r23.debtSchedule.principalScheduled[y] || 0) + (r23.debtSchedule.principalVoluntary[y] || 0)]
         ];
         for (const [name, arr, annual] of pairs) {
             const s = sumYear(arr, y);
@@ -516,8 +526,8 @@ const sumRange24 = (arr, from, len) => arr.slice(from, from + len).reduce((a, b)
 let quad24 = true; let det24 = '';
 for (let y = 1; y <= 5; y++) {
     const accruedYear = sumRange24(mc24.revenueAccrued, 12 + (y - 1) * 12, 12);
-    const annual = (r24.matrix.revenueRid[y - 1] || 0) + (r24.matrix.revenuePpa[y - 1] || 0) +
-        (r24.matrix.revenueArbitrage[y - 1] || 0) + (r24.matrix.revenueTimeshifting[y - 1] || 0);
+    const annual = (r24.matrix.revenueRid[y] || 0) + (r24.matrix.revenuePpa[y] || 0) +
+        (r24.matrix.revenueArbitrage[y] || 0) + (r24.matrix.revenueTimeshifting[y] || 0);
     const tol = Math.max(1e-6, Math.abs(annual) * 1e-9);
     if (Math.abs(accruedYear - annual) > tol) { quad24 = false; det24 = `Y${y}: ${accruedYear.toFixed(2)} vs ${annual.toFixed(2)}`; break; }
 }
@@ -574,7 +584,7 @@ const r26 = run(buildState({
     ]
 }), null, opexEv26);
 const mc26 = r26.monthlyCashflow;
-const opexTotY1 = r26.matrix.opexTotal[0] || 0;
+const opexTotY1 = r26.matrix.opexTotal[1] || 0;
 const resid26Y1 = Math.max(0, opexTotY1 - 30000);
 // indici: mar-2027=14, giu-2027=17, mar-2028=26, giu-2028=29
 check('Evento mar-2027 = 30.000 (solo uscita reale)', Math.abs(mc26.opex[14] - 30000) < 1e-6, `got=${mc26.opex[14].toFixed(2)}`);
@@ -585,8 +595,8 @@ check('OPEX cassa anno 1 = soli eventi dichiarati (30.000)', Math.abs(sumOpexY1 
 check('Contatori copertura OPEX (informativi, non generano cassa)', mc26.opexBudgetY1 === opexTotY1 && mc26.opexAllocated === 30000 &&
     Math.abs(mc26.opexResidual - resid26Y1) < 1e-6 && mc26.opexAllocatedY1 === 30000,
     `budget=${mc26.opexBudgetY1} alloc=${mc26.opexAllocated} resid=${mc26.opexResidual}`);
-check('Imposte anno 1 pagate a giu-2028 (non a giu-2027)', mc26.taxes[17] === 0 && Math.abs(mc26.taxes[29] - (r26.matrix.currentTaxesSpv[0] || 0)) < 1e-6);
-check('Imposte anno 5 oltre orizzonte tracciate', Math.abs(mc26.taxesAfterHorizon - (r26.matrix.currentTaxesSpv[4] || 0)) < 1e-6);
+check('Imposte anno 1 pagate a giu-2028 (non a giu-2027)', mc26.taxes[17] === 0 && Math.abs(mc26.taxes[29] - (r26.matrix.currentTaxesSpv[1] || 0)) < 1e-6);
+check('Imposte anno 5 oltre orizzonte tracciate', Math.abs(mc26.taxesAfterHorizon - (r26.matrix.currentTaxesSpv[5] || 0)) < 1e-6);
 check('Nessuna imposta o OPEX in anno 0', mc26.taxes.slice(0, 12).every(v => v === 0) && mc26.opex.slice(0, 12).every(v => v === 0));
 
 // ── Test 27: vista Holding mensile (CF6) ──
@@ -605,8 +615,8 @@ check('Anno 0: nessun servizio soci/PD/oneri HoldCo', mc27.holdcoSociService.sli
 const i27 = 29;
 const sociM27 = mc27.sociService[i27];
 const pdM27 = mc27.pdService[i27];
-const otherM27 = ((r27.matrix.holdcoEarnoutPaid[1] || 0) + (r27.matrix.holdcoOpex[1] || 0) +
-    (r27.matrix.holdcoIresTaxPaid[1] || 0) + (r27.matrix.holdcoIrapTaxPaid[1] || 0)) / 12;
+const otherM27 = ((r27.matrix.holdcoEarnoutPaid[2] || 0) + (r27.matrix.holdcoOpex[2] || 0) +
+    (r27.matrix.holdcoIresTaxPaid[2] || 0) + (r27.matrix.holdcoIrapTaxPaid[2] || 0)) / 12;
 check('Netto Holding = SPV − soci (datato) − PD (datato) − oneri HoldCo (giu-2028)', Math.abs(mc27.holdcoNetCashflow[i27] - (mc27.netCashflow[i27] - sociM27 - pdM27 - otherM27)) < 1e-6);
 check('Servizio soci datato: parte dalla data finanziamento (non prima)', (() => {
     // sociIdx = primo mese CAPEX (default senza date funding) → nessun servizio soci nei mesi precedenti
@@ -637,8 +647,8 @@ withCustom[0].customOpexEur = 50000;
 const r28b = run(buildState({ inputs: { collectionLagRid: 0 }, plants: withCustom }));
 check('CAPEX personalizzato entra nel costo progetto (+100.000)', Math.abs((r28b.totalProjectCost - r28a.totalProjectCost) - 100000) < 1e-6,
     `Δ=${(r28b.totalProjectCost - r28a.totalProjectCost).toFixed(0)}`);
-check('OPEX personalizzato entra in EBITDA anno 1 (−50.000)', Math.abs((r28b.matrix.ebitda[0] - r28a.matrix.ebitda[0]) + 50000) < 1e-6,
-    `Δ=${(r28b.matrix.ebitda[0] - r28a.matrix.ebitda[0]).toFixed(0)}`);
+check('OPEX personalizzato entra in EBITDA anno 1 (−50.000)', Math.abs((r28b.matrix.ebitda[1] - r28a.matrix.ebitda[1]) + 50000) < 1e-6,
+    `Δ=${(r28b.matrix.ebitda[1] - r28a.matrix.ebitda[1]).toFixed(0)}`);
 check('OPEX personalizzato nel budget Y1 ma non genera cassa senza eventi dichiarati',
     Math.abs((r28b.monthlyCashflow.opex[12] - r28a.monthlyCashflow.opex[12])) < 1e-6 &&
     Math.abs((r28b.monthlyCashflow.opexBudgetY1 - r28a.monthlyCashflow.opexBudgetY1) - 50000) < 1e-6,
@@ -710,7 +720,7 @@ check('Contatori budget: IVA allocata CAPEX (0% vs 22%)', Math.abs(mc31a.capexVa
 check('Lordo allocato CAPEX = netto + IVA', Math.abs(mc31b.capexGrossAllocated - (mc31b.capexAllocated + mc31b.capexVatAllocated)) < 1e-6);
 check('Eventi OPEX: IMU 0% + Sicurezza 22% → IVA allocata 2.200', Math.abs(mc31a.opexVatAllocated - 2200) < 1e-6 && Math.abs(mc31a.opexGrossAllocated - 22200) < 1e-6,
     `vat=${mc31a.opexVatAllocated} gross=${mc31a.opexGrossAllocated}`);
-// Identità CF11 al mese di COD (idx 16): residuo CAPEX × blend impianto (nessun evento OPEX a maggio)
+// Identità CF11 al mese di COD (idx 16): residuo CAPEX × blend impianto (EPC FV 10% + Bonifica 10%)
 const base31 = 8000 * 700 + 100000;
 const residCapex31 = base31 - 1000000;
 const blendCapex31a = (5600000 * 0.22 + 100000 * 0.10) / base31;
@@ -909,6 +919,107 @@ check('COD mag-2027: solo EPC datato 700.000 (nessun extra terreni duplicato)',
 check('Budget CAPEX coperto al 100% → residuo 0', Math.abs(mc37.capexResidual) < 1e-6 &&
     Math.abs(mc37.capexBudget - 800000) < 1e-3, `budget=${mc37.capexBudget} resid=${mc37.capexResidual}`);
 
-console.log(`\n═══════════════════════════════════`);
+// ── Test 38: Anno 0 (Pre-COD) nel P&L SPV e Holding (Step 2 Implementation) ──
+console.log('\n[Test 38] Anno 0 nel P&L SPV e Holding');
+const r38 = run(buildState());
+const m38 = r38.matrix;
+check('Anno 0 presente nella matrice (years[0] === 0)', m38.years[0] === 0 && m38.years.length === 21);
+check('Anno 0 SPV: ricavi pari a 0', m38.revenueTotal[0] === 0);
+check('Anno 0 SPV: produzione solare pari a 0', m38.qtySolarGen[0] === 0);
+check('Anno 0 SPV: ammortamenti civilistici pari a 0 (OIC 16 pre-COD)', m38.depreciationCivil[0] === 0);
+check('Anno 0 SPV: ammortamenti civilistici solare/bess/altri pari a 0', m38.depreciationCivilSolar[0] === 0 && m38.depreciationCivilBess[0] === 0 && m38.depreciationCivilOther[0] === 0);
+check('Anno 0 SPV: interessi senior a 0 (IDC capitalizzati in CAPEX)', m38.interest[0] === 0);
+check('Anno 0 SPV: EBT <= 0 (riflette eventuali costi pre-COD)', m38.ebt[0] <= 0);
+check('Anno 0 SPV: imposte correnti a 0 (IRES/IRAP)', m38.currentTaxesSpv[0] === 0);
+check('Anno 0 SPV: perdita riportata 100% Art. 84 c. 2 TUIR', m38.taxLossCF[0] >= Math.abs(m38.ebt[0]));
+check('Anno 0 Holding: OPEX Holding imputati', m38.holdcoOpex[0] > 0);
+check('Anno 0 Holding: Utile Netto Holding negativo (costi di struttura)', m38.holdcoNetProfit[0] < 0);
+check('Anno 0 Debito: debito iniziale 0, debito finale = debito erogato', r38.debtSchedule.beginningBalance[0] === 0 && r38.debtSchedule.endingBalance[0] === r38.debtAmount && r38.debtSchedule.beginningBalance[1] === r38.debtSchedule.endingBalance[0]);
+
+// ── Test 39: Interessi Passivi P&L e Ammortamento Debito COD-aware ──
+console.log('\n[Test 39] Interessi Passivi P&L e Ammortamento Debito COD-aware');
+// Scenario 1: COD 2027-07-01, Grace 6m, Debito 5.1M, Tasso 4.5%
+const r39a = run(buildState({
+    inputs: { seniorGracePeriodMonths: 6, interestRate: 0.045, loanTerm: 11 },
+    plant: { codDate: '2027-07-01' }
+}));
+const m39a = r39a.matrix;
+const ds39a = r39a.debtSchedule;
+check('Anno 0: Interessi a 0 (IDC capitalizzati)', m39a.interest[0] === 0);
+check('Anno 1: Interessi pro-rata post-COD (ca. metà anno, 184/365)', Math.abs(m39a.interest[1] - (r39a.debtAmount * 0.045 * (184/365))) < 1e-2,
+    `got=${m39a.interest[1]} exp=${(r39a.debtAmount * 0.045 * (184/365)).toFixed(2)}`);
+check('Anno 1 vs Anno 2: Interessi Anno 1 != Interessi Anno 2 (Anno 1 < Anno 2)', m39a.interest[1] < m39a.interest[2] * 0.6);
+check('Anno 1: Quota capitale = 0 o quasi 0 (coperta dal preammortamento 6m)', ds39a.principalScheduled[1] < 2000);
+check('Anno 2: Interessi 12 mesi interi sul debito residuo', Math.abs(m39a.interest[2] - (ds39a.beginningBalance[2] * 0.045)) < 1e-2);
+check('Anno 2: Quota capitale attiva dopo la grazia', ds39a.principalScheduled[2] > 300000);
+check('Allineamento P&L e Cash Flow: interest === interestPaid', m39a.interest[1] === m39a.interestPaid[1] && m39a.interest[2] === m39a.interestPaid[2]);
+
+// Scenario 2: COD 2028-01-01 (Anno 2 COD) -> Anno 1 a P&L ha 0 interessi (tutto IDC)
+const r39b = run(buildState({
+    inputs: { seniorGracePeriodMonths: 6, interestRate: 0.045, loanTerm: 11 },
+    plants: [
+        {
+            id: 'p1', name: 'Impianto A', capacity: 4000, capex: 700, enabled: true, codDate: '2027-07-01',
+            generation: sandbox.generateDefaultSolarProfile(4, 1300), zone: 'CNOR', marketType: 'rid', traderContractType: 'pun_orario'
+        },
+        {
+            id: 'p2', name: 'Impianto B', capacity: 4000, capex: 700, enabled: true, codDate: '2028-01-01',
+            generation: sandbox.generateDefaultSolarProfile(4, 1300), zone: 'CNOR', marketType: 'rid', traderContractType: 'pun_orario'
+        }
+    ]
+}));
+check('Multi-plant COD differenziato: Anno 1 riflette solo la quota di Plant A post-COD', r39b.matrix.interest[1] < r39b.matrix.interest[2] * 0.3);
+
+// ── Test 40: Gestione Credito IVA (Modello TR): rimborso, compensazione F24, ibrido e riporto ──
+console.log('\n[Test 40] Gestione Credito IVA (Modello TR): rimborso, compensazione F24, ibrido e riporto');
+const capexPay40 = { pA: [{ date: '2026-10-15', amount: 1000000, label: 'EPC FV' }] };
+
+// 1. Modalità Rimborso con lag 3: credito rimane visibile fino all'incasso, azzeramento alla ricezione del bonifico
+const r40rimb = run(buildState({
+    inputs: { vatEnabled: true, vatTrMode: 'rimborso', vatRefundLagMonths: 3, vatRevRid: 0 },
+    plants: basePlants28()
+}), capexPay40);
+const mcRimb = r40rimb.monthlyCashflow;
+const totRefundRimb = mcRimb.vatRefundReceived.reduce((a, b) => a + b, 0);
+check('Modalità Rimborso lag 3: accredito bonifico Erario > 0', totRefundRimb > 0, `tot=${totRefundRimb.toFixed(0)}`);
+check('Modalità Rimborso lag 3: credito a Dicembre 2026 non è azzerato (in attesa)', mcRimb.vatCreditEnd[11] > 10000);
+check('Modalità Rimborso lag 3: accredito a Marzo 2027 (mese 14)', mcRimb.vatRefundReceived[14] > 10000);
+check('Modalità Rimborso lag 3: credito finale si azzera periodicamente', mcRimb.vatCreditEnd[mcRimb.vatCreditEnd.length - 1] < 10000);
+check('Modalità Rimborso lag 3: cassa riceve il bonifico (vatCashFlow include rimborso)', mcRimb.vatCashFlow.some(v => v > 100000));
+
+// 1b. Modalità Rimborso con lag 0 (immediato): accredito e azzeramento credito a Dicembre 2026
+const r40rimb0 = run(buildState({
+    inputs: { vatEnabled: true, vatTrMode: 'rimborso', vatRefundLagMonths: 0, vatRevRid: 0 },
+    plants: basePlants28()
+}), capexPay40);
+const mcRimb0 = r40rimb0.monthlyCashflow;
+check('Modalità Rimborso lag 0: accredito nel mese di fine trimestre (Dicembre 2026)', mcRimb0.vatRefundReceived[11] > 10000);
+check('Modalità Rimborso lag 0: credito IVA azzerato nel mese di fine trimestre', mcRimb0.vatCreditEnd[11] === 0);
+check('Modalità Rimborso lag 0: cassa riceve il rimborso a Dicembre 2026', mcRimb0.vatCashFlow[11] > 10000);
+
+// 2. Modalità Compensazione: credito compensa imposte F24, riduzione tasse vive, quadratura con P&L
+const r40comp = run(buildState({
+    inputs: { vatEnabled: true, vatTrMode: 'compensazione', vatRevRid: 0 },
+    plants: basePlants28()
+}), capexPay40);
+const mcComp = r40comp.monthlyCashflow;
+const totComp = mcComp.vatCompensated.reduce((a, b) => a + b, 0);
+check('Modalità Compensazione: imposte F24 compensate con credito IVA > 0', totComp > 0, `comp=${totComp.toFixed(0)}`);
+check('Modalità Compensazione: nessun rimborso monetario erogato', mcComp.vatRefundReceived.every(v => v === 0));
+check('Modalità Compensazione: quadratura P&L vs Cash Flow (Imposte P&L entro orizzonte = Compensate + Pagate Cassa)',
+    Math.abs((mcComp.taxesAccruedTotal - (mcComp.taxesAfterHorizon || 0)) - (mcComp.vatCompensatedTotal + mcComp.taxesPaidTotal)) < 1e-3,
+    `accruedWithinHorizon=${mcComp.taxesAccruedTotal - (mcComp.taxesAfterHorizon || 0)} comp=${mcComp.vatCompensatedTotal} paid=${mcComp.taxesPaidTotal}`);
+
+// 3. Modalità Riporto (legacy): nessun rimborso né compensazione, credito accumulato
+const r40rip = run(buildState({
+    inputs: { vatEnabled: true, vatTrMode: 'riporto', vatRevRid: 0 },
+    plants: basePlants28()
+}), capexPay40);
+const mcRip = r40rip.monthlyCashflow;
+check('Modalità Riporto: nessun rimborso', mcRip.vatRefundReceived.every(v => v === 0));
+check('Modalità Riporto: nessuna compensazione', mcRip.vatCompensated.every(v => v === 0));
+check('Modalità Riporto: credito continua ad accumularsi', mcRip.vatCreditEnd[mcRip.vatCreditEnd.length - 1] > 1000000);
+
+console.log('\n═══════════════════════════════════');
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);

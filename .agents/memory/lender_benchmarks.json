@@ -1,0 +1,59 @@
+{
+  "market_date": "2026-09-01",
+  "macro_indicators": {
+    "euribor_6m": 3.15,
+    "irs_10y": 2.85,
+    "inflation_target_ecb": 2.00,
+    "italy_btp_10y_spread": 125
+  },
+  "lending_pools": [
+    {
+      "bank_name": "Intesa Sanpaolo (IMI CIB)",
+      "target_assets": ["Utility-scale PV", "Hybrid PV + BESS", "Industrial CER"],
+      "max_ltv_pct": 80.0,
+      "margin_bps_over_euribor": 150,
+      "min_dscr_target": 1.20,
+      "min_llcr_target": 1.30,
+      "preamortization_months_standard": 12,
+      "upfront_fee_pct": 1.00,
+      "dsra_months": 6,
+      "cash_sweep_pct": 50.0
+    },
+    {
+      "bank_name": "UniCredit Corporate & Investment Banking",
+      "target_assets": ["PV Greenfields", "BESS Standalone", "Agrivoltaico"],
+      "max_ltv_pct": 75.0,
+      "margin_bps_over_euribor": 160,
+      "min_dscr_target": 1.25,
+      "min_llcr_target": 1.35,
+      "preamortization_months_standard": 6,
+      "upfront_fee_pct": 1.10,
+      "dsra_months": 6,
+      "cash_sweep_pct": 75.0
+    },
+    {
+      "bank_name": "Cassa Depositi e Prestiti (CDP) / BEI Facility",
+      "target_assets": ["CER PNRR Comuni < 50k", "Transizione 5.0", "Comunità Energetiche"],
+      "max_ltv_pct": 85.0,
+      "margin_bps_over_euribor": 120,
+      "min_dscr_target": 1.15,
+      "min_llcr_target": 1.20,
+      "preamortization_months_standard": 18,
+      "upfront_fee_pct": 0.75,
+      "dsra_months": 6,
+      "cash_sweep_pct": 25.0
+    },
+    {
+      "bank_name": "BPER Banca / Crédit Agricole Italia",
+      "target_assets": ["C&I Rooftop PV", "On-site PPA Storage"],
+      "max_ltv_pct": 70.0,
+      "margin_bps_over_euribor": 175,
+      "min_dscr_target": 1.25,
+      "min_llcr_target": 1.30,
+      "preamortization_months_standard": 12,
+      "upfront_fee_pct": 1.25,
+      "dsra_months": 6,
+      "cash_sweep_pct": 50.0
+    }
+  ]
+}

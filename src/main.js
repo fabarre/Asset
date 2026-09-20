@@ -116,6 +116,159 @@
             // L'array State.zonalPun è già inizializzato a 0.
         }
 
+        // Centralized mapping between State.inputs keys and DOM input element IDs
+        const DOM_INPUT_MAP = {
+            'keVal': { id: 'input-ke-val', mult: 100 },
+            'wacc': { id: 'input-wacc', mult: 100 },
+            'inflation': { id: 'input-inflation', mult: 100 },
+            'fiscalDeprRate': { id: 'slide-fiscal-depreciation', mult: 100 },
+            'iresRate': { id: 'input-ires-rate', mult: 100 },
+            'irapRate': { id: 'input-irap-rate', mult: 100 },
+            'leverage': { id: 'slide-leverage', mult: 100 },
+            'interestRate': { id: 'slide-interest', mult: 100 },
+            'loanTerm': { id: 'slide-loan-term', mult: 1 },
+            'debtBasis': { id: 'select-debt-basis', mult: 1 },
+            'debtRepaymentFrequency': { id: 'select-debt-repayment-frequency', mult: 1 },
+            'sweepType': { id: 'select-sweep-type', mult: 1 },
+            'sweepValue': { id: 'input-sweep-value', mult: 1 },
+            'sweepYears': { id: 'input-sweep-years', mult: 1 },
+            'sculptingEnabled': { id: 'input-sculpting-enabled', mult: 1 },
+            'targetDscr': { id: 'input-target-dscr', mult: 1 },
+            'dsraMonths': { id: 'input-dsra-months', mult: 1 },
+            'refiEnabled': { id: 'input-refi-enabled', mult: 1 },
+            'refiYear': { id: 'input-refi-year', mult: 1 },
+            'refiInterestRate': { id: 'input-refi-rate', mult: 1 },
+            'refiLoanTerm': { id: 'input-refi-term', mult: 1 },
+            'seniorGracePeriodMonths': { id: 'slide-senior-grace-period', mult: 1 },
+            'constructionMonths': { id: 'slide-construction-months', mult: 1 },
+            'idcDrawdownFactor': { id: 'slide-idc-drawdown', mult: 1 },
+            'sociEquityPct': { id: 'slide-soci-equity-pct', mult: 1 },
+            'sociPctEpc': { id: 'slide-soci-pct-epc', mult: 1 },
+            'sociPctBess': { id: 'slide-soci-pct-bess', mult: 1 },
+            'sociPctConnection': { id: 'slide-soci-pct-connection', mult: 1 },
+            'sociPctLand': { id: 'slide-soci-pct-land', mult: 1 },
+            'sociPctDevelopment': { id: 'slide-soci-pct-development', mult: 1 },
+            'sociPctSpv': { id: 'slide-soci-pct-spv', mult: 1 },
+            'sociPctCustom': { id: 'slide-soci-pct-custom', mult: 1 },
+            'sociInterestRate': { id: 'slide-soci-interest-rate', mult: 1 },
+            'sociInterestGrace': { id: 'input-soci-interest-grace', mult: 1 },
+            'sociPrincipalGrace': { id: 'input-soci-principal-grace', mult: 1 },
+            'sociLoanTerm': { id: 'input-soci-loan-term', mult: 1 },
+            'soci_loan_term': { id: 'input-soci-loan-term', mult: 1 },
+            'pdEnabled': { id: 'input-pd-enabled', mult: 1 },
+            'pdAmountType': { id: 'select-pd-amount-type', mult: 1 },
+            'pdAmountValue': { id: 'input-pd-amount-value', mult: 1 },
+            'pdInterestRate': { id: 'slide-pd-interest-rate', mult: 1 },
+            'pdInterestGrace': { id: 'input-pd-interest-grace', mult: 1 },
+            'pdPrincipalGrace': { id: 'input-pd-principal-grace', mult: 1 },
+            'ridLossInjectBt': { id: 'input-ridLossInjectBt', mult: 1 },
+            'ridLossInjectMt': { id: 'input-ridLossInjectMt', mult: 1 },
+            'ridLossInjectAt': { id: 'input-ridLossInjectAt', mult: 1 },
+            'ridLossWithdrawBt': { id: 'input-ridLossWithdrawBt', mult: 1 },
+            'ridLossWithdrawMt': { id: 'input-ridLossWithdrawMt', mult: 1 },
+            'ridLossWithdrawAt': { id: 'input-ridLossWithdrawAt', mult: 1 },
+            'cerLossCprBt': { id: 'input-cerLossCprBt', mult: 1 },
+            'cerLossCprMt': { id: 'input-cerLossCprMt', mult: 1 },
+            'cerLossCprAt': { id: 'input-cerLossCprAt', mult: 1 },
+            'ridImbalanceCost': { id: 'input-ridImbalanceCost', mult: 1 },
+            'msdEurMwYr': { id: 'input-msd-eur-mw-yr', mult: 1 },
+            'cerTras': { id: 'input-cerTras', mult: 1 },
+            'cerFissaSmall': { id: 'input-cerFissaSmall', mult: 1 },
+            'cerFissaMedium': { id: 'input-cerFissaMedium', mult: 1 },
+            'cerFissaLarge': { id: 'input-cerFissaLarge', mult: 1 },
+            'cerCapSmall': { id: 'input-cerCapSmall', mult: 1 },
+            'cerCapMedium': { id: 'input-cerCapMedium', mult: 1 },
+            'cerCapLarge': { id: 'input-cerCapLarge', mult: 1 },
+            'cerVarReferencePrice': { id: 'input-cerVarReferencePrice', mult: 1 },
+            'cerVarMax': { id: 'input-cerVarMax', mult: 1 },
+            'cerGeoNord': { id: 'input-cerGeoNord', mult: 1 },
+            'cerGeoCentro': { id: 'input-cerGeoCentro', mult: 1 },
+            'cerGeoSud': { id: 'input-cerGeoSud', mult: 1 },
+            'pdMode': { id: 'select-pd-mode', mult: 1 },
+            'pdLoanTerm': { id: 'input-pd-loan-term', mult: 1 },
+            'pdTaxDeductible': { id: 'input-pd-tax-deductible', mult: 1 },
+            'pdWaterfallRank': { id: 'select-pd-waterfall-rank', mult: 1 },
+            'peEnabled': { id: 'input-pe-enabled', mult: 1 },
+            'peAmountType': { id: 'select-pe-amount-type', mult: 1 },
+            'peAmountValue': { id: 'input-pe-amount-value', mult: 1 },
+            'peMode': { id: 'select-pe-mode', mult: 1 },
+            'peHurdleRate': { id: 'slide-pe-hurdle-rate', mult: 1 },
+            'pePreferredPct': { id: 'slide-pe-preferred-pct', mult: 1 },
+            'peExitMultiple': { id: 'input-pe-exit-multiple', mult: 1 },
+            'peRoyaltyPct': { id: 'slide-pe-royalty-pct', mult: 1 },
+            'peParticipatesExit': { id: 'input-pe-participates-exit', mult: 1 },
+            'afEnabled': { id: 'input-af-enabled', mult: 1 },
+            'afType': { id: 'select-af-type', mult: 1 },
+            'afAnnualAmount': { id: 'input-af-annual-amount', mult: 1 },
+            'afRevenuePct': { id: 'slide-af-revenue-pct', mult: 1 },
+            'afExitPct': { id: 'slide-af-exit-pct', mult: 1 },
+            'afWarrantPct': { id: 'slide-af-warrant-pct', mult: 1 },
+            'afConvertibleAmount': { id: 'input-af-convertible-amount', mult: 1 },
+            'afConvertibleRate': { id: 'slide-af-convertible-rate', mult: 1 },
+            'afConvertiblePct': { id: 'slide-af-convertible-pct', mult: 1 },
+            'afTaxDeductible': { id: 'input-af-tax-deductible', mult: 1 },
+            'holdcoCapital': { id: 'input-holdco-capital', mult: 1 },
+            'exitOption': { id: 'input-exit-option', mult: 1 },
+            'exitMultiple': { id: 'input-exit-multiple', mult: 1 },
+            'exitValuePerMwp': { id: 'input-exit-value-mwp', mult: 1 },
+            'exitEnterpriseValue': { id: 'input-exit-ev', mult: 1 },
+            'priceScenarioType': { id: 'select-price-scenario-type', mult: 1 },
+            'collectionLagRid': { id: 'mc-lag-rid', mult: 1 },
+            'collectionLagBrp': { id: 'mc-lag-brp', mult: 1 },
+            'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
+            'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
+            'taxPaymentMonth': { id: 'mc-tax-pay-month', mult: 1 },
+            'vatEnabled': { id: 'input-vat-enabled', mult: 1 },
+            'vatRevRid': { id: 'vat-rev-rid', mult: 1 },
+            'vatRevPpa': { id: 'vat-rev-ppa', mult: 1 },
+            'vatRevBrp': { id: 'vat-rev-brp', mult: 1 },
+            'vatRevCer': { id: 'vat-rev-cer', mult: 1 },
+            'vatRevFerx': { id: 'vat-rev-ferx', mult: 1 },
+            'vatSettlement': { id: 'input-vat-settlement', mult: 1 },
+            'vatTrMode': { id: 'input-vat-tr-mode', mult: 1 },
+            'vatRefundEnabled': { id: 'input-vat-refund-enabled', mult: 1 },
+            'vatRefundLagMonths': { id: 'input-vat-refund-lag', mult: 1 },
+            'vatCapexEpcFv': { id: 'vat-capex-epc-fv', mult: 1 },
+            'vatCapexEpcBess': { id: 'vat-capex-epc-bess', mult: 1 },
+            'vatCapexConnection': { id: 'vat-capex-connection', mult: 1 },
+            'vatCapexDevelopment': { id: 'vat-capex-development', mult: 1 },
+            'vatCapexSpv': { id: 'vat-capex-spv', mult: 1 },
+            'vatCapexLand': { id: 'vat-capex-land', mult: 1 },
+            'vatOpexOmFv': { id: 'vat-opex-om-fv', mult: 1 },
+            'vatOpexOmBess': { id: 'vat-opex-om-bess', mult: 1 },
+            'vatOpexInsurance': { id: 'vat-opex-insurance', mult: 1 },
+            'vatOpexImu': { id: 'vat-opex-imu', mult: 1 },
+            'vatOpexSecurity': { id: 'vat-opex-security', mult: 1 },
+            'vatOpexAssetMgmt': { id: 'vat-opex-asset-mgmt', mult: 1 },
+            'fundingEquityDate': { id: 'input-funding-equity-date', mult: 1 },
+            'fundingSociDate': { id: 'input-funding-soci-date', mult: 1 },
+            'fundingDebtDate': { id: 'input-funding-debt-date', mult: 1 },
+            'punDiscountPct': { id: 'input-pun-discount-pct', mult: 1 },
+            'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
+            'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
+            'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
+            'arbBearishDecayRate': { id: 'input-arb-bearish-decay-rate', mult: 100 },
+            'dividendLock': { id: 'input-dividend-lock', mult: 1 },
+            'distributionPolicy': { id: 'select-distribution-policy', mult: 1 },
+            'cashTrapDeployment': { id: 'select-cash-trap-deployment', mult: 1 },
+            'bessOptimizer': { id: 'select-bess-optimizer', mult: 1 }
+        };
+
+        // Safe Chart destruction helper to prevent "Canvas is already in use" errors
+        function safeDestroyChart(canvasOrId, instanceRef) {
+            const canvas = typeof canvasOrId === 'string' ? document.getElementById(canvasOrId) : canvasOrId;
+            if (typeof Chart !== 'undefined' && Chart.getChart && canvas) {
+                const existing = Chart.getChart(canvas);
+                if (existing) {
+                    try { existing.destroy(); } catch (e) { console.warn('safeDestroyChart getChart destroy error:', e); }
+                }
+            }
+            if (instanceRef && typeof instanceRef.destroy === 'function') {
+                try { instanceRef.destroy(); } catch (e) { console.warn('safeDestroyChart instanceRef destroy error:', e); }
+            }
+            return null;
+        }
+
         // Load Supabase credentials from external file, then auth gate.
         // Ritorna: 'authenticated' | 'auth_required' | 'no_config'
         async function loadSupabaseConfig() {
@@ -155,6 +308,7 @@
             
             supabaseClient = supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
             registerAuthListener();
+            updateAdminTabVisibility();
             
             // Auth gate: sessione attiva?
             let session = null;
@@ -180,33 +334,268 @@
             return 'auth_required';
         }
 
-        // ── AUTH MODULE (Supabase Auth, email/password) ──
+        // ── AUTH MODULE (Supabase Auth, email/password & views) ──
+        window.togglePasswordVisibility = function(inputId, iconId) {
+            const input = document.getElementById(inputId);
+            const icon = document.getElementById(iconId);
+            if (!input) return;
+            const isPassword = input.type === 'password';
+            input.type = isPassword ? 'text' : 'password';
+            if (icon) {
+                if (isPassword) {
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            }
+        };
+
+        window.onSignupPasswordInput = function() {
+            const pwd = document.getElementById('auth-signup-password')?.value || '';
+            const bar = document.getElementById('auth-signup-strength-bar');
+            const txt = document.getElementById('auth-signup-strength-text');
+            if (!bar || !txt) return;
+
+            if (!pwd) {
+                bar.style.width = '0%';
+                bar.className = 'h-full bg-slate-700 transition-all duration-300';
+                txt.textContent = 'Minimo 6 caratteri';
+                txt.className = 'text-slate-400 font-semibold';
+                return;
+            }
+
+            let score = 0;
+            if (pwd.length >= 6) score++;
+            if (pwd.length >= 10) score++;
+            if (/[A-Z]/.test(pwd)) score++;
+            if (/[0-9]/.test(pwd)) score++;
+            if (/[^A-Za-z0-9]/.test(pwd)) score++;
+
+            if (pwd.length < 6) {
+                bar.style.width = '20%';
+                bar.className = 'h-full bg-rose-500 transition-all duration-300';
+                txt.textContent = 'Troppo corta (< 6 car.)';
+                txt.className = 'text-rose-400 font-semibold';
+            } else if (score <= 2) {
+                bar.style.width = '40%';
+                bar.className = 'h-full bg-rose-400 transition-all duration-300';
+                txt.textContent = 'Debole';
+                txt.className = 'text-rose-400 font-semibold';
+            } else if (score <= 4) {
+                bar.style.width = '70%';
+                bar.className = 'h-full bg-amber-400 transition-all duration-300';
+                txt.textContent = 'Media';
+                txt.className = 'text-amber-400 font-semibold';
+            } else {
+                bar.style.width = '100%';
+                bar.className = 'h-full bg-emerald-400 transition-all duration-300';
+                txt.textContent = 'Forte';
+                txt.className = 'text-emerald-400 font-semibold';
+            }
+        };
+
+        function attachCapsLockDetectors() {
+            const pairs = [
+                { inputId: 'auth-password', warnId: 'auth-caps-warning-login' },
+                { inputId: 'auth-signup-password', warnId: 'auth-caps-warning-signup' },
+                { inputId: 'modal-new-password', warnId: 'modal-caps-warning' }
+            ];
+            pairs.forEach(({ inputId, warnId }) => {
+                const el = document.getElementById(inputId);
+                const warn = document.getElementById(warnId);
+                if (!el || !warn) return;
+                const check = (e) => {
+                    if (e && typeof e.getModifierState === 'function') {
+                        if (e.getModifierState('CapsLock')) {
+                            warn.classList.remove('hidden');
+                        } else {
+                            warn.classList.add('hidden');
+                        }
+                    }
+                };
+                el.addEventListener('keydown', check);
+                el.addEventListener('keyup', check);
+                el.addEventListener('blur', () => warn.classList.add('hidden'));
+            });
+        }
+
+        window.showAuthView = function(view) {
+            const views = ['login', 'signup', 'forgot', 'reset'];
+            views.forEach(v => {
+                const el = document.getElementById(`auth-view-${v}`);
+                if (el) el.classList.toggle('hidden', v !== view);
+                const tabBtn = document.getElementById(`tab-auth-${v}-btn`);
+                if (tabBtn) {
+                    if (v === view) {
+                        tabBtn.className = 'flex-1 pb-2.5 text-xs font-bold text-emerald-400 border-b-2 border-emerald-500 transition-colors flex items-center justify-center space-x-1.5';
+                    } else {
+                        tabBtn.className = 'flex-1 pb-2.5 text-xs font-bold text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors flex items-center justify-center space-x-1.5';
+                    }
+                }
+            });
+
+            // Mostra o nascondi tabs in modalità recovery reset
+            const tabsContainer = document.getElementById('auth-tabs');
+            const titleEl = document.getElementById('auth-modal-title');
+            if (view === 'reset') {
+                if (tabsContainer) tabsContainer.classList.add('hidden');
+                if (titleEl) titleEl.textContent = 'Ripristino Password';
+            } else {
+                if (tabsContainer) tabsContainer.classList.remove('hidden');
+                if (titleEl) titleEl.textContent = 'Accesso Deal Simulator';
+            }
+
+            // Svuota i box di errore
+            ['auth-error', 'auth-signup-error', 'auth-forgot-msg', 'auth-reset-msg'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.add('hidden');
+                    el.textContent = '';
+                }
+            });
+
+            // Focus intelligente
+            setTimeout(() => {
+                if (view === 'login') {
+                    const email = document.getElementById('auth-email');
+                    const pwd = document.getElementById('auth-password');
+                    if (email && email.value) pwd?.focus();
+                    else email?.focus();
+                } else if (view === 'signup') {
+                    document.getElementById('auth-signup-email')?.focus();
+                } else if (view === 'forgot') {
+                    const loginEmail = document.getElementById('auth-email')?.value || '';
+                    const forgotEmail = document.getElementById('auth-forgot-email');
+                    if (forgotEmail) {
+                        if (loginEmail && !forgotEmail.value) forgotEmail.value = loginEmail;
+                        forgotEmail.focus();
+                    }
+                } else if (view === 'reset') {
+                    document.getElementById('auth-reset-password')?.focus();
+                }
+            }, 100);
+        };
+
+        function translateAuthError(err) {
+            if (!err) return 'Si è verificato un errore.';
+            const msg = typeof err === 'string' ? err : (err.message || String(err));
+            const lower = msg.toLowerCase();
+            if (lower.includes('invalid login credentials') || lower.includes('invalid_grant')) {
+                return 'Credenziali non valide. Verifica email e password.';
+            }
+            if (lower.includes('email not confirmed')) {
+                return 'Indirizzo email non ancora confermato. Controlla la tua casella di posta elettronica per il link di conferma.';
+            }
+            if (lower.includes('user already registered') || lower.includes('already registered')) {
+                return 'Esiste già un account con questa email. Effettua l\'accesso o recupera la password.';
+            }
+            if (lower.includes('password should be at least 6') || lower.includes('at least 6 characters')) {
+                return 'La password deve contenere almeno 6 caratteri.';
+            }
+            if (lower.includes('over_email_send_rate_limit') || lower.includes('rate limit') || lower.includes('too many requests')) {
+                return 'Troppe richieste inviate. Attendi qualche minuto prima di riprovare.';
+            }
+            if (lower.includes('signup is disabled') || lower.includes('signups not allowed')) {
+                return 'La registrazione di nuovi utenti è disabilitata dall\'amministratore del progetto.';
+            }
+            if (lower.includes('network') || lower.includes('failed to fetch') || lower.includes('timeout')) {
+                return 'Impossibile contattare il server di autenticazione. Verifica la connessione di rete.';
+            }
+            return msg;
+        }
+
+        function setButtonLoading(btn, isLoading, defaultHtml, loadingText) {
+            if (!btn) return;
+            if (isLoading) {
+                btn.disabled = true;
+                btn.dataset.prevHtml = btn.innerHTML;
+                btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i> <span>${loadingText || 'Attendere...'}</span>`;
+                btn.classList.add('opacity-75', 'cursor-not-allowed');
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = btn.dataset.prevHtml || defaultHtml;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+            }
+        }
+
         function showAuthOverlay() {
             const ov = document.getElementById('auth-overlay');
             if (ov) ov.style.display = 'flex';
             const anonWrap = document.getElementById('auth-anonymous-wrap');
             if (anonWrap) anonWrap.style.display = State.allowAnonymous ? '' : 'none';
+
+            // Auto-compilazione email salvata con "Ricordami"
+            const rememberedEmail = localStorage.getItem('asset_remembered_email');
             const emailEl = document.getElementById('auth-email');
-            if (emailEl) setTimeout(() => emailEl.focus(), 150);
+            const rememberCheck = document.getElementById('auth-remember-me');
+            if (rememberedEmail && emailEl) {
+                emailEl.value = rememberedEmail;
+                if (rememberCheck) rememberCheck.checked = true;
+                const pwdEl = document.getElementById('auth-password');
+                if (pwdEl) setTimeout(() => pwdEl.focus(), 150);
+            } else {
+                if (emailEl) setTimeout(() => emailEl.focus(), 150);
+            }
+            attachCapsLockDetectors();
         }
+
         function hideAuthOverlay() {
             const ov = document.getElementById('auth-overlay');
             if (ov) ov.style.display = 'none';
-            const errEl = document.getElementById('auth-error');
-            if (errEl) errEl.classList.add('hidden');
+            ['auth-error', 'auth-signup-error', 'auth-forgot-msg', 'auth-reset-msg'].forEach(id => {
+                const errEl = document.getElementById(id);
+                if (errEl) errEl.classList.add('hidden');
+            });
         }
-        function showAuthError(msg, isInfo = false) {
-            const errEl = document.getElementById('auth-error');
+
+        function showAuthError(msg, isInfo = false, view = 'login') {
+            let errId = 'auth-error';
+            if (view === 'signup') errId = 'auth-signup-error';
+            else if (view === 'forgot') errId = 'auth-forgot-msg';
+            else if (view === 'reset') errId = 'auth-reset-msg';
+
+            const errEl = document.getElementById(errId);
             if (!errEl) return;
             errEl.textContent = msg;
             errEl.className = isInfo
                 ? 'text-emerald-400 text-[11px] font-semibold text-center bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2'
                 : 'text-rose-400 text-[11px] font-semibold text-center bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2';
+            errEl.classList.remove('hidden');
         }
+
         function onUserAuthenticated(user) {
             State.currentUser = user || null;
             updateAdminTabVisibility();
             updateRoleBadge();
+
+            // Sincronizzazione controlli utente nella Top Navbar globale
+            const navPill = document.getElementById('nav-user-pill');
+            const navEmail = document.getElementById('nav-user-email');
+            const navRole = document.getElementById('nav-role-badge');
+            if (user && user.email) {
+                if (navPill) navPill.classList.remove('hidden');
+                if (navEmail) {
+                    navEmail.textContent = user.email;
+                    navEmail.title = user.email;
+                }
+                if (navRole) {
+                    const role = currentUserRole();
+                    navRole.textContent = role.toUpperCase();
+                    if (role === 'admin') {
+                        navRole.className = 'text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 border bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+                    } else if (role === 'viewer') {
+                        navRole.className = 'text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 border bg-amber-500/10 text-amber-400 border-amber-500/30';
+                    } else {
+                        navRole.className = 'text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 border bg-sky-500/10 text-sky-400 border-sky-500/30';
+                    }
+                }
+            } else {
+                if (navPill) navPill.classList.add('hidden');
+            }
+
+            // Controlli retrocompatibili nel pannello Finanza
             const badge = document.getElementById('auth-user-badge');
             const logoutBtn = document.getElementById('btn-logout');
             if (badge && user && user.email) {
@@ -273,13 +662,43 @@
             }
         };
 
+        function updateGmeUploadVisibility() {
+            const btn = document.getElementById('btn-upload-gme');
+            const badge = document.getElementById('gme-admin-badge');
+            const notice = document.getElementById('gme-admin-notice');
+            const admin = isCurrentUserAdmin();
+            if (badge) badge.classList.toggle('hidden', admin);
+            if (notice) notice.classList.toggle('hidden', admin);
+            if (btn) {
+                if (admin) {
+                    btn.classList.remove('opacity-40', 'cursor-not-allowed');
+                    btn.classList.add('cursor-pointer');
+                    btn.title = 'Carica file Excel rilasciato dal GME';
+                } else {
+                    btn.classList.add('opacity-40', 'cursor-not-allowed');
+                    btn.title = 'Importazione riservata agli amministratori';
+                }
+            }
+        }
+
         function updateAdminTabVisibility() {
             const btn = document.getElementById('btn-tab-users');
-            if (!btn) return;
-            const admin = isCurrentUserAdmin();
-            btn.classList.toggle('hidden', !admin);
-            btn.classList.toggle('flex', admin);
+            if (btn) {
+                const admin = isCurrentUserAdmin();
+                btn.classList.toggle('hidden', !admin);
+                btn.classList.toggle('inline-flex', admin);
+            }
+            updateGmeUploadVisibility();
         }
+
+        window.triggerGmeUpload = function() {
+            if (!isCurrentUserAdmin()) {
+                showToast('Importazione e modifica dei listini zonali riservata al ruolo admin.', 'warning');
+                return;
+            }
+            const input = document.getElementById('gme-xlsx-file');
+            if (input) input.click();
+        };
 
         window.fetchAdminUsers = async function() {
             const body = document.getElementById('users-table-body');
@@ -347,11 +766,24 @@
         function registerAuthListener() {
             if (!supabaseClient || State._authListenerRegistered) return;
             State._authListenerRegistered = true;
-            supabaseClient.auth.onAuthStateChange((event) => {
+            supabaseClient.auth.onAuthStateChange((event, session) => {
                 if (event === 'SIGNED_OUT') {
                     window.location.reload();
+                } else if (event === 'PASSWORD_RECOVERY') {
+                    showAuthOverlay();
+                    showAuthView('reset');
+                } else if (event === 'USER_UPDATED' && session && session.user) {
+                    onUserAuthenticated(session.user);
                 }
             });
+
+            // Controllo hash URL al caricamento per intercettare il token di password recovery
+            if (typeof window !== 'undefined' && window.location.hash && (window.location.hash.includes('type=recovery') || window.location.hash.includes('error_code'))) {
+                setTimeout(() => {
+                    showAuthOverlay();
+                    showAuthView('reset');
+                }, 200);
+            }
         }
         // Boot dell'app dopo autenticazione (o scelta anonima): carica dati e avvia simulazione
         async function bootAfterAuth() {
@@ -371,7 +803,7 @@
                     statusEl.textContent = "Stato Connessione: Accesso negato - login richiesto";
                     statusEl.className = "text-xs text-rose-400 font-bold";
                 }
-                showAuthError('Accesso ai dati negato: autenticati per continuare. (' + err.message + ')');
+                showAuthError('Accesso ai dati negato: autenticati per continuare. (' + err.message + ')', false, 'login');
             } finally {
                 State.isLoading = false;
                 showCalcIndicator(false);
@@ -381,13 +813,26 @@
         }
 
         window.loginUser = async function() {
-            if (!supabaseClient) { showAuthError('Database non configurato.'); return; }
-            const email = (document.getElementById('auth-email').value || '').trim();
-            const password = document.getElementById('auth-password').value || '';
-            if (!email || !password) { showAuthError('Inserisci email e password.'); return; }
+            if (!supabaseClient) { showAuthError('Database non configurato.', false, 'login'); return; }
+            const email = (document.getElementById('auth-email')?.value || '').trim();
+            const password = document.getElementById('auth-password')?.value || '';
+            if (!email || !password) { showAuthError('Inserisci email e password per accedere.', false, 'login'); return; }
+
+            const btn = document.getElementById('btn-auth-login');
+            setButtonLoading(btn, true, '<i class="fa-solid fa-right-to-bracket mr-1.5"></i> <span>Accedi</span>', 'Accesso in corso...');
+
             try {
                 const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
                 if (error) throw error;
+
+                // Gestione opzione "Ricordami"
+                const rememberCheck = document.getElementById('auth-remember-me');
+                if (rememberCheck && rememberCheck.checked) {
+                    localStorage.setItem('asset_remembered_email', email);
+                } else {
+                    localStorage.removeItem('asset_remembered_email');
+                }
+
                 hideAuthOverlay();
                 onUserAuthenticated(data.user);
                 const statusEl = document.getElementById('sync-status');
@@ -397,16 +842,25 @@
                 }
                 await bootAfterAuth();
             } catch (err) {
-                showAuthError(err.message === 'Invalid login credentials' ? 'Credenziali non valide. Riprova.' : err.message);
+                showAuthError(translateAuthError(err), false, 'login');
+            } finally {
+                setButtonLoading(btn, false, '<i class="fa-solid fa-right-to-bracket mr-1.5"></i> <span>Accedi</span>');
             }
         };
 
         window.signupUser = async function() {
-            if (!supabaseClient) { showAuthError('Database non configurato.'); return; }
-            const email = (document.getElementById('auth-email').value || '').trim();
-            const password = document.getElementById('auth-password').value || '';
-            if (!email || !password) { showAuthError('Inserisci email e password per la registrazione.'); return; }
-            if (password.length < 6) { showAuthError('La password deve contenere almeno 6 caratteri.'); return; }
+            if (!supabaseClient) { showAuthError('Database non configurato.', false, 'signup'); return; }
+            const email = (document.getElementById('auth-signup-email')?.value || '').trim();
+            const password = document.getElementById('auth-signup-password')?.value || '';
+            const confirm = document.getElementById('auth-signup-confirm-password')?.value || '';
+
+            if (!email || !password) { showAuthError('Inserisci email e password per la registrazione.', false, 'signup'); return; }
+            if (password.length < 6) { showAuthError('La password deve contenere almeno 6 caratteri.', false, 'signup'); return; }
+            if (password !== confirm) { showAuthError('Le password inserite non coincidono.', false, 'signup'); return; }
+
+            const btn = document.getElementById('btn-auth-signup');
+            setButtonLoading(btn, true, '<i class="fa-solid fa-user-plus mr-1.5"></i> <span>Registra nuovo utente</span>', 'Registrazione in corso...');
+
             try {
                 const { data, error } = await supabaseClient.auth.signUp({ email, password });
                 if (error) throw error;
@@ -416,19 +870,86 @@
                     onUserAuthenticated(data.user);
                     await bootAfterAuth();
                 } else {
-                    showAuthError('Registrazione completata. Se richiesta dal progetto, conferma la email e poi accedi.', true);
+                    showAuthError('Registrazione completata! Controlla la tua email per confermare l\'account prima di accedere.', true, 'signup');
                 }
             } catch (err) {
-                showAuthError(err.message);
+                showAuthError(translateAuthError(err), false, 'signup');
+            } finally {
+                setButtonLoading(btn, false, '<i class="fa-solid fa-user-plus mr-1.5"></i> <span>Registra nuovo utente</span>');
+            }
+        };
+
+        window.forgotPasswordUser = async function() {
+            if (!supabaseClient) { showAuthError('Database non configurato.', false, 'forgot'); return; }
+            const email = (document.getElementById('auth-forgot-email')?.value || '').trim();
+            if (!email) { showAuthError('Inserisci il tuo indirizzo email.', false, 'forgot'); return; }
+
+            const btn = document.getElementById('btn-auth-forgot');
+            setButtonLoading(btn, true, '<i class="fa-solid fa-paper-plane mr-1.5"></i> <span>Invia Link di Ripristino</span>', 'Invio link in corso...');
+
+            try {
+                const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.origin + window.location.pathname
+                });
+                if (error) throw error;
+                showAuthError('Link inviato! Controlla la tua casella di posta (anche nella cartella Spam).', true, 'forgot');
+            } catch (err) {
+                showAuthError(translateAuthError(err), false, 'forgot');
+            } finally {
+                setButtonLoading(btn, false, '<i class="fa-solid fa-paper-plane mr-1.5"></i> <span>Invia Link di Ripristino</span>');
+            }
+        };
+
+        window.updatePasswordUser = async function() {
+            if (!supabaseClient) { showAuthError('Database non configurato.', false, 'reset'); return; }
+            const pwd = document.getElementById('auth-reset-password')?.value || '';
+            const confirm = document.getElementById('auth-reset-confirm')?.value || '';
+
+            if (!pwd || !confirm) { showAuthError('Compila entrambi i campi password.', false, 'reset'); return; }
+            if (pwd.length < 6) { showAuthError('La password deve contenere almeno 6 caratteri.', false, 'reset'); return; }
+            if (pwd !== confirm) { showAuthError('Le password non coincidono.', false, 'reset'); return; }
+
+            const btn = document.getElementById('btn-auth-reset');
+            setButtonLoading(btn, true, '<i class="fa-solid fa-check mr-1.5"></i> <span>Salva Nuova Password</span>', 'Salvataggio in corso...');
+
+            try {
+                const { error } = await supabaseClient.auth.updateUser({ password: pwd });
+                if (error) throw error;
+                showToast('Password aggiornata con successo! Accesso effettuato.', 'success');
+                hideAuthOverlay();
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, null, window.location.pathname);
+                }
+                await bootAfterAuth();
+            } catch (err) {
+                showAuthError(translateAuthError(err), false, 'reset');
+            } finally {
+                setButtonLoading(btn, false, '<i class="fa-solid fa-check mr-1.5"></i> <span>Salva Nuova Password</span>');
             }
         };
 
         window.continueAnonymous = async function() {
             if (!State.allowAnonymous) {
-                showAuthError('Accesso anonimo non consentito in questo ambiente: effettua il login.');
+                showAuthError('Accesso anonimo non consentito in questo ambiente: effettua il login.', false, 'login');
                 return;
             }
             hideAuthOverlay();
+            State.currentUser = null;
+
+            // Aggiorna navbar
+            const navPill = document.getElementById('nav-user-pill');
+            const navEmail = document.getElementById('nav-user-email');
+            const navRole = document.getElementById('nav-role-badge');
+            if (navPill) navPill.classList.remove('hidden');
+            if (navEmail) {
+                navEmail.textContent = 'Modalità Sviluppo';
+                navEmail.title = 'Accesso anonimo / locale';
+            }
+            if (navRole) {
+                navRole.textContent = 'DEV';
+                navRole.className = 'text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 border bg-slate-800 text-slate-400 border-slate-700';
+            }
+
             const statusEl = document.getElementById('sync-status');
             if (statusEl) {
                 statusEl.textContent = "Stato Connessione: Collegato (anonimo)";
@@ -439,7 +960,77 @@
 
         window.logoutUser = async function() {
             if (!supabaseClient) return;
-            await supabaseClient.auth.signOut(); // il listener SIGNED_OUT ricarica la pagina
+            const ok = await showConfirm({
+                title: 'Disconnessione',
+                message: 'Sei sicuro di voler uscire dal simulatore?',
+                confirmLabel: 'Disconnetti',
+                cancelLabel: 'Annulla',
+                danger: true
+            });
+            if (!ok) return;
+            try {
+                await supabaseClient.auth.signOut();
+            } catch (e) {
+                console.warn('Errore logout:', e);
+                window.location.reload();
+            }
+        };
+
+        window.openChangePasswordModal = function() {
+            if (!State.currentUser) {
+                showToast('Nessun utente autenticato.', 'warning');
+                return;
+            }
+            const modal = document.getElementById('modal-change-password');
+            const emailSpan = document.getElementById('change-pwd-user-email');
+            const errEl = document.getElementById('modal-change-pwd-error');
+            if (emailSpan) emailSpan.textContent = State.currentUser.email || 'account';
+            if (errEl) {
+                errEl.classList.add('hidden');
+                errEl.textContent = '';
+            }
+            const p1 = document.getElementById('modal-new-password');
+            const p2 = document.getElementById('modal-confirm-password');
+            if (p1) p1.value = '';
+            if (p2) p2.value = '';
+            if (modal) modal.style.display = 'flex';
+            setTimeout(() => p1?.focus(), 150);
+            attachCapsLockDetectors();
+        };
+
+        window.closeChangePasswordModal = function() {
+            const modal = document.getElementById('modal-change-password');
+            if (modal) modal.style.display = 'none';
+        };
+
+        window.submitChangePassword = async function() {
+            if (!supabaseClient) { showToast('Database non connesso.', 'error'); return; }
+            const p1 = document.getElementById('modal-new-password')?.value || '';
+            const p2 = document.getElementById('modal-confirm-password')?.value || '';
+            const errEl = document.getElementById('modal-change-pwd-error');
+            const showErr = (msg) => {
+                if (!errEl) return;
+                errEl.textContent = msg;
+                errEl.classList.remove('hidden');
+            };
+
+            if (!p1 || !p2) { showErr('Compila entrambi i campi password.'); return; }
+            if (p1.length < 6) { showErr('La password deve contenere almeno 6 caratteri.'); return; }
+            if (p1 !== p2) { showErr('Le password non coincidono.'); return; }
+
+            const btn = document.getElementById('btn-save-change-pwd');
+            setButtonLoading(btn, true, '<i class="fa-solid fa-check mr-1.5"></i> <span>Aggiorna</span>', 'Salvataggio in corso...');
+
+            try {
+                const { error } = await supabaseClient.auth.updateUser({ password: p1 });
+                if (error) throw error;
+                closeChangePasswordModal();
+                showToast('Password modificata con successo!', 'success');
+            } catch (err) {
+                showErr(translateAuthError(err));
+            } finally {
+                setButtonLoading(btn, false, '<i class="fa-solid fa-check mr-1.5"></i> <span>Aggiorna</span>');
+            }
         };
 
         // Initialize App
@@ -545,6 +1136,7 @@
                     scheduleLoadPreview();
                 }, 50);
             }
+            if (tabId === 'tab-cer') tabId = 'tab-rid';
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
 
@@ -558,21 +1150,32 @@
                 'tab-plants': 'btn-tab-plants',
                 'tab-gme': 'btn-tab-gme',
                 'tab-rid': 'btn-tab-rid',
-                'tab-cer': 'btn-tab-cer',
+                'tab-cer': 'btn-tab-rid',
                 'tab-hourly': 'btn-tab-hourly',
                 'tab-financials': 'btn-tab-financials',
                 'tab-stabilimenti': 'btn-tab-stabilimenti',
                 'tab-sensitivity': 'btn-tab-sensitivity',
-                'tab-dataquality': 'btn-tab-dataquality',
-                'tab-users': 'btn-tab-users'
+                'tab-dataquality': 'btn-tab-dataquality'
             };
             
             document.querySelectorAll('nav button').forEach(btn => {
                 btn.className = "border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2";
             });
-            const activeNavBtn = document.getElementById(navMap[tabId]);
+            const activeNavBtn = navMap[tabId] ? document.getElementById(navMap[tabId]) : null;
             if (activeNavBtn) activeNavBtn.className = "border-b-2 border-emerald-500 text-emerald-400 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2";
-            // Il forEach sopra rimuove 'hidden' dai bottoni: riapplica la visibilità admin
+
+            // Highlight header users button if active
+            const btnUsers = document.getElementById('btn-tab-users');
+            if (btnUsers) {
+                if (tabId === 'tab-users') {
+                    btnUsers.classList.remove('border-slate-800', 'text-slate-400', 'bg-slate-900');
+                    btnUsers.classList.add('border-emerald-500', 'text-emerald-400', 'bg-emerald-500/20');
+                } else {
+                    btnUsers.classList.remove('border-emerald-500', 'text-emerald-400', 'bg-emerald-500/20');
+                    btnUsers.classList.add('border-slate-800', 'text-slate-400', 'bg-slate-900');
+                }
+            }
+
             updateAdminTabVisibility();
             if (tabId === 'tab-users') fetchAdminUsers();
             
@@ -643,8 +1246,9 @@
             // 4. Quadratura energetica anno 1 (se disponibili risultati)
             const m = State.results && State.results.matrix;
             if (m && m.qtySolarGen && m.qtySolarGen.length) {
-                const gen = m.qtySolarGen[0] || 0;
-                const alloc = (m.qtySolarPpa[0] || 0) + (m.qtySolarRid[0] || 0) + (m.qtySolarToBess[0] || 0);
+                const idxY1 = (m.years && m.years[0] === 0) ? 1 : 0;
+                const gen = m.qtySolarGen[idxY1] || 0;
+                const alloc = (m.qtySolarPpa[idxY1] || 0) + (m.qtySolarRid[idxY1] || 0) + (m.qtySolarToBess[idxY1] || 0);
                 const diff = gen > 0 ? Math.abs(gen - alloc) / gen : 0;
                 if (diff > 0.01) add('Quadrature', 'Bilancio energetico Y1', 'err', (diff * 100).toFixed(2) + '%', 'Gen ≠ PPA+RID+toBESS');
                 else add('Quadrature', 'Bilancio energetico Y1', 'ok', (diff * 100).toFixed(2) + '%', 'Generazione = allocazione');
@@ -809,6 +1413,10 @@
             const yieldEl = document.getElementById('plant-kpi-yield');
             const prodEl  = document.getElementById('plant-kpi-production');
             const lcoeEl  = document.getElementById('plant-kpi-lcoe');
+            const yieldCorrEl = document.getElementById('plant-kpi-yield-corrected');
+            const prodCorrEl  = document.getElementById('plant-kpi-production-corrected');
+            const lcoeCorrEl  = document.getElementById('plant-kpi-lcoe-corrected');
+            const multInput   = document.getElementById('plant-prod-multiplier');
             if (!yieldEl || !prodEl || !lcoeEl) return;
 
             // Persist last known generation so cost-only changes can still update LCOE
@@ -821,12 +1429,23 @@
                 return; // No generation data yet
             }
 
+            const multVal = multInput ? parseFloat(multInput.value) : 1.0;
+            const mult = (!isNaN(multVal) && multVal > 0) ? multVal : 1.0;
+
             const cap = capacityKwp || 0;
             const yieldKwhKwp = cap > 0 ? (annualGenerationKwh / cap) : 0;
             const productionMwh = annualGenerationKwh / 1000;
 
             yieldEl.value = cap > 0 ? yieldKwhKwp.toFixed(1) : '\u2014';
             prodEl.value  = cap > 0 ? productionMwh.toFixed(1) : '\u2014';
+
+            // Corrected Yield and Production
+            const correctedProductionMwh = productionMwh * mult;
+            const correctedYieldKwhKwp = yieldKwhKwp * mult;
+            const correctedAnnualGenerationKwh = annualGenerationKwh * mult;
+
+            if (yieldCorrEl) yieldCorrEl.value = cap > 0 ? correctedYieldKwhKwp.toFixed(1) : '\u2014';
+            if (prodCorrEl)  prodCorrEl.value  = cap > 0 ? correctedProductionMwh.toFixed(1) : '\u2014';
 
             // Discounted LCOE calculation over 20 years matching the simulation methodology
             const PLANT_LIFE = 20;
@@ -844,75 +1463,84 @@
             const landCapex = (landTypeVal === 'acquisto') ? landCostVal : 0;
             const landOpex  = (landTypeVal === 'dds_annuo') ? landCostVal : 0;
 
-            let serviceOpexAnnual = 0;
             const serviceType = document.getElementById('plant-service-type') ? document.getElementById('plant-service-type').value : 'none';
             const serviceVal = parseFloat((document.getElementById('plant-service-val') || {}).value) || 0;
             const serviceYears = parseInt((document.getElementById('plant-service-years') || {}).value) || 0;
-            if (serviceType !== 'none' && serviceVal > 0) {
-                // Find associated stabilimento (if any)
-                const activeStab = State.stabilimenti.find(s => s.plantId === (editingPlantId || ''));
-                if (activeStab) {
-                    if (serviceType === 'ppa_rev_pct') {
-                        const ppaPrice = activeStab.ppaPrice || 0;
-                        let selfConsKwh = 0;
-                        if (activeStab.ppaType === 'on-site' || activeStab.ppaType === 'cer') {
-                            const plant = State.plants.find(p => p.id === editingPlantId);
-                            if (plant && plant._selfConsumptionMwh !== undefined) {
-                                selfConsKwh = plant._selfConsumptionMwh * 1000;
-                            } else {
-                                selfConsKwh = (annualGenerationKwh || 0) * 0.5;
-                            }
-                        } else {
-                            selfConsKwh = (annualGenerationKwh || 0);
-                        }
-                        const approxPpaRev = (selfConsKwh / 1000) * ppaPrice;
-                        serviceOpexAnnual = (serviceVal / 100) * approxPpaRev;
-                    } else if (serviceType === 'shared_ppa_mwh') {
-                        let selfConsMwh = 0;
-                        const plant = State.plants.find(p => p.id === editingPlantId);
-                        if (plant && plant._selfConsumptionMwh !== undefined) {
-                            selfConsMwh = plant._selfConsumptionMwh;
-                        } else {
-                            selfConsMwh = (annualGenerationKwh || 0) * 0.5 / 1000;
-                        }
-                        serviceOpexAnnual = serviceVal * selfConsMwh;
-                    }
-                }
-            }
 
             // Exclude BESS CAPEX from Solar LCOE initial cost; CF7: include custom CAPEX/OPEX
             const editPlantForKpi = State.plants.find(p => p.id === editingPlantId);
             const customCapexKpi = editPlantForKpi ? (editPlantForKpi.customCapexEur || 0) : 0;
             const customOpexKpi = editPlantForKpi ? (editPlantForKpi.customOpexEur || 0) : 0;
             const totalCapexExBess = (capexPerKwp * cap) + connCost + devCost + spvCost + landCapex + customCapexKpi;
-
-            let lcoeSumDiscountedCosts = totalCapexExBess;
-            let lcoeSumDiscountedEnergy = 0;
             const wacc = State.inputs.wacc || 0.06;
             const inflation = State.inputs.inflation || 0.02;
 
-            for (let yr = 1; yr <= PLANT_LIFE; yr++) {
-                const inflationMultiplier = Math.pow(1 + inflation, yr - 1);
-                const discountFactor = Math.pow(1 + wacc, yr);
+            function computeLcoe(genKwh) {
+                if (!genKwh || genKwh <= 0 || cap <= 0) return null;
 
-                // Exclude BESS Opex and BESS maintenance reserve
-                let yOpex = (opexAnnual + opexIns + opexTax + opexSec + opexAsset + landOpex + customOpexKpi) * inflationMultiplier;
-                if (yr <= serviceYears) {
-                    yOpex += serviceOpexAnnual * inflationMultiplier;
+                let serviceOpexAnnual = 0;
+                if (serviceType !== 'none' && serviceVal > 0) {
+                    const activeStab = State.stabilimenti.find(s => s.plantId === (editingPlantId || ''));
+                    if (activeStab) {
+                        if (serviceType === 'ppa_rev_pct') {
+                            const ppaPrice = activeStab.ppaPrice || 0;
+                            let selfConsKwh = 0;
+                            if (activeStab.ppaType === 'on-site' || activeStab.ppaType === 'cer') {
+                                const plant = State.plants.find(p => p.id === editingPlantId);
+                                if (plant && plant._selfConsumptionMwh !== undefined) {
+                                    selfConsKwh = plant._selfConsumptionMwh * 1000;
+                                } else {
+                                    selfConsKwh = genKwh * 0.5;
+                                }
+                            } else {
+                                selfConsKwh = genKwh;
+                            }
+                            const approxPpaRev = (selfConsKwh / 1000) * ppaPrice;
+                            serviceOpexAnnual = (serviceVal / 100) * approxPpaRev;
+                        } else if (serviceType === 'shared_ppa_mwh') {
+                            let selfConsMwh = 0;
+                            const plant = State.plants.find(p => p.id === editingPlantId);
+                            if (plant && plant._selfConsumptionMwh !== undefined) {
+                                selfConsMwh = plant._selfConsumptionMwh;
+                            } else {
+                                selfConsMwh = genKwh * 0.5 / 1000;
+                            }
+                            serviceOpexAnnual = serviceVal * selfConsMwh;
+                        }
+                    }
                 }
 
-                lcoeSumDiscountedCosts += yOpex / discountFactor;
+                let lcoeSumDiscountedCosts = totalCapexExBess;
+                let lcoeSumDiscountedEnergy = 0;
 
-                const solarDegradation = Math.max(0.50, 1 - 0.0035 * (yr - 1));
-                const yEnergyKwh = annualGenerationKwh * solarDegradation;
-                lcoeSumDiscountedEnergy += yEnergyKwh / discountFactor;
+                for (let yr = 1; yr <= PLANT_LIFE; yr++) {
+                    const inflationMultiplier = Math.pow(1 + inflation, yr - 1);
+                    const discountFactor = Math.pow(1 + wacc, yr);
+
+                    let yOpex = (opexAnnual + opexIns + opexTax + opexSec + opexAsset + landOpex + customOpexKpi) * inflationMultiplier;
+                    if (yr <= serviceYears) {
+                        yOpex += serviceOpexAnnual * inflationMultiplier;
+                    }
+
+                    lcoeSumDiscountedCosts += yOpex / discountFactor;
+
+                    const solarDegradation = Math.max(0.50, 1 - 0.0035 * (yr - 1));
+                    const yEnergyKwh = genKwh * solarDegradation;
+                    lcoeSumDiscountedEnergy += yEnergyKwh / discountFactor;
+                }
+
+                if (lcoeSumDiscountedEnergy > 0 && lcoeSumDiscountedCosts > 0) {
+                    return (lcoeSumDiscountedCosts / lcoeSumDiscountedEnergy) * 1000;
+                }
+                return null;
             }
 
-            if (lcoeSumDiscountedEnergy > 0 && lcoeSumDiscountedCosts > 0) {
-                const lcoeMwh = (lcoeSumDiscountedCosts / lcoeSumDiscountedEnergy) * 1000;
-                lcoeEl.value = lcoeMwh.toFixed(2);
-            } else {
-                lcoeEl.value = '\u2014';
+            const baseLcoe = computeLcoe(annualGenerationKwh);
+            const corrLcoe = computeLcoe(correctedAnnualGenerationKwh);
+
+            lcoeEl.value = (baseLcoe != null) ? baseLcoe.toFixed(2) : '\u2014';
+            if (lcoeCorrEl) {
+                lcoeCorrEl.value = (corrLcoe != null) ? corrLcoe.toFixed(2) : '\u2014';
             }
         }
 
@@ -924,6 +1552,7 @@
             
             const name = getVal('plant-name');
             const codDate = getVal('plant-cod-date') || null;
+            const prodMultiplier = getFloat('plant-prod-multiplier') || 1.0;
             const capex = getFloat('plant-capex');
             const opex = getFloat('plant-opex');
             const opexOmBess = getFloat('plant-opex-om-bess');
@@ -980,8 +1609,11 @@
             const degradeTimeshifting = getFloat('plant-degrade-timeshifting');
             const degradeArbitrage = getFloat('plant-degrade-arbitrage');
 
+            const origProdMultiplier = (originalPlantData.prodMultiplier !== undefined && originalPlantData.prodMultiplier !== null) ? Number(originalPlantData.prodMultiplier) : 1.0;
+
             return name !== originalPlantData.name ||
                    codDate !== (originalPlantData.codDate || null) ||
+                   Math.abs(prodMultiplier - origProdMultiplier) > 1e-4 ||
                    capex !== originalPlantData.capex ||
                    opex !== originalPlantData.opex ||
                    opexOmBess !== (originalPlantData.opexOmBess || 0) ||
@@ -1193,7 +1825,11 @@
             setRo('pvgis-elevation', plant.pvgisElevation);
             setRo('pvgis-system-losses', plant.pvgisSystemLosses);
             setRo('pvgis-tracking', plant.pvgisTracking);
-            setRo('pvgis-database', plant.pvgisDatabase);
+            // Multiplier
+            const multEl = document.getElementById('plant-prod-multiplier');
+            if (multEl) {
+                multEl.value = (plant.prodMultiplier !== undefined && plant.prodMultiplier !== null) ? Number(plant.prodMultiplier).toFixed(3) : '1.000';
+            }
 
             // Populate KPI calculated fields
             const setKpi = (id, val, decimals=1) => {
@@ -1303,8 +1939,11 @@
             ['pvgis-latitude','pvgis-longitude','pvgis-slope','pvgis-azimuth',
              'pvgis-elevation','pvgis-system-losses','pvgis-tracking','pvgis-database'
             ].forEach(id => { const el = document.getElementById(id); if (el) el.value = '\u2014'; });
+            const multEl = document.getElementById('plant-prod-multiplier');
+            if (multEl) multEl.value = '1.000';
             // Reset KPI calculated fields
-            ['plant-kpi-yield','plant-kpi-production','plant-kpi-lcoe']
+            ['plant-kpi-yield','plant-kpi-production','plant-kpi-lcoe',
+             'plant-kpi-yield-corrected','plant-kpi-production-corrected','plant-kpi-lcoe-corrected']
                 .forEach(id => { const el = document.getElementById(id); if (el) el.value = '\u2014'; });
             // Clear persisted KPI state so LCOE does not carry over to next plant
             window._lastKpiState = null;
@@ -1369,6 +2008,7 @@
                 name: document.getElementById('plant-name').value,
                 zone: editZone,
                 codDate: document.getElementById('plant-cod-date').value || null,
+                prodMultiplier: parseFloat(document.getElementById('plant-prod-multiplier').value) || 1.0,
                 capex: parseFloat(document.getElementById('plant-capex').value) || 0,
                 opex: parseFloat(document.getElementById('plant-opex').value) || 0,
                 opexOmBess: parseFloat(document.getElementById('plant-opex-om-bess').value) || 0,
@@ -1441,6 +2081,7 @@
             if (success) {
                 State.plants[plantIdx] = updatedPlant;
                 renderPlantsList();
+                if (typeof syncConstructionMonthsAuto === 'function') syncConstructionMonthsAuto(false);
                 triggerRecalculate();
                 exitEditMode();
                 Audit.log('plant.edit', updatedPlant.name);
@@ -1451,7 +2092,7 @@
         
         function initWorker() {
             if (!simWorker) {
-                simWorker = new Worker('./src/worker/simulation.worker.js?v=3');
+                simWorker = new Worker('./src/worker/simulation.worker.js?v=140');
                 simWorker.onmessage = function(e) {
                     const data = e.data;
                     try {
@@ -1531,6 +2172,7 @@
             }
         }
 
+        window.triggerRecalculate = triggerRecalculate;
         function triggerRecalculate() {
             if (State.isUpdatePending) {
                 State.recalcNeeded = true;
@@ -1836,16 +2478,10 @@
                 energyBadge.classList.remove('hidden');
             }
 
-            // Safe destroy: use Chart.getChart() to avoid 'canvas already in use' errors
-            // that occur when the instance reference (stabPreviewChartInstance) is null
-            // but Chart.js still has the canvas registered internally.
+            // Safe destroy: use safeDestroyChart() to avoid 'canvas already in use' errors
             const canvas = document.getElementById('stab-preview-chart');
-            if (typeof Chart !== 'undefined' && Chart.getChart) {
-                const existing = Chart.getChart(canvas);
-                if (existing) existing.destroy();
-            } else if (stabPreviewChartInstance) {
-                stabPreviewChartInstance.destroy();
-            }
+            safeDestroyChart(canvas, stabPreviewChartInstance);
+            stabPreviewChartInstance = null;
 
             // With responsive:false, Chart.js uses canvas pixel dimensions.
             // Set them explicitly so the chart fills the wrapper div correctly.
@@ -2417,6 +3053,13 @@
                 if (cerContainer) cerContainer.classList.add('hidden');
                 if (priceLabel) priceLabel.textContent = 'Prezzo PPA (€/MWh)';
             }
+            if (document.getElementById('stab-excise-allocation')) {
+                document.getElementById('stab-excise-allocation').value = s.exciseAllocation || 'off-taker';
+            }
+            const exciseContainer = document.getElementById('stab-excise-allocation-container');
+            if (exciseContainer) {
+                exciseContainer.classList.toggle('hidden', s.ppaType !== 'on-site');
+            }
             document.getElementById('stab-works-saturday').checked = !!s.worksSaturday;
             document.getElementById('stab-works-sunday').checked   = !!s.worksSunday;
             document.getElementById('stab-works-holidays').checked = !!s.worksHolidays;
@@ -2459,6 +3102,11 @@
             const priceLabel = document.getElementById('lbl-stab-ppa-price');
             if (priceLabel) priceLabel.textContent = 'Prezzo PPA (€/MWh)';
             document.getElementById('stab-cer-share-type').value = 'shared_energy';
+            if (document.getElementById('stab-excise-allocation')) {
+                document.getElementById('stab-excise-allocation').value = 'off-taker';
+            }
+            const exciseContainer = document.getElementById('stab-excise-allocation-container');
+            if (exciseContainer) exciseContainer.classList.remove('hidden');
             ['stab-works-saturday','stab-works-sunday','stab-works-holidays'].forEach(id2 => {
                 document.getElementById(id2).checked = false;
                 setStabToggleVisual(id2, false);
@@ -2518,6 +3166,7 @@
             const worksHol  = document.getElementById('stab-works-holidays').checked;
             const shiftType = document.getElementById('stab-shift-type').value;
             const cerShareType = ppaType === 'cer' ? document.getElementById('stab-cer-share-type').value : 'shared_energy';
+            const exciseAllocation = document.getElementById('stab-excise-allocation') ? document.getElementById('stab-excise-allocation').value : 'off-taker';
 
             const msgEl = document.getElementById('stab-validation-msg');
 
@@ -2565,6 +3214,7 @@
             const stab = {
                 id: editId || ('stab_' + Date.now()),
                 name, plantId, ppaType, ppaPrice, ppaDuration: ppaDur,
+                exciseAllocation,
                 annualConsumption: annualMwh, worksSaturday: worksSat,
                 worksSunday: worksSun, worksHolidays: worksHol,
                 shiftType, loadSource: loadSrc,
@@ -2654,20 +3304,24 @@
             if (e.target.id === 'stab-ppa-type') {
                 const descEl = document.getElementById('stab-ppa-type-desc-text');
                 const cerContainer = document.getElementById('stab-cer-share-type-container');
+                const exciseContainer = document.getElementById('stab-excise-allocation-container');
                 const priceLabel = document.getElementById('lbl-stab-ppa-price');
                 if (!descEl) return;
                 
                 if (e.target.value === 'on-site') {
                     descEl.textContent = 'On-Site: energia consegnata fisicamente allo stabilimento. La quota eccedente va al Ritiro Dedicato (RID) valorizzata al PUN.';
                     if (cerContainer) cerContainer.classList.add('hidden');
+                    if (exciseContainer) exciseContainer.classList.remove('hidden');
                     if (priceLabel) priceLabel.textContent = 'Prezzo PPA (€/MWh)';
                 } else if (e.target.value === 'off-site') {
                     descEl.textContent = 'Off-Site: contratto virtuale sull\'intera produzione dell\'impianto. Il prezzo PPA sostituisce il PUN per l\'impianto associato.';
                     if (cerContainer) cerContainer.classList.add('hidden');
+                    if (exciseContainer) exciseContainer.classList.add('hidden');
                     if (priceLabel) priceLabel.textContent = 'Prezzo PPA (€/MWh)';
                 } else if (e.target.value === 'cer') {
                     descEl.textContent = 'CER: condivisione virtuale dell\'energia prodotta. Il produttore cede l\'energia in Ritiro Dedicato (RID) e riceve una tariffa CER aggiuntiva sull\'energia prodotta o condivisa.';
                     if (cerContainer) cerContainer.classList.remove('hidden');
+                    if (exciseContainer) exciseContainer.classList.add('hidden');
                     if (priceLabel) priceLabel.textContent = 'Prezzo CER (€/MWh)';
                 }
             }
@@ -2688,6 +3342,7 @@
                 const stabPayload = {
                     id: stab.id, name: stab.name, plant_id: stab.plantId,
                     ppa_type: stab.ppaType, ppa_price: stab.ppaPrice, ppa_duration: stab.ppaDuration,
+                    excise_allocation: stab.exciseAllocation || 'off-taker',
                     annual_consumption_mwh: stab.annualConsumption,
                     works_saturday: stab.worksSaturday, works_sunday: stab.worksSunday,
                     works_holidays: stab.worksHolidays, shift_type: stab.shiftType,
@@ -2710,8 +3365,9 @@
                     error = insErr;
                 }
 
-                if (error && error.message && (error.message.includes('cer_share_type') || error.code === 'PGRST204')) {
+                if (error && error.message && (error.message.includes('cer_share_type') || error.message.includes('excise_allocation') || error.code === 'PGRST204')) {
                     delete stabPayload.cer_share_type;
+                    delete stabPayload.excise_allocation;
                     let { data: upDataRetry, error: retryError } = await supabaseClient
                         .from('stabilimenti')
                         .update(stabPayload)
@@ -2828,6 +3484,7 @@
                         ppaType: s.ppa_type || 'on-site',
                         ppaPrice: parseFloat(s.ppa_price) || 0,
                         ppaDuration: parseInt(s.ppa_duration) || 15,
+                        exciseAllocation: s.excise_allocation || 'off-taker',
                         annualConsumption: parseFloat(s.annual_consumption_mwh) || 0,
                         worksSaturday: !!s.works_saturday, worksSunday: !!s.works_sunday,
                         worksHolidays: !!s.works_holidays,
@@ -2918,6 +3575,7 @@
             p.interestRate = getNum('slide-interest', 4.5) / 100;
             p.loanTerm = getNum('slide-loan-term', 11);
             p.debtBasis = getVal('select-debt-basis');
+            p.debtRepaymentFrequency = getVal('select-debt-repayment-frequency') || 'semestrale';
             // Cash Sweep params
             p.sweepType  = getVal('select-sweep-type') || 'none';
             p.sweepValue = getNum('input-sweep-value', 0);
@@ -2930,13 +3588,21 @@
             p.refiInterestRate = getNum('input-refi-rate', 5.0);
             p.refiLoanTerm = getNum('input-refi-term', 10);
             p.seniorGracePeriodMonths = getNum('slide-senior-grace-period', 6);
-            p.constructionMonths = getNum('slide-construction-months', 6);
+            p.constructionMonths = (typeof syncConstructionMonthsAuto === 'function') ? syncConstructionMonthsAuto(false) : getNum('slide-construction-months', 6);
             p.idcDrawdownFactor = getNum('slide-idc-drawdown', 50);
             // Shareholder Loan params
-            p.sociEquityPct = getNum('slide-soci-equity-pct', 80);
+            p.sociEquityPct = getNum('slide-soci-equity-pct', 100);
+            p.sociPctEpc = getNum('slide-soci-pct-epc', 100);
+            p.sociPctBess = getNum('slide-soci-pct-bess', 100);
+            p.sociPctConnection = getNum('slide-soci-pct-connection', 100);
+            p.sociPctLand = getNum('slide-soci-pct-land', 100);
+            p.sociPctDevelopment = getNum('slide-soci-pct-development', 100);
+            p.sociPctSpv = getNum('slide-soci-pct-spv', 100);
+            p.sociPctCustom = getNum('slide-soci-pct-custom', 100);
             p.sociInterestRate = getNum('slide-soci-interest-rate', 5.5);
             p.sociInterestGrace = getNum('input-soci-interest-grace', 0);
             p.sociPrincipalGrace = getNum('input-soci-principal-grace', 0);
+            p.sociLoanTerm = getNum('input-soci-loan-term', 10);
             // Private Debt
             p.pdEnabled = document.getElementById('input-pd-enabled') ? document.getElementById('input-pd-enabled').checked : false;
             p.pdAmountType = getVal('select-pd-amount-type') || 'fixed_eur';
@@ -2975,6 +3641,14 @@
             p.exitMultiple = getNum('input-exit-multiple', 8.0);
             p.exitValuePerMwp = getNum('input-exit-value-mwp', 0);
             p.exitEnterpriseValue = getNum('input-exit-ev', 0);
+            if (p.exitMultiple <= 0 && p.exitEnterpriseValue > 0 && window.State && window.State.results && window.State.results.matrix && window.State.results.matrix.ebitda) {
+                const exitYr = parseInt(p.exitOption) || 20;
+                const ebitdaExit = window.State.results.matrix.ebitda[exitYr - 1] || 0;
+                if (ebitdaExit > 0) p.exitMultiple = parseFloat((p.exitEnterpriseValue / ebitdaExit).toFixed(2));
+                else p.exitMultiple = 8.0;
+            } else if (p.exitMultiple <= 0) {
+                p.exitMultiple = 8.0;
+            }
 
             p.priceScenarioType = getVal('select-price-scenario-type') || 'base';
 
@@ -2988,19 +3662,23 @@
             // CF10/CF11: IVA di cassa — meccanismo + aliquote sui ricavi per regime + aliquote per voce di spesa
             p.vatEnabled = document.getElementById('input-vat-enabled') ? document.getElementById('input-vat-enabled').checked : true;
             p.vatSettlement = getVal('input-vat-settlement') || 'mensile';
+            p.vatTrMode = getVal('input-vat-tr-mode') || 'ibrido';
+            p.vatRefundLagMonths = (getVal('input-vat-refund-lag') !== '' && !isNaN(parseInt(getVal('input-vat-refund-lag'), 10)))
+                ? Math.max(0, parseInt(getVal('input-vat-refund-lag'), 10))
+                : 0;
             const vatCat = (id, def) => { const v = parseFloat(getVal(id)); return isNaN(v) ? def : v; };
-            // IVA a debito sui ricavi per regime (reverse charge = 0%; CER 22%)
+            // IVA a debito sui ricavi per regime (reverse charge = 0%; PPA on-site 10%; CER 22%)
             p.vatRevRid = vatCat('vat-rev-rid', 0);
-            p.vatRevPpa = vatCat('vat-rev-ppa', 0);
+            p.vatRevPpa = vatCat('vat-rev-ppa', 10);
             p.vatRevBrp = vatCat('vat-rev-brp', 0);
             p.vatRevCer = vatCat('vat-rev-cer', 22);
             p.vatRevFerx = vatCat('vat-rev-ferx', 0);
             // IVA a credito per categoria CAPEX/OPEX (default italiani)
-            p.vatCapexEpcFv = vatCat('vat-capex-epc-fv', 22);
+            p.vatCapexEpcFv = vatCat('vat-capex-epc-fv', 10);
             p.vatCapexEpcBess = vatCat('vat-capex-epc-bess', 22);
             p.vatCapexConnection = vatCat('vat-capex-connection', 22);
             p.vatCapexDevelopment = vatCat('vat-capex-development', 22);
-            p.vatCapexSpv = vatCat('vat-capex-spv', 22);
+            p.vatCapexSpv = vatCat('vat-capex-spv', 0);
             p.vatCapexLand = vatCat('vat-capex-land', 0);
             p.vatOpexOmFv = vatCat('vat-opex-om-fv', 22);
             p.vatOpexOmBess = vatCat('vat-opex-om-bess', 22);
@@ -3013,11 +3691,14 @@
             p.fundingSociDate = getVal('input-funding-soci-date') || '';
             p.fundingDebtDate = getVal('input-funding-debt-date') || '';
             p.bessOptimizer = getVal('select-bess-optimizer') || 'dp';
+            p.punDiscountPct = getNum('input-pun-discount-pct', 0.0);
             p.punZonalFloor = getNum('input-pun-zonal-floor', 60.0);
             p.punBearishDecayRate = getNum('input-pun-bearish-decay-rate', 5) / 100;
             p.tsBearishDecayRate = getNum('input-ts-bearish-decay-rate', 2) / 100;
             p.arbBearishDecayRate = getNum('input-arb-bearish-decay-rate', 3) / 100;
             p.dividendLock = document.getElementById('input-dividend-lock') ? document.getElementById('input-dividend-lock').checked : false;
+            p.distributionPolicy = getVal('select-distribution-policy') || 'cash_flow_driven';
+            p.cashTrapDeployment = getVal('select-cash-trap-deployment') || 'bank_locked';
 
             p.ridLossInjectBt = getNum('input-ridLossInjectBt', 0);
             p.ridLossInjectMt = getNum('input-ridLossInjectMt', 0);
@@ -3070,6 +3751,7 @@
             setVal('slide-interest', p.interestRate * 100);
             setVal('slide-loan-term', p.loanTerm);
             setVal('select-debt-basis', p.debtBasis);
+            setVal('select-debt-repayment-frequency', p.debtRepaymentFrequency || 'semestrale');
             setVal('select-sweep-type', p.sweepType);
             setVal('input-sweep-value', p.sweepValue);
             setVal('input-sweep-years', p.sweepYears);
@@ -3084,11 +3766,19 @@
             setVal('input-refi-term', p.refiLoanTerm !== undefined ? p.refiLoanTerm : 10);
             setVal('slide-senior-grace-period', p.seniorGracePeriodMonths !== undefined ? p.seniorGracePeriodMonths : 6);
             setVal('slide-construction-months', p.constructionMonths !== undefined ? p.constructionMonths : 6);
-            setVal('slide-idc-drawdown', p.idcDrawdownFactor !== undefined ? p.idcDrawdownFactor : 50);
-            setVal('slide-soci-equity-pct', p.sociEquityPct);
-            setVal('slide-soci-interest-rate', p.sociInterestRate);
-            setVal('input-soci-interest-grace', p.sociInterestGrace);
-            setVal('input-soci-principal-grace', p.sociPrincipalGrace);
+            if (typeof syncConstructionMonthsAuto === 'function') syncConstructionMonthsAuto(false);
+            setVal('slide-soci-equity-pct', p.sociEquityPct !== undefined ? p.sociEquityPct : 100);
+            setVal('slide-soci-pct-epc', p.sociPctEpc !== undefined ? p.sociPctEpc : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100));
+            setVal('slide-soci-pct-bess', p.sociPctBess !== undefined ? p.sociPctBess : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100));
+            setVal('slide-soci-pct-connection', p.sociPctConnection !== undefined ? p.sociPctConnection : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100));
+            setVal('slide-soci-pct-land', p.sociPctLand !== undefined ? p.sociPctLand : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100));
+            setVal('slide-soci-pct-development', p.sociPctDevelopment !== undefined ? p.sociPctDevelopment : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100));
+            setVal('slide-soci-pct-spv', p.sociPctSpv !== undefined ? p.sociPctSpv : 100);
+            setVal('slide-soci-pct-custom', p.sociPctCustom !== undefined ? p.sociPctCustom : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100));
+            setVal('slide-soci-interest-rate', p.sociInterestRate !== undefined ? p.sociInterestRate : 5.5);
+            setVal('input-soci-interest-grace', p.sociInterestGrace !== undefined ? p.sociInterestGrace : 0);
+            setVal('input-soci-principal-grace', p.sociPrincipalGrace !== undefined ? p.sociPrincipalGrace : 0);
+            setVal('input-soci-loan-term', p.sociLoanTerm !== undefined ? p.sociLoanTerm : 10);
             // Private Debt
             const setChk = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
             setChk('input-pd-enabled', p.pdEnabled);
@@ -3135,12 +3825,15 @@
             setVal('input-exit-ev', p.exitEnterpriseValue);
             setVal('select-price-scenario-type', p.priceScenarioType || 'base');
             setVal('select-bess-optimizer', p.bessOptimizer || 'dp');
+            setVal('input-pun-discount-pct', p.punDiscountPct !== undefined ? p.punDiscountPct : 0);
             setVal('input-pun-zonal-floor', p.punZonalFloor !== undefined ? p.punZonalFloor : 60);
             setVal('input-pun-bearish-decay-rate', p.punBearishDecayRate !== undefined ? p.punBearishDecayRate * 100 : 5);
             setVal('input-ts-bearish-decay-rate', p.tsBearishDecayRate !== undefined ? p.tsBearishDecayRate * 100 : 2);
             setVal('input-arb-bearish-decay-rate', p.arbBearishDecayRate !== undefined ? p.arbBearishDecayRate * 100 : 3);
             const dlEl = document.getElementById('input-dividend-lock');
             if (dlEl) dlEl.checked = (p.dividendLock === true || p.dividendLock === 'true');
+            setVal('select-distribution-policy', p.distributionPolicy || 'cash_flow_driven');
+            setVal('select-cash-trap-deployment', p.cashTrapDeployment || 'bank_locked');
 
             // RID & CER 2026 global configs
             setVal('input-ridLossInjectBt', p.ridLossInjectBt);
@@ -3251,128 +3944,7 @@
                     });
                     
                     // Update DOM elements using mapping
-                    const domMap = {
-                        'keVal': { id: 'input-ke-val', mult: 100 },
-                        'wacc': { id: 'input-wacc', mult: 100 },
-                        'inflation': { id: 'input-inflation', mult: 100 },
-                        'fiscalDeprRate': { id: 'slide-fiscal-depreciation', mult: 100 },
-                        'iresRate': { id: 'input-ires-rate', mult: 100 },
-                        'irapRate': { id: 'input-irap-rate', mult: 100 },
-                        'leverage': { id: 'slide-leverage', mult: 100 },
-                        'interestRate': { id: 'slide-interest', mult: 100 },
-                        'loanTerm': { id: 'slide-loan-term', mult: 1 },
-                        'debtBasis': { id: 'select-debt-basis', mult: 1 },
-                        'sweepType': { id: 'select-sweep-type', mult: 1 },
-                        'sweepValue': { id: 'input-sweep-value', mult: 1 },
-                        'sweepYears': { id: 'input-sweep-years', mult: 1 },
-                        'sculptingEnabled': { id: 'input-sculpting-enabled', mult: 1 },
-                        'targetDscr': { id: 'input-target-dscr', mult: 1 },
-                        'dsraMonths': { id: 'input-dsra-months', mult: 1 },
-                        'refiEnabled': { id: 'input-refi-enabled', mult: 1 },
-                        'refiYear': { id: 'input-refi-year', mult: 1 },
-                        'refiInterestRate': { id: 'input-refi-rate', mult: 1 },
-                        'refiLoanTerm': { id: 'input-refi-term', mult: 1 },
-                        'seniorGracePeriodMonths': { id: 'slide-senior-grace-period', mult: 1 },
-                        'constructionMonths': { id: 'slide-construction-months', mult: 1 },
-                        'idcDrawdownFactor': { id: 'slide-idc-drawdown', mult: 1 },
-                        'sociEquityPct': { id: 'slide-soci-equity-pct', mult: 1 },
-                        'sociInterestRate': { id: 'slide-soci-interest-rate', mult: 1 },
-                        'sociInterestGrace': { id: 'input-soci-interest-grace', mult: 1 },
-                        'sociPrincipalGrace': { id: 'input-soci-principal-grace', mult: 1 },
-                        'pdEnabled': { id: 'input-pd-enabled', mult: 1 },
-                        'pdAmountType': { id: 'select-pd-amount-type', mult: 1 },
-                        'pdAmountValue': { id: 'input-pd-amount-value', mult: 1 },
-                        'pdInterestRate': { id: 'slide-pd-interest-rate', mult: 1 },
-                        'pdInterestGrace': { id: 'input-pd-interest-grace', mult: 1 },
-                        'pdPrincipalGrace': { id: 'input-pd-principal-grace', mult: 1 },
-                        'ridLossInjectBt': { id: 'input-ridLossInjectBt', mult: 1 },
-                        'ridLossInjectMt': { id: 'input-ridLossInjectMt', mult: 1 },
-                        'ridLossInjectAt': { id: 'input-ridLossInjectAt', mult: 1 },
-                        'ridLossWithdrawBt': { id: 'input-ridLossWithdrawBt', mult: 1 },
-                        'ridLossWithdrawMt': { id: 'input-ridLossWithdrawMt', mult: 1 },
-                        'ridLossWithdrawAt': { id: 'input-ridLossWithdrawAt', mult: 1 },
-                        'cerLossCprBt': { id: 'input-cerLossCprBt', mult: 1 },
-                        'cerLossCprMt': { id: 'input-cerLossCprMt', mult: 1 },
-                        'cerLossCprAt': { id: 'input-cerLossCprAt', mult: 1 },
-                        'ridImbalanceCost': { id: 'input-ridImbalanceCost', mult: 1 },
-                        'msdEurMwYr': { id: 'input-msd-eur-mw-yr', mult: 1 },
-                        'cerTras': { id: 'input-cerTras', mult: 1 },
-                        'cerFissaSmall': { id: 'input-cerFissaSmall', mult: 1 },
-                        'cerFissaMedium': { id: 'input-cerFissaMedium', mult: 1 },
-                        'cerFissaLarge': { id: 'input-cerFissaLarge', mult: 1 },
-                        'cerCapSmall': { id: 'input-cerCapSmall', mult: 1 },
-                        'cerCapMedium': { id: 'input-cerCapMedium', mult: 1 },
-                        'cerCapLarge': { id: 'input-cerCapLarge', mult: 1 },
-                        'cerVarReferencePrice': { id: 'input-cerVarReferencePrice', mult: 1 },
-                        'cerVarMax': { id: 'input-cerVarMax', mult: 1 },
-                        'cerGeoNord': { id: 'input-cerGeoNord', mult: 1 },
-                        'cerGeoCentro': { id: 'input-cerGeoCentro', mult: 1 },
-                        'cerGeoSud': { id: 'input-cerGeoSud', mult: 1 },
-                        'pdMode': { id: 'select-pd-mode', mult: 1 },
-                        'pdLoanTerm': { id: 'input-pd-loan-term', mult: 1 },
-                        'pdTaxDeductible': { id: 'input-pd-tax-deductible', mult: 1 },
-                        'pdWaterfallRank': { id: 'select-pd-waterfall-rank', mult: 1 },
-                        'peEnabled': { id: 'input-pe-enabled', mult: 1 },
-                        'peAmountType': { id: 'select-pe-amount-type', mult: 1 },
-                        'peAmountValue': { id: 'input-pe-amount-value', mult: 1 },
-                        'peMode': { id: 'select-pe-mode', mult: 1 },
-                        'peHurdleRate': { id: 'slide-pe-hurdle-rate', mult: 1 },
-                        'pePreferredPct': { id: 'slide-pe-preferred-pct', mult: 1 },
-                        'peExitMultiple': { id: 'input-pe-exit-multiple', mult: 1 },
-                        'peRoyaltyPct': { id: 'slide-pe-royalty-pct', mult: 1 },
-                        'peParticipatesExit': { id: 'input-pe-participates-exit', mult: 1 },
-                        'afEnabled': { id: 'input-af-enabled', mult: 1 },
-                        'afType': { id: 'select-af-type', mult: 1 },
-                        'afAnnualAmount': { id: 'input-af-annual-amount', mult: 1 },
-                        'afRevenuePct': { id: 'slide-af-revenue-pct', mult: 1 },
-                        'afExitPct': { id: 'slide-af-exit-pct', mult: 1 },
-                        'afWarrantPct': { id: 'slide-af-warrant-pct', mult: 1 },
-                        'afConvertibleAmount': { id: 'input-af-convertible-amount', mult: 1 },
-                        'afConvertibleRate': { id: 'slide-af-convertible-rate', mult: 1 },
-                        'afConvertiblePct': { id: 'slide-af-convertible-pct', mult: 1 },
-                        'afTaxDeductible': { id: 'input-af-tax-deductible', mult: 1 },
-                        'holdcoCapital': { id: 'input-holdco-capital', mult: 1 },
-                        'exitOption': { id: 'input-exit-option', mult: 1 },
-                        'exitMultiple': { id: 'input-exit-multiple', mult: 1 },
-                        'exitValuePerMwp': { id: 'input-exit-value-mwp', mult: 1 },
-                        'exitEnterpriseValue': { id: 'input-exit-ev', mult: 1 },
-                        'exitValuePerMwp': { id: 'input-exit-value-mwp', mult: 1 },
-                        'exitEnterpriseValue': { id: 'input-exit-ev', mult: 1 },
-                        'priceScenarioType': { id: 'select-price-scenario-type', mult: 1 },
-                        'collectionLagRid': { id: 'mc-lag-rid', mult: 1 },
-                        'collectionLagBrp': { id: 'mc-lag-brp', mult: 1 },
-                        'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
-                        'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
-                        'taxPaymentMonth': { id: 'mc-tax-pay-month', mult: 1 },
-                        'vatEnabled': { id: 'input-vat-enabled', mult: 1 },
-                        'vatRevRid': { id: 'vat-rev-rid', mult: 1 },
-                        'vatRevPpa': { id: 'vat-rev-ppa', mult: 1 },
-                        'vatRevBrp': { id: 'vat-rev-brp', mult: 1 },
-                        'vatRevCer': { id: 'vat-rev-cer', mult: 1 },
-                        'vatRevFerx': { id: 'vat-rev-ferx', mult: 1 },
-                        'vatSettlement': { id: 'input-vat-settlement', mult: 1 },
-                        'vatCapexEpcFv': { id: 'vat-capex-epc-fv', mult: 1 },
-                        'vatCapexEpcBess': { id: 'vat-capex-epc-bess', mult: 1 },
-                        'vatCapexConnection': { id: 'vat-capex-connection', mult: 1 },
-                        'vatCapexDevelopment': { id: 'vat-capex-development', mult: 1 },
-                        'vatCapexSpv': { id: 'vat-capex-spv', mult: 1 },
-                        'vatCapexLand': { id: 'vat-capex-land', mult: 1 },
-                        'vatOpexOmFv': { id: 'vat-opex-om-fv', mult: 1 },
-                        'vatOpexOmBess': { id: 'vat-opex-om-bess', mult: 1 },
-                        'vatOpexInsurance': { id: 'vat-opex-insurance', mult: 1 },
-                        'vatOpexImu': { id: 'vat-opex-imu', mult: 1 },
-                        'vatOpexSecurity': { id: 'vat-opex-security', mult: 1 },
-                        'vatOpexAssetMgmt': { id: 'vat-opex-asset-mgmt', mult: 1 },
-                        'fundingEquityDate': { id: 'input-funding-equity-date', mult: 1 },
-                        'fundingSociDate': { id: 'input-funding-soci-date', mult: 1 },
-                        'fundingDebtDate': { id: 'input-funding-debt-date', mult: 1 },
-                        'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
-                        'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
-                        'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
-                        'arbBearishDecayRate': { id: 'input-arb-bearish-decay-rate', mult: 100 },
-                        'dividendLock': { id: 'input-dividend-lock', mult: 1 },
-                        'bessOptimizer': { id: 'select-bess-optimizer', mult: 1 }
-                    };
+                    const domMap = DOM_INPUT_MAP;
                     
                     Object.keys(parsedInputs).forEach(key => {
                         const mapping = domMap[key];
@@ -3562,6 +4134,7 @@
                                 capacity: p.capacity_kwp,
                                 zone: p.zone,
                                 codDate: p.cod_date || null,
+                                prodMultiplier: p.prod_multiplier != null ? parseFloat(p.prod_multiplier) : 1.0,
                                 capex: p.capex_kwp,
                                 opex: p.opex_eur,
                                 enabled: true, // default: included in simulation
@@ -3716,128 +4289,7 @@
                     }
                         
                         // Also update the DOM element!
-                            const domMap = {
-                                'keVal': { id: 'input-ke-val', mult: 100 },
-                                'wacc': { id: 'input-wacc', mult: 100 },
-                                'inflation': { id: 'input-inflation', mult: 100 },
-                                'fiscalDeprRate': { id: 'slide-fiscal-depreciation', mult: 100 },
-                                'iresRate': { id: 'input-ires-rate', mult: 100 },
-                                'irapRate': { id: 'input-irap-rate', mult: 100 },
-                                'leverage': { id: 'slide-leverage', mult: 100 },
-                                'interestRate': { id: 'slide-interest', mult: 100 },
-                                'loanTerm': { id: 'slide-loan-term', mult: 1 },
-                                'debtBasis': { id: 'select-debt-basis', mult: 1 },
-                                'sweepType': { id: 'select-sweep-type', mult: 1 },
-                                'sweepValue': { id: 'input-sweep-value', mult: 1 },
-                                'sweepYears': { id: 'input-sweep-years', mult: 1 },
-                                'sculptingEnabled': { id: 'input-sculpting-enabled', mult: 1 },
-                                'targetDscr': { id: 'input-target-dscr', mult: 1 },
-                                'dsraMonths': { id: 'input-dsra-months', mult: 1 },
-                                'refiEnabled': { id: 'input-refi-enabled', mult: 1 },
-                                'refiYear': { id: 'input-refi-year', mult: 1 },
-                                'refiInterestRate': { id: 'input-refi-rate', mult: 1 },
-                                'refiLoanTerm': { id: 'input-refi-term', mult: 1 },
-                                'seniorGracePeriodMonths': { id: 'slide-senior-grace-period', mult: 1 },
-                                'constructionMonths': { id: 'slide-construction-months', mult: 1 },
-                                'idcDrawdownFactor': { id: 'slide-idc-drawdown', mult: 1 },
-                                'sociEquityPct': { id: 'slide-soci-equity-pct', mult: 1 },
-                                'sociInterestRate': { id: 'slide-soci-interest-rate', mult: 1 },
-                                'sociInterestGrace': { id: 'input-soci-interest-grace', mult: 1 },
-                                'sociPrincipalGrace': { id: 'input-soci-principal-grace', mult: 1 },
-                                'pdEnabled': { id: 'input-pd-enabled', mult: 1 },
-                                'pdAmountType': { id: 'select-pd-amount-type', mult: 1 },
-                                'pdAmountValue': { id: 'input-pd-amount-value', mult: 1 },
-                                'pdInterestRate': { id: 'slide-pd-interest-rate', mult: 1 },
-                                'pdInterestGrace': { id: 'input-pd-interest-grace', mult: 1 },
-                                'pdPrincipalGrace': { id: 'input-pd-principal-grace', mult: 1 },
-                                'ridLossInjectBt': { id: 'input-ridLossInjectBt', mult: 1 },
-                                'ridLossInjectMt': { id: 'input-ridLossInjectMt', mult: 1 },
-                                'ridLossInjectAt': { id: 'input-ridLossInjectAt', mult: 1 },
-                                'ridLossWithdrawBt': { id: 'input-ridLossWithdrawBt', mult: 1 },
-                                'ridLossWithdrawMt': { id: 'input-ridLossWithdrawMt', mult: 1 },
-                                'ridLossWithdrawAt': { id: 'input-ridLossWithdrawAt', mult: 1 },
-                                'cerLossCprBt': { id: 'input-cerLossCprBt', mult: 1 },
-                                'cerLossCprMt': { id: 'input-cerLossCprMt', mult: 1 },
-                                'cerLossCprAt': { id: 'input-cerLossCprAt', mult: 1 },
-                                'ridImbalanceCost': { id: 'input-ridImbalanceCost', mult: 1 },
-                                'msdEurMwYr': { id: 'input-msd-eur-mw-yr', mult: 1 },
-                                'cerTras': { id: 'input-cerTras', mult: 1 },
-                                'cerFissaSmall': { id: 'input-cerFissaSmall', mult: 1 },
-                                'cerFissaMedium': { id: 'input-cerFissaMedium', mult: 1 },
-                                'cerFissaLarge': { id: 'input-cerFissaLarge', mult: 1 },
-                                'cerCapSmall': { id: 'input-cerCapSmall', mult: 1 },
-                                'cerCapMedium': { id: 'input-cerCapMedium', mult: 1 },
-                                'cerCapLarge': { id: 'input-cerCapLarge', mult: 1 },
-                                'cerVarReferencePrice': { id: 'input-cerVarReferencePrice', mult: 1 },
-                                'cerVarMax': { id: 'input-cerVarMax', mult: 1 },
-                                'cerGeoNord': { id: 'input-cerGeoNord', mult: 1 },
-                                'cerGeoCentro': { id: 'input-cerGeoCentro', mult: 1 },
-                                'cerGeoSud': { id: 'input-cerGeoSud', mult: 1 },
-                                'pdMode': { id: 'select-pd-mode', mult: 1 },
-                                'pdLoanTerm': { id: 'input-pd-loan-term', mult: 1 },
-                                'pdTaxDeductible': { id: 'input-pd-tax-deductible', mult: 1 },
-                                'pdWaterfallRank': { id: 'select-pd-waterfall-rank', mult: 1 },
-                                'peEnabled': { id: 'input-pe-enabled', mult: 1 },
-                                'peAmountType': { id: 'select-pe-amount-type', mult: 1 },
-                                'peAmountValue': { id: 'input-pe-amount-value', mult: 1 },
-                                'peMode': { id: 'select-pe-mode', mult: 1 },
-                                'peHurdleRate': { id: 'slide-pe-hurdle-rate', mult: 1 },
-                                'pePreferredPct': { id: 'slide-pe-preferred-pct', mult: 1 },
-                                'peExitMultiple': { id: 'input-pe-exit-multiple', mult: 1 },
-                                'peRoyaltyPct': { id: 'slide-pe-royalty-pct', mult: 1 },
-                                'peParticipatesExit': { id: 'input-pe-participates-exit', mult: 1 },
-                                'afEnabled': { id: 'input-af-enabled', mult: 1 },
-                                'afType': { id: 'select-af-type', mult: 1 },
-                                'afAnnualAmount': { id: 'input-af-annual-amount', mult: 1 },
-                                'afRevenuePct': { id: 'slide-af-revenue-pct', mult: 1 },
-                                'afExitPct': { id: 'slide-af-exit-pct', mult: 1 },
-                                'afWarrantPct': { id: 'slide-af-warrant-pct', mult: 1 },
-                                'afConvertibleAmount': { id: 'input-af-convertible-amount', mult: 1 },
-                                'afConvertibleRate': { id: 'slide-af-convertible-rate', mult: 1 },
-                                'afConvertiblePct': { id: 'slide-af-convertible-pct', mult: 1 },
-                                'afTaxDeductible': { id: 'input-af-tax-deductible', mult: 1 },
-                                'holdcoCapital': { id: 'input-holdco-capital', mult: 1 },
-                                'exitOption': { id: 'input-exit-option', mult: 1 },
-                                'exitMultiple': { id: 'input-exit-multiple', mult: 1 },
-                        'exitValuePerMwp': { id: 'input-exit-value-mwp', mult: 1 },
-                        'exitEnterpriseValue': { id: 'input-exit-ev', mult: 1 },
-                        'exitValuePerMwp': { id: 'input-exit-value-mwp', mult: 1 },
-                        'exitEnterpriseValue': { id: 'input-exit-ev', mult: 1 },
-                                'priceScenarioType': { id: 'select-price-scenario-type', mult: 1 },
-                                'collectionLagRid': { id: 'mc-lag-rid', mult: 1 },
-                                'collectionLagBrp': { id: 'mc-lag-brp', mult: 1 },
-                                'collectionLagCer': { id: 'mc-lag-cer', mult: 1 },
-                                'collectionLagFerx': { id: 'mc-lag-ferx', mult: 1 },
-                                'taxPaymentMonth': { id: 'mc-tax-pay-month', mult: 1 },
-                        'fundingEquityDate': { id: 'input-funding-equity-date', mult: 1 },
-                        'fundingSociDate': { id: 'input-funding-soci-date', mult: 1 },
-                        'fundingDebtDate': { id: 'input-funding-debt-date', mult: 1 },
-                        'vatEnabled': { id: 'input-vat-enabled', mult: 1 },
-                        'vatRevRid': { id: 'vat-rev-rid', mult: 1 },
-                        'vatRevPpa': { id: 'vat-rev-ppa', mult: 1 },
-                        'vatRevBrp': { id: 'vat-rev-brp', mult: 1 },
-                        'vatRevCer': { id: 'vat-rev-cer', mult: 1 },
-                        'vatRevFerx': { id: 'vat-rev-ferx', mult: 1 },
-                        'vatSettlement': { id: 'input-vat-settlement', mult: 1 },
-                        'vatCapexEpcFv': { id: 'vat-capex-epc-fv', mult: 1 },
-                        'vatCapexEpcBess': { id: 'vat-capex-epc-bess', mult: 1 },
-                        'vatCapexConnection': { id: 'vat-capex-connection', mult: 1 },
-                        'vatCapexDevelopment': { id: 'vat-capex-development', mult: 1 },
-                        'vatCapexSpv': { id: 'vat-capex-spv', mult: 1 },
-                        'vatCapexLand': { id: 'vat-capex-land', mult: 1 },
-                        'vatOpexOmFv': { id: 'vat-opex-om-fv', mult: 1 },
-                        'vatOpexOmBess': { id: 'vat-opex-om-bess', mult: 1 },
-                        'vatOpexInsurance': { id: 'vat-opex-insurance', mult: 1 },
-                        'vatOpexImu': { id: 'vat-opex-imu', mult: 1 },
-                        'vatOpexSecurity': { id: 'vat-opex-security', mult: 1 },
-                        'vatOpexAssetMgmt': { id: 'vat-opex-asset-mgmt', mult: 1 },
-                                'punZonalFloor': { id: 'input-pun-zonal-floor', mult: 1 },
-                                'punBearishDecayRate': { id: 'input-pun-bearish-decay-rate', mult: 100 },
-                                'tsBearishDecayRate': { id: 'input-ts-bearish-decay-rate', mult: 100 },
-                                'arbBearishDecayRate': { id: 'input-arb-bearish-decay-rate', mult: 100 },
-                                'dividendLock': { id: 'input-dividend-lock', mult: 1 },
-                                'bessOptimizer': { id: 'select-bess-optimizer', mult: 1 }
-                            };
+                        const domMap = DOM_INPUT_MAP;
                             
                             const mapping = domMap[key];
                             if (mapping) {
@@ -4139,13 +4591,13 @@
             resultsEl.classList.remove('hidden');
 
             const kpis = [
-                { key: 'irr', label: 'Equity IRR', fmt: v => v.toFixed(2) + '%', best: 'max' },
-                { key: 'npv', label: 'NPV @ Ke', fmt: v => formatEuro(v), best: 'max' },
-                { key: 'moic', label: 'MOIC', fmt: v => v.toFixed(2) + 'x', best: 'max' },
-                { key: 'minDscr', label: 'DSCR Minimo', fmt: v => v === null ? 'N/A' : v.toFixed(2) + 'x', best: 'max' },
-                { key: 'avgDscr', label: 'DSCR Medio', fmt: v => v.toFixed(2) + 'x', best: 'max' },
-                { key: 'lcoe', label: 'LCOE', fmt: v => '\u20ac ' + v.toFixed(2) + '/MWh', best: 'min' },
-                { key: 'payback', label: 'Payback', fmt: v => v, best: null }
+                { key: 'irr', label: 'Equity IRR', fmt: v => (v == null || isNaN(v)) ? 'N/A' : Number(v).toFixed(2) + '%', best: 'max' },
+                { key: 'npv', label: 'NPV @ Ke', fmt: v => (v == null || isNaN(v)) ? 'N/A' : formatEuro(v), best: 'max' },
+                { key: 'moic', label: 'MOIC', fmt: v => (v == null || isNaN(v)) ? 'N/A' : Number(v).toFixed(2) + 'x', best: 'max' },
+                { key: 'minDscr', label: 'DSCR Minimo', fmt: v => (v == null || isNaN(v)) ? 'N/A' : Number(v).toFixed(2) + 'x', best: 'max' },
+                { key: 'avgDscr', label: 'DSCR Medio', fmt: v => (v == null || isNaN(v)) ? 'N/A' : Number(v).toFixed(2) + 'x', best: 'max' },
+                { key: 'lcoe', label: 'LCOE', fmt: v => (v == null || isNaN(v)) ? 'N/A' : '\u20ac ' + Number(v).toFixed(2) + '/MWh', best: 'min' },
+                { key: 'payback', label: 'Payback', fmt: v => (v == null || isNaN(v)) ? 'N/A' : v, best: null }
             ];
 
             let html = '<table class="w-full text-xs text-left border border-slate-800 rounded-lg overflow-hidden"><thead><tr>';
@@ -4198,6 +4650,7 @@
                     capacity_kwp: plant.capacity,
                     zone: plant.zone,
                     cod_date: plant.codDate || null,
+                    prod_multiplier: (plant.prodMultiplier !== undefined && plant.prodMultiplier !== null) ? plant.prodMultiplier : 1.0,
                     capex_kwp: plant.capex,
                     opex_eur: plant.opex,
                     opex_om_bess: plant.opexOmBess || 0,
@@ -4444,6 +4897,7 @@
                 name: plantName,
                 capacity: plantCapacityKwp,
                 zone: plantZone,
+                prodMultiplier: parseFloat((document.getElementById('plant-prod-multiplier') || {}).value) || 1.0,
                 capex: capex,
                 opex: opex,
                 enabled: true, // default: included in simulation
@@ -4521,6 +4975,11 @@
 
         // GME XLSX Import (Fixed Italian formatting, date parsing, and DB upsert)
         window.importGmeXlsx = function(event) {
+            if (!isCurrentUserAdmin()) {
+                showToast('Importazione e modifica dei listini zonali riservata al ruolo admin.', 'warning');
+                if (event && event.target) event.target.value = '';
+                return;
+            }
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -4847,15 +5306,20 @@
 
         // Cache produzione annua e PUN ponderato per impianto (evita cicli 8760 ad ogni render)
         function getPlantAnnualMwh(p) {
-            if (p._cachedGenMwh === undefined) {
-                p._cachedGenMwh = p.generation ? (p.generation.reduce((a, b) => a + b, 0) / 1000) : 0;
+            const mult = (p.prodMultiplier !== undefined && p.prodMultiplier !== null) ? Number(p.prodMultiplier) : 1.0;
+            const multKey = `${mult}`;
+            if (p._cachedGenMwh === undefined || p._cachedGenMwhMult !== multKey) {
+                p._cachedGenMwh = p.generation ? ((p.generation.reduce((a, b) => a + b, 0) / 1000) * mult) : 0;
+                p._cachedGenMwhMult = multKey;
             }
             return p._cachedGenMwh;
         }
 
         function getPlantWeightedPun(p) {
             const punVer = State._punVersion || 0;
-            if (p._cachedWeightedPun === undefined || p._cachedWeightedPunVer !== punVer) {
+            const discount = (State.inputs && State.inputs.punDiscountPct !== undefined) ? Number(State.inputs.punDiscountPct) : 0;
+            const punVerKey = `${punVer}_${discount}`;
+            if (p._cachedWeightedPun === undefined || p._cachedWeightedPunVer !== punVerKey) {
                 let num = 0, den = 0;
                 const zonePrices = State.zonalPun[String(p.zone).toUpperCase()] || State.zonalPun["CNOR"];
                 if (p.generation) {
@@ -4864,8 +5328,9 @@
                         den += p.generation[t];
                     }
                 }
-                p._cachedWeightedPun = den > 0 ? (num / den) : 0;
-                p._cachedWeightedPunVer = punVer;
+                const rawWeighted = den > 0 ? (num / den) : 0;
+                p._cachedWeightedPun = rawWeighted * Math.max(0, 1 - (discount / 100));
+                p._cachedWeightedPunVer = punVerKey;
             }
             return p._cachedWeightedPun;
         }
@@ -4962,7 +5427,7 @@
                         <td>${formatEuro(spvCost)}</td>
                         <td>${formatEuro(p.opex)}</td>
                         <td><span class="px-2 py-0.5 rounded text-[10px] font-medium ${p.bessMwh > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-400'}">${bessDesc}</span></td>
-                        <td class="text-emerald-400 font-bold">€ ${weightedPun.toFixed(2)}</td>
+                        <td class="text-emerald-400 font-bold" title="€ ${weightedPun.toFixed(3)}/MWh">€ ${weightedPun.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 3 })}</td>
                         <td class="text-right" onclick="event.stopPropagation()">
                             <button onclick="window.deletePlant('${escapeJs(p.id)}')" class="text-red-400 hover:text-red-300 font-bold"><i class="fa-solid fa-trash-can"></i></button>
                         </td>
@@ -4970,6 +5435,71 @@
                 `;
             });
             body.innerHTML = html;
+        }
+
+        // Helper to format the allocation % badge with chromatic thresholds
+        function formatAllocBadge(alloc, budget) {
+            // No budget and no allocation: subtle dash
+            if ((!budget || budget <= 0) && (!alloc || alloc <= 0)) {
+                return `<span class="text-slate-600 select-none text-[10px]">—</span>`;
+            }
+            // Allocation without budget: over-budget warning
+            if ((!budget || budget <= 0) && alloc > 0) {
+                return `<span class="inline-block text-rose-400 font-bold bg-rose-500/15 border border-rose-500/30 px-1 py-0.5 rounded text-[10px] tracking-tight" title="Allocato senza budget: € ${formatEuro(alloc)}">>100%</span>`;
+            }
+            const pct = (alloc / budget) * 100;
+            const diff = alloc - budget;
+            // Over-budget (> 100.05%)
+            if (pct > 100.05) {
+                const pctStr = pct >= 999.5 ? '>999%' : (pct.toFixed(pct % 1 === 0 ? 0 : 1) + '%');
+                return `<span class="inline-block text-rose-400 font-bold bg-rose-500/15 border border-rose-500/30 px-1 py-0.5 rounded text-[10px] tracking-tight" title="SOVRA-ALLOCATO: € ${formatEuro(alloc)} su € ${formatEuro(budget)} (+${formatEuro(diff)})">${pctStr}</span>`;
+            }
+            // Fully allocated (100.0% ± 0.05%)
+            if (Math.abs(pct - 100) <= 0.05) {
+                return `<span class="inline-block text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.5 rounded text-[10px] tracking-tight" title="Allocato 100%: € ${formatEuro(alloc)} su € ${formatEuro(budget)}">100%</span>`;
+            }
+            // 0% allocated
+            if (alloc <= 0.001) {
+                return `<span class="text-slate-500 text-[10px] select-none" title="Non allocato: 0 € su € ${formatEuro(budget)} (Residuo al COD: € ${formatEuro(budget)})">0%</span>`;
+            }
+            // Partially allocated (< 100%)
+            const pctStr = pct.toFixed(pct % 1 === 0 ? 0 : 1) + '%';
+            return `<span class="inline-block text-amber-400 font-medium text-[10px] tracking-tight" title="Parzialmente allocato: € ${formatEuro(alloc)} su € ${formatEuro(budget)} (Residuo al COD: € ${formatEuro(budget - alloc)})">${pctStr}</span>`;
+        }
+
+        // Helper to retrieve allocated CAPEX from State.capexPayments for a plant and category
+        function getCapexAllocForPlant(rowKey, plant, customLabel) {
+            if (!plant || !State.capexPayments) return 0;
+            const payments = State.capexPayments[plant.id] || [];
+            let sum = 0;
+            payments.forEach(pm => {
+                const lbl = (pm.label || '').trim();
+                const amt = parseFloat(pm.amount) || 0;
+                if (amt <= 0) return;
+                
+                if (rowKey === 'epc') {
+                    if (lbl === 'EPC FV' || lbl.toLowerCase().includes('solare') || lbl.toLowerCase() === 'epc') sum += amt;
+                } else if (rowKey === 'connection') {
+                    if (lbl === 'Connessione rete' || lbl.toLowerCase().includes('connessione')) sum += amt;
+                } else if (rowKey === 'land_purchase') {
+                    if ((plant.landType === 'acquisto' || (plant.landType !== 'dds_attualizzato' && !plant.landType)) && (lbl === 'Terreno' || lbl.toLowerCase().includes('terreno'))) sum += amt;
+                } else if (rowKey === 'land_dds') {
+                    if (plant.landType === 'dds_attualizzato' && (lbl === 'Terreno' || lbl.toLowerCase().includes('terreno'))) sum += amt;
+                } else if (rowKey === 'development') {
+                    if (lbl === 'Compensazioni' || lbl === 'Sviluppo' || lbl.toLowerCase().includes('compensaz') || lbl.toLowerCase().includes('sviluppo')) sum += amt;
+                } else if (rowKey === 'spv') {
+                    if (lbl === 'Acquisto SPV' || lbl.toLowerCase().includes('spv')) sum += amt;
+                } else if (rowKey === 'bess') {
+                    if (lbl === 'EPC BESS' || lbl.toLowerCase().includes('bess') || lbl.toLowerCase().includes('bess') || lbl.toLowerCase().includes('accumulo')) sum += amt;
+                } else if (rowKey === 'custom_item') {
+                    if (lbl.toLowerCase() === (customLabel || '').toLowerCase()) sum += amt;
+                } else if (rowKey === 'custom_other') {
+                    if (lbl === 'Altro' || lbl.toLowerCase() === 'altro') sum += amt;
+                } else if (rowKey === 'custom') {
+                    if (lbl === 'Altro' || lbl.toLowerCase().includes('personalizzat') || lbl.toLowerCase() === 'altro') sum += amt;
+                }
+            });
+            return sum;
         }
 
         // Render Deal Value (Enterprise Value) Breakdown Table dynamically
@@ -4986,65 +5516,130 @@
             }
 
             // 1. Render Header
-            let headerHtml = `<th class="frozen-column px-4 py-3 border-r border-slate-800 text-left min-w-[200px] z-30 uppercase tracking-wider text-[10px] text-slate-400" style="background-color: inherit;">Voce di Costo</th>`;
+            let headerHtml = `<th class="frozen-column px-3 py-2.5 border-r border-slate-800 text-left min-w-[170px] z-30 uppercase tracking-wider text-[9px] text-slate-400" style="background-color: inherit;">Voce di Costo</th>`;
             activePlants.forEach(p => {
-                headerHtml += `<th class="px-3 py-3 text-right font-bold text-slate-200 border-b border-slate-800 min-w-[120px] bg-[#020617]">${escapeHtml(p.name)}</th>`;
+                headerHtml += `<th class="px-2 py-2 text-right font-bold text-slate-200 border-b border-slate-800 min-w-[95px] bg-[#020617] text-[10px]">${escapeHtml(p.name)}</th>`;
+                headerHtml += `<th class="px-1 py-2 text-center font-semibold text-slate-400 border-b border-r border-slate-800/60 min-w-[58px] max-w-[65px] bg-[#020617] text-[9px] tracking-tight" title="% Allocato su Budget per ${escapeHtml(p.name)}">% Alloc.</th>`;
             });
-            headerHtml += `<th class="px-3 py-3 text-right font-bold text-emerald-400 border-b border-slate-800 min-w-[130px] bg-[#020617]">Totale Portafoglio</th>`;
-            headerHtml += `<th class="px-3 py-3 text-right font-bold text-slate-400 border-b border-slate-800 min-w-[110px] bg-[#020617]">% Ammortamento</th>`;
-            headerHtml += `<th class="px-3 py-3 text-right font-bold text-slate-400 border-b border-slate-800 min-w-[140px] bg-[#020617]">Ammortamento Annuo</th>`;
+            headerHtml += `<th class="px-2 py-2 text-right font-bold text-emerald-400 border-b border-slate-800 min-w-[105px] bg-[#020617] text-[10px]">Totale Portafoglio</th>`;
+            headerHtml += `<th class="px-1 py-2 text-center font-semibold text-emerald-400/80 border-b border-r border-slate-800 min-w-[58px] max-w-[65px] bg-[#020617] text-[9px] tracking-tight" title="% Allocato totale su Budget Portafoglio">% Alloc.</th>`;
+            headerHtml += `<th class="px-2 py-2 text-right font-bold text-slate-400 border-b border-slate-800 min-w-[75px] bg-[#020617] text-[9px]">% Amm.</th>`;
+            headerHtml += `<th class="px-2 py-2 text-right font-bold text-slate-400 border-b border-slate-800 min-w-[95px] bg-[#020617] text-[9px]">Amm. Annuo</th>`;
             headerEl.innerHTML = headerHtml;
 
-            // 2. Prepare Row Data
+            // 2. Prepare Row Data: Standard CAPEX + Custom CAPEX items
             const rows = [
                 { key: 'epc', label: 'CAPEX EPC (Solare)', depreciable: true },
                 { key: 'connection', label: 'Costo Connessione', depreciable: true },
                 { key: 'land_purchase', label: 'Costo Terreno (Acquisto)', depreciable: false },
                 { key: 'land_dds', label: 'Costo Terreno (DDS Attualizzato)', depreciable: true },
-                { key: 'development', label: 'Costo Sviluppo', depreciable: true },
+                { key: 'development', label: 'Costo Compensazioni', depreciable: true },
                 { key: 'spv', label: 'Costo Acquisizione SPV', depreciable: false },
-                { key: 'bess', label: 'CAPEX BESS (Accumulo)', depreciable: true },
-                { key: 'total', label: 'VALORE DEAL (Enterprise Value)', isTotal: true }
+                { key: 'bess', label: 'CAPEX BESS (Accumulo)', depreciable: true }
             ];
+
+            // Rileva tutte le voci personalizzate CAPEX distinte negli impianti attivi
+            const customCapexLabels = [];
+            activePlants.forEach(p => {
+                (p.customCosts || []).filter(c => c.cost_type === 'capex').forEach(c => {
+                    const lbl = (c.label || '').trim();
+                    if (lbl && !customCapexLabels.includes(lbl)) customCapexLabels.push(lbl);
+                });
+            });
+            // Rileva anche eventuali pagamenti con etichette personalizzate
+            activePlants.forEach(p => {
+                (((State.capexPayments || {})[p.id]) || []).forEach(pm => {
+                    const lbl = (pm.label || '').trim();
+                    const stdLabels = ['EPC FV', 'EPC BESS', 'Connessione rete', 'Compensazioni', 'Sviluppo', 'Acquisto SPV', 'Terreno', 'Altro'];
+                    if (lbl && !stdLabels.includes(lbl) && !customCapexLabels.includes(lbl)) {
+                        customCapexLabels.push(lbl);
+                    }
+                });
+            });
+
+            if (customCapexLabels.length > 0) {
+                customCapexLabels.forEach(lbl => {
+                    rows.push({
+                        key: 'custom_' + lbl,
+                        label: `${lbl} (Custom CAPEX)`,
+                        isCustom: true,
+                        customLabel: lbl,
+                        depreciable: true
+                    });
+                });
+                const hasGenericOther = activePlants.some(p => {
+                    return (((State.capexPayments || {})[p.id]) || []).some(pm => (pm.label || '').trim() === 'Altro');
+                });
+                if (hasGenericOther) {
+                    rows.push({ key: 'custom_other', label: 'Altre Voci CAPEX', isCustomOther: true, depreciable: true });
+                }
+            } else {
+                // Se nessuna voce personalizzata è definita, mostra comunque la riga di categoria per completezza (0 € e —)
+                rows.push({ key: 'custom', label: 'Voci Personalizzate (Custom CAPEX)', depreciable: true });
+            }
+
+            rows.push({ key: 'total', label: 'VALORE DEAL (Enterprise Value)', isTotal: true });
 
             // 3. Compute and Inject values
             let html = '';
             rows.forEach(row => {
                 let rowHtml = '';
                 let rowTotal = 0;
+                let rowAllocTotal = 0;
                 
                 const isTotal = row.isTotal;
                 const trClass = isTotal 
                     ? 'font-extrabold bg-[#0c1a2e] text-slate-100 border-t border-slate-700'
                     : 'bg-[#020617] group hover:bg-[#15223e]';
                 const tdClass = isTotal
-                    ? 'px-3 py-2.5 text-right font-black text-emerald-400'
-                    : 'px-3 py-2 text-right border-b border-slate-800/40 text-slate-350';
+                    ? 'px-2 py-2 text-right font-black text-emerald-400 text-xs'
+                    : 'px-2 py-1.5 text-right border-b border-slate-800/40 text-slate-350 text-xs';
+                const pctTdClass = isTotal
+                    ? 'px-1 py-2 text-center font-bold text-xs border-r border-slate-800/60'
+                    : 'px-1 py-1.5 text-center border-b border-r border-slate-800/40 text-xs';
                 const labelClass = isTotal
-                    ? 'frozen-column px-4 py-2.5 text-left font-black text-emerald-400 z-10'
-                    : 'frozen-column px-4 py-2 text-left border-r border-slate-800 font-medium z-10 text-slate-400 border-b border-slate-800/40';
+                    ? 'frozen-column px-3 py-2 text-left font-black text-emerald-400 z-10 text-xs'
+                    : 'frozen-column px-3 py-1.5 text-left border-r border-slate-800 font-medium z-10 text-slate-400 border-b border-slate-800/40 text-xs';
 
                 rowHtml += `<tr class="${trClass}">`;
                 rowHtml += `<td class="${labelClass}" style="background-color: inherit;">${row.label}</td>`;
 
                 activePlants.forEach(p => {
                     let val = 0;
+                    let alloc = 0;
                     if (row.key === 'epc') {
                         val = (p.capacity || 0) * (p.capex || 0);
+                        alloc = getCapexAllocForPlant('epc', p);
                     } else if (row.key === 'connection') {
                         val = p.connectionCost || 0;
+                        alloc = getCapexAllocForPlant('connection', p);
                     } else if (row.key === 'land_purchase') {
                         val = (p.landType === 'acquisto') ? (p.landCost || 0) : 0;
+                        alloc = getCapexAllocForPlant('land_purchase', p);
                     } else if (row.key === 'land_dds') {
                         val = (p.landType === 'dds_attualizzato') ? (p.landCost || 0) : 0;
+                        alloc = getCapexAllocForPlant('land_dds', p);
                     } else if (row.key === 'development') {
                         val = p.developmentCost || 0;
+                        alloc = getCapexAllocForPlant('development', p);
                     } else if (row.key === 'spv') {
                         val = p.spvAcquisitionCost || 0;
+                        alloc = getCapexAllocForPlant('spv', p);
                     } else if (row.key === 'bess') {
                         const plantBessMwh = p.bessMwh !== undefined ? p.bessMwh : 0;
                         const plantBessCapexKwh = p.bessCapexKwh !== undefined ? p.bessCapexKwh : 300;
                         val = plantBessMwh * 1000 * plantBessCapexKwh;
+                        alloc = getCapexAllocForPlant('bess', p);
+                    } else if (row.isCustom) {
+                        const cItem = (p.customCosts || []).find(c => c.cost_type === 'capex' && (c.label || '').trim() === row.customLabel);
+                        val = cItem ? customCostEur(cItem, p) : 0;
+                        alloc = getCapexAllocForPlant('custom_item', p, row.customLabel);
+                    } else if (row.isCustomOther) {
+                        val = 0;
+                        alloc = getCapexAllocForPlant('custom_other', p);
+                    } else if (row.key === 'custom') {
+                        val = Math.max(0, p.customCapexEur || 0);
+                        alloc = getCapexAllocForPlant('custom', p);
                     } else if (row.isTotal) {
                         const epcVal = (p.capacity || 0) * (p.capex || 0);
                         const connVal = p.connectionCost || 0;
@@ -5055,13 +5650,18 @@
                         const plantBessMwh = p.bessMwh !== undefined ? p.bessMwh : 0;
                         const plantBessCapexKwh = p.bessCapexKwh !== undefined ? p.bessCapexKwh : 300;
                         const bessVal = plantBessMwh * 1000 * plantBessCapexKwh;
-                        val = epcVal + connVal + landPurchaseVal + landDdsVal + devVal + spvVal + bessVal;
+                        const customVal = Math.max(0, p.customCapexEur || 0);
+                        val = epcVal + connVal + landPurchaseVal + landDdsVal + devVal + spvVal + bessVal + customVal;
+                        alloc = (((State.capexPayments || {})[p.id]) || []).reduce((s, pm) => s + (parseFloat(pm.amount) || 0), 0);
                     }
                     rowTotal += val;
+                    rowAllocTotal += alloc;
                     rowHtml += `<td class="${tdClass}">${formatEuro(val)}</td>`;
+                    rowHtml += `<td class="${pctTdClass} cursor-help">${formatAllocBadge(alloc, val)}</td>`;
                 });
 
-                rowHtml += `<td class="${tdClass} ${isTotal ? 'text-emerald-300 font-bold bg-[#0d2238]' : 'text-emerald-400 font-semibold'}" >${formatEuro(rowTotal)}</td>`;
+                rowHtml += `<td class="${tdClass} ${isTotal ? 'text-emerald-300 font-bold bg-[#0d2238]' : 'text-emerald-400 font-semibold'}">${formatEuro(rowTotal)}</td>`;
+                rowHtml += `<td class="${pctTdClass} ${isTotal ? 'bg-[#0d2238]' : ''} cursor-help border-r border-slate-800">${formatAllocBadge(rowAllocTotal, rowTotal)}</td>`;
                 
                 // Add rate and annual depreciation columns
                 let depRateHtml = '';
@@ -5083,6 +5683,11 @@
                                     const plantBessMwh = p.bessMwh !== undefined ? p.bessMwh : 0;
                                     const plantBessCapexKwh = p.bessCapexKwh !== undefined ? p.bessCapexKwh : 300;
                                     rVal = plantBessMwh * 1000 * plantBessCapexKwh;
+                                } else if (r.isCustom) {
+                                    const cItem = (p.customCosts || []).find(c => c.cost_type === 'capex' && (c.label || '').trim() === r.customLabel);
+                                    rVal = cItem ? customCostEur(cItem, p) : 0;
+                                } else if (r.key === 'custom') {
+                                    rVal = Math.max(0, p.customCapexEur || 0);
                                 }
                                 totalDep += (rVal * globalRate);
                             });
@@ -5117,6 +5722,7 @@
             saveConfigDebounced();
 
             renderPlantsList();
+            if (typeof syncConstructionMonthsAuto === 'function') syncConstructionMonthsAuto(false);
             // CF: i menu a tendina CAPEX/OPEX devono mostrare solo gli impianti attivi
             renderCapexPaymentOptions();
             renderOpexEventOptions();
@@ -5218,8 +5824,12 @@
             });
             const months = Array.from({ length: 12 }, newAcc);
 
+            const punDiscountPct = (State.inputs && State.inputs.punDiscountPct !== undefined) ? Number(State.inputs.punDiscountPct) : 0;
+            const punDiscountMult = Math.max(0, 1 - (punDiscountPct / 100));
+
             activePlants.forEach(p => {
-                const zonePrices = State.zonalPun[String(p.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                const baseZonePrices = State.zonalPun[String(p.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                const zonePrices = (punDiscountMult !== 1) ? baseZonePrices.map(v => v * punDiscountMult) : baseZonePrices;
                 const lossInject = resolveGridLosses(p.gridVoltage, 'inject');
                 const lossWithdraw = resolveGridLosses(p.gridVoltage, 'withdraw');
                 const lossMult = 1 + (lossInject / 100);
@@ -5496,10 +6106,8 @@
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
 
-            if (State.gmeChartInstance) {
-                State.gmeChartInstance.destroy();
-                State.gmeChartInstance = null;
-            }
+            safeDestroyChart(canvas, State.gmeChartInstance);
+            State.gmeChartInstance = null;
 
             const monthsShort = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
             const dataMedioneFv = [];
@@ -5641,9 +6249,16 @@
             setTxt('val-loan-term', p.loanTerm + ' Anni');
             setTxt('val-senior-grace-period', p.seniorGracePeriodMonths + " Mesi");
             setTxt('val-construction-months', p.constructionMonths + " Mesi");
+            if (typeof updateCalculatedConstructionInfo === 'function') updateCalculatedConstructionInfo();
             setTxt('val-idc-drawdown', p.idcDrawdownFactor + " %");
-            setTxt('val-fiscal-depreciation', (p.fiscalDeprRate * 100).toFixed(1) + ' %');
-            setTxt('val-soci-equity-pct', p.sociEquityPct + " % dell'Equity");
+            setTxt('val-soci-equity-pct', (p.sociEquityPct !== undefined ? p.sociEquityPct : 100) + " % dell'Equity");
+            setTxt('val-soci-pct-epc', (p.sociPctEpc !== undefined ? p.sociPctEpc : 100) + ' %');
+            setTxt('val-soci-pct-bess', (p.sociPctBess !== undefined ? p.sociPctBess : 100) + ' %');
+            setTxt('val-soci-pct-connection', (p.sociPctConnection !== undefined ? p.sociPctConnection : 100) + ' %');
+            setTxt('val-soci-pct-land', (p.sociPctLand !== undefined ? p.sociPctLand : 100) + ' %');
+            setTxt('val-soci-pct-development', (p.sociPctDevelopment !== undefined ? p.sociPctDevelopment : 100) + ' %');
+            setTxt('val-soci-pct-spv', (p.sociPctSpv !== undefined ? p.sociPctSpv : 100) + ' %');
+            setTxt('val-soci-pct-custom', (p.sociPctCustom !== undefined ? p.sociPctCustom : 100) + ' %');
             setTxt('val-soci-interest-rate', p.sociInterestRate.toFixed(2) + " %");
             window.updateExternalFinancingLabels(p);
             setTxt('kpi-total-cost',  '\u20ac 0');
@@ -5656,6 +6271,7 @@
             setTxt('kpi-npv',     '\u20ac 0');
             setTxt('kpi-moic',    '0.00x');
             setTxt('kpi-payback', 'N/A');
+            setTxt('kpi-payback-unlevered', 'N/A');
             setTxt('kpi-lcoe',    '€ 0.00 /MWh');
             setTxt('kpi-lcos',    '€ 0.00 /MWh');
             setTxt('kpi-dscr',    'N/A');
@@ -5684,7 +6300,7 @@
                 'opexPlants','opexBess','opexGridCharging','opexLandDds',
                 'opexInsurance','opexTaxes','opexSecurity','opexAssetManagement','opexServiceContract',
                 'ebitda','depreciationCivil','depreciationCivilSolar','depreciationCivilBess','depreciationCivilOther','ebit','interestActive','interest',
-                'sociInterestAccrued','ebt','currentTaxesSpv','deferredTaxes','netProfitSpv','cfads',
+                'sociInterestAccrued','ebt','currentTaxesSpv','iresTaxSpv','irapTaxSpv','taxTaxableIres','taxDeprDelta','taxInterestDelta','taxLossApplied','taxTaxableFinal','taxLossCF','interestCF','rolCF','taxableIrap','deferredTaxes','netProfitSpv','cfads',
                 'afInterestAccrued','peRoyalty','afFee',
                 'pdInterestPaid','pdPrincipalPaid','peDividendPaid',
                 'opexMaintReserve','interestPaid','principalScheduled','principalVoluntary',
@@ -5692,6 +6308,10 @@
                 'holdcoInterestReceived','holdcoLoanRepaymentReceived','spvLockedDividends','holdcoDividendReceived',
                 'dividendsPaid',
                 'holdcoInflowTotal','holdcoOpex','holdcoEarnoutPaid','holdcoIresTaxPaid','holdcoIrapTaxPaid','holdcoNetProfit',
+                'ce_holdcoProductionValue','ce_holdcoAssetManagementReceived','ce_holdcoProductionCosts','ce_holdcoOpex','ce_holdcoEarnoutPaid',
+                'ce_holdcoEbitda','ce_holdcoDepreciation','ce_holdcoDeprDetail','ce_holdcoOperatingEbit',
+                'ce_holdcoDividendReceived','ce_holdcoInterestReceived','ce_pdInterestPaid','ce_holdcoFinancialNet','ce_holdcoEbt',
+                'ce_holdcoTaxTotal','ce_holdcoIresTaxPaid','ce_holdcoIrapTaxPaid','ce_holdcoNetProfit',
                 'exitValuationGroup', 'exitEnterpriseValue', 'exitDebtPayoff', 'exitPexTaxRow',
                 'pdBulletPayoff','peExitShare','afExitCost',
                 'exitLimitedLiability',
@@ -5701,21 +6321,21 @@
                 'beginningBalanceSoci','interestAccruedSoci','interestPaidSoci',
                 'principalPaidSoci','endingBalanceSoci',
                 'beginningBalancePd','interestAccruedPd','interestPaidPd','principalPaidPd','endingBalancePd','dsraBalance'];
-            for (let yr = 1; yr <= 20; yr++) {
+            for (let yr = 0; yr <= 20; yr++) {
                 pnlKeys.forEach(k => { const el = document.getElementById(`cell-pnl-${k}-y${yr}`); if (el) el.textContent = '\u2014'; });
                 debtKeys.forEach(k => { const el = document.getElementById(`cell-debt-${k}-y${yr}`); if (el) el.textContent = '\u2014'; });
             }
 
             // Render empty chart
             const emptyMatrix = { 
-                years: Array.from({length:20},(_,i)=>i+1), 
-                holdcoFCFE: new Array(20).fill(0),
-                revenuePpa: new Array(20).fill(0),
-                revenueRid: new Array(20).fill(0),
-                revenueArbitrage: new Array(20).fill(0),
-                revenueTimeshifting: new Array(20).fill(0)
+                years: Array.from({length:21},(_,i)=>i), 
+                holdcoFCFE: new Array(21).fill(0),
+                revenuePpa: new Array(21).fill(0),
+                revenueRid: new Array(21).fill(0),
+                revenueArbitrage: new Array(21).fill(0),
+                revenueTimeshifting: new Array(21).fill(0)
             };
-            const emptyDebt   = { dscr: new Array(20).fill(-1) };
+            const emptyDebt   = { dscr: new Array(21).fill(-1) };
             renderChart(emptyMatrix, emptyDebt);
 
             if (typeof renderHourlyProfileChart === 'function') renderHourlyProfileChart();
@@ -5813,7 +6433,16 @@
                 { key: 'ebt', label: 'EBT - Utile ante Imposte SPV (€)', type: 'bold' },
                 { key: 'currentTaxesSpv', label: '  (-) Imposte Correnti SPV (IRES 24% + IRAP 3.9%) (€)', type: 'minus' },
                 { key: 'iresTaxSpv', label: 'di cui: IRES (24% su EBT +/- Variazioni Fiscali) (€)', type: 'detail', parent: 'currentTaxesSpv' },
+                { key: 'taxTaxableIres', label: 'di cui: Imponibile IRES Lordo da EBT (€)', type: 'detail', parent: 'iresTaxSpv' },
+                { key: 'taxDeprDelta', label: 'di cui: (+/-) Variazione Ammortamenti (Art. 102 TUIR: 50% 1° anno) (€)', type: 'detail', parent: 'iresTaxSpv' },
+                { key: 'taxInterestDelta', label: 'di cui: (+/-) Variazione Interessi e ROL 30% (Art. 96 TUIR) (€)', type: 'detail', parent: 'iresTaxSpv' },
+                { key: 'taxLossApplied', label: 'di cui: (-) Deduzione Perdite Fiscali Pregresse (Art. 84 TUIR) (€)', type: 'detail', parent: 'iresTaxSpv' },
+                { key: 'taxTaxableFinal', label: 'di cui: (=) Imponibile IRES Netto Tassabile (€)', type: 'bold', parent: 'iresTaxSpv' },
+                { key: 'taxLossCF', label: '  (Memo Fiscale) Perdite Fiscali Pregresse Riportabili a Nuovo (€)', type: 'detail-sub', parent: 'iresTaxSpv' },
+                { key: 'interestCF', label: '  (Memo Fiscale) Interessi Indeducibili Riportabili a Nuovo (€)', type: 'detail-sub', parent: 'iresTaxSpv' },
+                { key: 'rolCF', label: '  (Memo Fiscale) Eccedenza ROL 30% Riportabile a Nuovo (€)', type: 'detail-sub', parent: 'iresTaxSpv' },
                 { key: 'irapTaxSpv', label: 'di cui: IRAP (3.9% su EBIT + Costi Indeducibili) (€)', type: 'detail', parent: 'currentTaxesSpv' },
+                { key: 'taxableIrap', label: 'di cui: Imponibile IRAP (EBIT + Riprese Indeducibilità) (€)', type: 'detail', parent: 'irapTaxSpv' },
                 { key: 'deferredTaxes', label: '  (-/+) Variazione Imposte Differite (-> Sez. B) (€)', type: 'normal' },
                 { key: 'netProfitSpv', label: 'UTILE NETTO CIVILISTICO SPV (-> Sez. B) (€)', type: 'bold' }
             ];
@@ -5821,7 +6450,7 @@
             const pnlRowsB = [
                 { key: 'rf_netProfitSpv', label: '-> Utile Netto Civilistico SPV (da Sez. A) (€)', type: 'detail' },
                 { key: 'rf_depreciationCivil', label: '  (+) Ripresa Ammortamento Civilistico (Non-Cash) (€)', type: 'plus' },
-                { key: 'rf_deferredTaxes', label: '  (+/Scale) Ripresa Imposte Differite (da Sez. A) (€)', type: 'normal' },
+                { key: 'rf_deferredTaxes', label: '  (-/+) Ripresa Imposte Differite (da Sez. A) (€)', type: 'normal' },
                 { key: 'rf_interest', label: '  (+) Ripresa Interessi Mutuo Bancario Senior (Accrual) (€)', type: 'plus' },
                 { key: 'rf_sociInterestAccrued', label: '  (+) Ripresa Interessi Finanziamento Soci (Accrual) (€)', type: 'plus' },
                 ...(p.afEnabled && p.afType === 'convertible_note' ? [{ key: 'rf_afInterestAccrued', label: '  (+) Ripresa Interessi Convertibile (Altra Forma) (€)', type: 'plus' }] : []),
@@ -5851,19 +6480,59 @@
 
                 // ── CASCATA DI DISTRIBUZIONE SPV -> HOLDCO ───────────────────────────────
                 { section: 'CASCATA DISTRIBUZIONE SPV -> HOLDCO (Waterfall)', type: 'section-title' },
-                ...(p.peEnabled && p.peMode !== 'royalty_fee' ? [{ key: 'peDividendPaid', label: '  (-) Quota Dividendi/Preferred Private Equity a Partner Esterno (€)', type: 'minus' }] : []),
+                { key: 'spvLegalReserveAccrual', label: '  (Nota civilistica) Accantonamento Riserva Legale SPV (5% ex Art. 2430 c.c.) (€)', type: 'detail' },
+                { key: 'spvRetainedEarnings', label: '  (Capienza) Capacità Distributiva Utili SPV Cumulata (€)', type: 'detail' },
                 { key: 'holdcoInterestReceived', label: '  (-) Interessi Soci Pagati da SPV a HoldCo (-> Sez. C) (€)', type: 'minus' },
-                { key: 'holdcoLoanRepaymentReceived', label: '  (-) Rimborso Capitale Finanziamento Soci a HoldCo (-> Sez. C) (€)', type: 'minus' },
-                { key: 'spvLockedDividends', label: '  (+) Cassa SPV Vincolata Accumulata da Anni Precedenti (€)', type: 'detail' },
-                { key: 'holdcoDividendReceived', label: '  (-) Dividendi SPV Distribuiti a HoldCo (-> Sez. C) (€)', type: 'minus' },
-                { key: 'spvCashTrap', label: '(=) Cassa Rimanente non distribuita in SPV (Cash Trap) (€)', type: 'bold' }
+                ...(p.peEnabled && p.peMode !== 'royalty_fee' ? [{ key: 'peDividendPaid', label: '  (-) Quota Dividendi/Preferred Private Equity a Partner Esterno (€)', type: 'minus' }] : []),
+                { key: 'holdcoLoanRepaymentReceived', label: '  (-) Rimborso Capitale Finanziamento Soci a HoldCo (-> Sez. D) (€)', type: 'minus' },
+                { key: 'holdcoDividendReceived', label: '  (-) Dividendi SPV Distribuiti a HoldCo (da Utili Art. 2433 c.c.) (-> Sez. C) (€)', type: 'minus' },
+                { key: 'spvCapitalReserveReturned', label: '  (-) Restituzione Riserve di Capitale / Esuberanza a HoldCo (Art. 2482 c.c.) (-> Sez. D) (€)', type: 'minus' },
+                { key: 'spvCashTrap', label: '(=) Flusso Netto SPV non distribuito nell\'Esercizio (Cash Trap Annuo) (€)', type: 'bold' },
+                { key: 'spvLockedDividends', label: '  (+) Cassa SPV Vincolata a Inizio Esercizio (da Anni Precedenti) (€)', type: 'plus' },
+                { key: 'spvCashTrapCumulative', label: '(=) SALDO TOTALE CASSA VINCOLATA IN SPV (CASH TRAP CUMULATO A FINE ANNO) (€)', type: 'bold-teal' }
             ];
 
+            // ── SEZIONE C: CONTO ECONOMICO CIVILISTICO HOLDING (HOLDCO LEVEL) ──
             const pnlRowsC = [
+                { key: 'ce_holdcoProductionValue', label: 'RICAVI TOTALI HOLDING (€)', type: 'group-header' },
+                { key: 'ce_holdcoAssetManagementReceived', label: 'di cui: Ricavi per Servizi: Gestione Amministrativa & Asset Management a SPV (€)', type: 'detail', parent: 'ce_holdcoProductionValue' },
+
+                { key: 'ce_holdcoProductionCosts', label: '(-) COSTI OPERATIVI (OPEX) TOTALE HOLDING (€)', type: 'group-header' },
+                { key: 'ce_holdcoOpex', label: 'di cui: Spese Generali e Costi di Funzionamento Holding (OPEX) (€)', type: 'detail', parent: 'ce_holdcoProductionCosts' },
+                { key: 'ce_holdcoEarnoutPaid', label: 'di cui: Oneri Diversi di Gestione: Quota Earn-Out Holding (€)', type: 'detail', parent: 'ce_holdcoProductionCosts' },
+
+                { key: 'ce_holdcoEbitda', label: 'EBITDA HOLDING (€)', type: 'bold' },
+
+                { key: 'ce_holdcoDepreciation', label: '(-) Ammortamento Civilistico (€)', type: 'group-header' },
+                { key: 'ce_holdcoDeprDetail', label: 'di cui: Ammortamenti Beni Materiali e Immateriali Holding (€)', type: 'detail', parent: 'ce_holdcoDepreciation' },
+
+                { key: 'ce_holdcoOperatingEbit', label: 'EBIT HOLDING (Risultato Operativo) (€)', type: 'bold' },
+
+                { key: 'ce_holdcoDividendReceived', label: '  (+) Proventi da Partecipazioni: Dividendi SPV da Utili (Art. 2433 c.c.) (€)', type: 'plus' },
+                { key: 'ce_holdcoInterestReceived', label: '  (+) Altri Proventi Finanziari: Interessi Attivi Finanziamento Soci SPV (€)', type: 'plus' },
+                ...(p.pdEnabled ? [
+                    { key: 'ce_pdInterestPaid', label: '  (-) Oneri Finanziari: Interessi Passivi Private Debt Holding (€)', type: 'minus' }
+                ] : []),
+                { key: 'ce_holdcoFinancialNet', label: '(=) TOTALE PROVENTI E ONERI FINANZIARI (C) (€)', type: 'bold' },
+
+                { key: 'ce_holdcoEbt', label: 'EBT - Utile ante Imposte HOLDING (€)', type: 'bold' },
+
+                { key: 'ce_holdcoTaxTotal', label: '  (-) Imposte Correnti Holding (IRES 24% + IRAP 3.9%) (€)', type: 'minus' },
+                { key: 'ce_holdcoIresTaxPaid', label: 'di cui: Imposta IRES HoldCo (24% su dividendi imponibili PEX 5% e interessi netti) (€)', type: 'detail', parent: 'ce_holdcoTaxTotal' },
+                { key: 'ce_holdcoIrapTaxPaid', label: 'di cui: Imposta IRAP HoldCo (3,9% su Valore Produzione Netta) (€)', type: 'detail', parent: 'ce_holdcoTaxTotal' },
+
+                { key: 'ce_holdcoNetProfit', label: 'UTILE NETTO CIVILISTICO HOLDING (-> Sez. D) (€)', type: 'bold' }
+            ];
+
+            // ── SEZIONE D: RENDICONTO FINANZIARIO HOLDING (HOLDCO LEVEL) — STRUTTURA E ORDINE ORIGINALE COMPLETO ──
+            const hasCapitalReserve = (p && p.distributionPolicy === 'civil_with_capital_reserve_return') ||
+                (window.State && window.State.results && window.State.results.matrix && window.State.results.matrix.holdcoCapitalReserveReceived && window.State.results.matrix.holdcoCapitalReserveReceived.some(v => Math.abs(v) > 0.01));
+            const pnlRowsD = [
                 { key: 'holdcoInflowTotal', label: '-> Flusso Cassa Risalito Totale da SPV (da Sez. B) (€)', type: 'group-header' },
                 { key: 'hc_holdcoInterestReceived', label: '  di cui: Interessi Finanziamento Soci ricevuti (€)', type: 'detail', parent: 'holdcoInflowTotal' },
                 { key: 'hc_holdcoLoanRepaymentReceived', label: '  di cui: Rimborso Capitale Finanziamento Soci ricevuto (€)', type: 'detail', parent: 'holdcoInflowTotal' },
                 { key: 'hc_holdcoDividendReceived', label: '  di cui: Dividendi SPV ricevuti (quota Sponsor) (€)', type: 'detail', parent: 'holdcoInflowTotal' },
+                ...(hasCapitalReserve ? [{ key: 'hc_holdcoCapitalReserveReceived', label: '  di cui: Restituzione Riserve di Capitale SPV (Art. 2482 c.c.) (€)', type: 'detail', parent: 'holdcoInflowTotal' }] : []),
                 { key: 'hc_holdcoAssetManagementReceived', label: '  di cui: Ricavi Gestione Amministrativa & Asset Mgt ricevuti da SPV (€)', type: 'detail', parent: 'holdcoInflowTotal' },
                 { key: 'holdcoOpex', label: '  (-) Spese Funzionamento Holding (€)', type: 'minus' },
                 { key: 'holdcoEarnoutPaid', label: '  (-) Earn-Out Holding (€)', type: 'minus' },
@@ -5871,6 +6540,8 @@
                 { key: 'holdcoIrapTaxPaid', label: '  (-) Imposta IRAP HoldCo (3,9% su Valore Produzione Netta) (€)', type: 'bold-rose' },
                 { key: 'holdcoNetProfit', label: 'UTILE NETTO HOLDING CIVILISTICO (€)', type: 'bold' },
                 { key: 'hc_reconcileLoanRepayment', label: '  (+) Rimborso Capitale Finanziamento Soci (Cassa Patrimoniale) (€)', type: 'plus' },
+                ...(hasCapitalReserve ? [{ key: 'hc_reconcileCapitalReserve', label: '  (+) Restituzione Riserve di Capitale SPV (Cassa Patrimoniale) (€)', type: 'plus' }] : []),
+                { key: 'holdcoOperatingCashflow', label: '(=) CASSA GENERATA DALLA GESTIONE ORDINARIA HOLDING (€)', type: 'bold' },
                 ...(p.pdEnabled ? [
                     { section: 'SERVIZIO PRIVATE DEBT (HOLDING LEVEL)', type: 'section-title' },
                     { key: 'pdInterestPaid', label: '  (-) Interessi Private Debt Pagati dalla Holding (€)', type: 'minus' },
@@ -5894,9 +6565,10 @@
             const renderTableHeader = (headerId) => {
                 const header = document.getElementById(headerId);
                 if (!header) return;
-                let headerHtml = `<th class="frozen-column px-4 py-4 border-r border-slate-800 text-left min-w-[340px] z-30 uppercase tracking-wider text-[10px] text-slate-400 bg-[#020617]">Voce di Bilancio</th>`;
-                for (let yr = 1; yr <= yearsLimit; yr++) {
-                    headerHtml += `<th class="px-3 py-4 text-right font-bold text-slate-200 border-b border-slate-800 min-w-[110px] bg-[#020617] sticky top-0 z-20">Anno ${yr}</th>`;
+                let headerHtml = `<th class="frozen-column px-4 py-4 border-r border-slate-800 text-left w-[500px] min-w-[500px] max-w-[500px] z-30 uppercase tracking-wider text-[10px] text-slate-400 bg-[#020617] select-none">Voce di Bilancio</th>`;
+                for (let yr = 0; yr <= yearsLimit; yr++) {
+                    const yearLabel = yr === 0 ? 'Anno 0' : `Anno ${yr}`;
+                    headerHtml += `<th class="px-3 py-4 text-right font-bold text-slate-200 border-b border-slate-800 w-[120px] min-w-[120px] max-w-[120px] bg-[#020617] sticky top-0 z-20 select-none" title="${yr === 0 ? 'Anno 0 (Pre-COD / Cantiere)' : `Anno ${yr}`}">${yearLabel}</th>`;
                 }
                 header.innerHTML = headerHtml;
             };
@@ -5904,6 +6576,7 @@
             renderTableHeader('pl-header-a');
             renderTableHeader('pl-header-b');
             renderTableHeader('pl-header-c');
+            renderTableHeader('pl-header-d');
 
             const renderTableBody = (tbodyId, rows) => {
                 const tbody = document.getElementById(tbodyId);
@@ -5917,13 +6590,13 @@
                         else if (row.type === 'title-blue') sectionClass = 'bg-[#111c30] text-sky-300 font-bold uppercase text-[9px] tracking-wider border-b border-sky-800/50';
                         html += `
                             <tr class="${sectionClass}">
-                                <td class="frozen-column px-4 py-2 border-r border-slate-800 z-10" style="background-color: inherit;">${row.section}</td>
-                                <td colspan="${yearsLimit}" class="px-3 py-2"></td>
+                                <td class="frozen-column px-4 py-2 border-r border-slate-800 z-10 w-[500px] min-w-[500px] max-w-[500px] select-none" style="background-color: inherit;">${row.section}</td>
+                                <td colspan="${yearsLimit + 1}" class="px-3 py-2"></td>
                             </tr>
                         `;
                     } else {
                         let trClass = 'group hover:bg-[#15223e]';
-                        let tdClass = 'px-3 py-2 text-right border-b border-slate-800/40';
+                        let tdClass = 'px-3 py-2 text-right border-b border-slate-800/40 w-[120px] min-w-[120px] max-w-[120px]';
                         let textClass = 'text-slate-300';
                         let bgClass = 'bg-[#020617]'; // Default table row background to prevent scrolling overlap
 
@@ -5978,9 +6651,9 @@
 
                         html += `
                             <tr class="${trClass}" data-row-key="${row.key}" data-parent="${row.parent || ''}" data-expanded="false">
-                                <td class="frozen-column px-4 py-2 text-left border-r border-slate-800 font-medium z-10 transition-colors duration-150 ${hasChildren ? 'cursor-pointer select-none hover:text-white' : ''}" style="background-color: inherit;" ${hasChildren ? `onclick="toggleTableRowGroup('${row.key}')"` : ''}>${labelContent}</td>
+                                <td class="frozen-column px-4 py-2 text-left border-r border-slate-800 font-medium z-10 transition-colors duration-150 w-[500px] min-w-[500px] max-w-[500px] select-none ${hasChildren ? 'cursor-pointer hover:text-white' : ''}" style="background-color: inherit;" ${hasChildren ? `onclick="toggleTableRowGroup('${row.key}')"` : ''}>${labelContent}</td>
                         `;
-                        for (let yr = 1; yr <= yearsLimit; yr++) {
+                        for (let yr = 0; yr <= yearsLimit; yr++) {
                             html += `<td id="cell-pnl-${row.key}-y${yr}" class="${tdClass} ${textClass}">-</td>`;
                         }
                         html += `</tr>`;
@@ -5992,14 +6665,16 @@
             renderTableBody('pl-body-a', pnlRowsA);
             renderTableBody('pl-body-b', pnlRowsB);
             renderTableBody('pl-body-c', pnlRowsC);
+            renderTableBody('pl-body-d', pnlRowsD);
             renderTableHeader('pl-header-kpis');
             renderTableBody('pl-body-kpis', pnlRowsKPIs);
 
             // Setup Debt rows
             const debtHeader = document.getElementById('debt-header');
-            let debtHeaderHtml = `<th class="frozen-column px-4 py-4 border-r border-slate-800 text-left min-w-[280px] z-30 uppercase tracking-wider text-[10px] text-slate-400 bg-[#020617]">Parametro Ammortamento</th>`;
-            for (let yr = 1; yr <= yearsLimit; yr++) {
-                debtHeaderHtml += `<th class="px-3 py-4 text-right font-bold text-slate-200 border-b border-slate-800 min-w-[110px] bg-[#020617] sticky top-0 z-20">Anno ${yr}</th>`;
+            let debtHeaderHtml = `<th class="frozen-column px-4 py-4 border-r border-slate-800 text-left w-[500px] min-w-[500px] max-w-[500px] z-30 uppercase tracking-wider text-[10px] text-slate-400 bg-[#020617] select-none">Parametro Ammortamento</th>`;
+            for (let yr = 0; yr <= yearsLimit; yr++) {
+                const yearLabel = yr === 0 ? 'Anno 0' : `Anno ${yr}`;
+                debtHeaderHtml += `<th class="px-3 py-4 text-right font-bold text-slate-200 border-b border-slate-800 w-[120px] min-w-[120px] max-w-[120px] bg-[#020617] sticky top-0 z-20 select-none" title="${yr === 0 ? 'Anno 0 (Pre-COD / Cantiere)' : `Anno ${yr}`}">${yearLabel}</th>`;
             }
             debtHeader.innerHTML = debtHeaderHtml;
 
@@ -6020,7 +6695,7 @@
                 { key: 'beginningBalanceSoci', label: 'Finanziamento Soci Inizio Anno (€)', type: 'normal' },
                 { key: 'interestAccruedSoci', label: `(-) Interessi Maturati (${p.sociInterestRate > 0 ? p.sociInterestRate.toFixed(2) + '% p.a.' : 'Nessuno'}${p.sociInterestGrace > 0 ? `, grazia anni 1-${p.sociInterestGrace}` : ', nessuna grazia'}) (€)`, type: 'minus' },
                 { key: 'interestPaidSoci', label: '(+) Interessi Pagati Effettivamente (€)', type: 'plus-debt' },
-                { key: 'principalPaidSoci', label: `(-) Rimborso Quota Capitale (${p.sociPrincipalGrace > 0 ? 'grazia anni 1-' + p.sociPrincipalGrace : 'nessuna grazia'}) (€)`, type: 'minus' },
+                { key: 'principalPaidSoci', label: `(-) Rimborso Quota Capitale (${p.sociPrincipalGrace > 0 ? 'grazia anni 1-' + p.sociPrincipalGrace + ', ' : ''}${p.sociLoanTerm > 0 ? 'ammortamento ' + p.sociLoanTerm + 'a' : 'cash sweep'}) (€)`, type: 'minus' },
                 { key: 'endingBalanceSoci', label: 'Finanziamento Soci Fine Anno (€)', type: 'bold' }
             ];
             // ── Sezione 3: Private Debt (se abilitato) ──
@@ -6044,13 +6719,13 @@
                         : 'bg-[#1a1235] text-violet-300 border-b border-violet-800/50';
                     debtBodyHtml += `
                         <tr class="${sectionBg} font-bold uppercase text-[9px] tracking-wider">
-                            <td class="frozen-column px-4 py-2 border-r border-slate-800 z-10" style="background-color: inherit;">${row.section}</td>
-                            <td colspan="${yearsLimit}" class="px-3 py-2"></td>
+                            <td class="frozen-column px-4 py-2 border-r border-slate-800 z-10 w-[500px] min-w-[500px] max-w-[500px]" style="background-color: inherit;">${row.section}</td>
+                            <td colspan="${yearsLimit + 1}" class="px-3 py-2"></td>
                         </tr>
                     `;
                 } else {
                     let trClass = 'group hover:bg-[#15223e]';
-                    let tdClass = 'px-3 py-2 text-right border-b border-slate-800/40';
+                    let tdClass = 'px-3 py-2 text-right border-b border-slate-800/40 w-[120px] min-w-[120px] max-w-[120px]';
                     let textClass = 'text-slate-300';
                     let bgClass = 'bg-[#020617]'; // Default table row background to prevent scrolling overlap
                     
@@ -6062,9 +6737,9 @@
 
                     debtBodyHtml += `
                         <tr class="${trClass}">
-                            <td class="frozen-column px-4 py-2 text-left border-r border-slate-800 font-medium z-10 transition-colors duration-150" style="background-color: inherit;">${row.label}</td>
+                            <td class="frozen-column px-4 py-2 text-left border-r border-slate-800 font-medium z-10 transition-colors duration-150 w-[500px] min-w-[500px] max-w-[500px] select-none" style="background-color: inherit;">${row.label}</td>
                     `;
-                    for (let yr = 1; yr <= yearsLimit; yr++) {
+                    for (let yr = 0; yr <= yearsLimit; yr++) {
                         debtBodyHtml += `<td id="cell-debt-${row.key}-y${yr}" class="${tdClass} ${textClass}">-</td>`;
                     }
                     debtBodyHtml += `</tr>`;
@@ -6176,7 +6851,16 @@
                 setCell('ebt', m.ebt[i]);
                 setCell('currentTaxesSpv', m.currentTaxesSpv[i], true, formatMinusEuro);
                 setCell('iresTaxSpv', m.iresTaxSpv[i], true, formatMinusEuro);
+                setCell('taxTaxableIres', m.taxTaxableIres ? m.taxTaxableIres[i] : 0, true, formatEuro);
+                setCell('taxDeprDelta', m.taxDeprDelta ? m.taxDeprDelta[i] : 0, true, v => v !== 0 ? (v > 0 ? '+' : '-') + formatEuro(Math.abs(v)) : '-');
+                setCell('taxInterestDelta', m.taxInterestDelta ? m.taxInterestDelta[i] : 0, true, v => v !== 0 ? (v > 0 ? '+' : '-') + formatEuro(Math.abs(v)) : '-');
+                setCell('taxLossApplied', m.taxLossApplied ? m.taxLossApplied[i] : 0, true, formatMinusEuro);
+                setCell('taxTaxableFinal', m.taxTaxableFinal ? m.taxTaxableFinal[i] : 0, true, formatEuro);
+                setCell('taxLossCF', m.taxLossCF ? m.taxLossCF[i] : 0, true, formatEuro);
+                setCell('interestCF', m.interestCF ? m.interestCF[i] : 0, true, formatEuro);
+                setCell('rolCF', m.rolCF ? m.rolCF[i] : 0, true, formatEuro);
                 setCell('irapTaxSpv', m.irapTaxSpv[i], true, formatMinusEuro);
+                setCell('taxableIrap', m.taxableIrap ? m.taxableIrap[i] : 0, true, formatEuro);
                 setCell('deferredTaxes', m.deferredTaxes[i], true, v => (v >= 0 ? '-' : '+') + formatEuro(Math.abs(v)));
                 setCell('netProfitSpv', m.netProfitSpv[i]);
                 setCell('rf_netProfitSpv', m.netProfitSpv[i], true, formatEuro);
@@ -6201,24 +6885,54 @@
                 setCell('opexMaintReserve', m.opexMaintReserve ? m.opexMaintReserve[i] : 0, true, formatMinusEuro);
                 setCell('holdcoInterestReceived', m.holdcoInterestReceived[i], true, formatMinusEuro);
                 setCell('holdcoLoanRepaymentReceived', m.holdcoLoanRepaymentReceived[i], true, formatMinusEuro);
-                setCell('spvLockedDividends', m.spvLockedDividends ? m.spvLockedDividends[i] : 0, true, formatEuro);
+                setCell('spvLockedDividends', m.spvLockedDividends ? m.spvLockedDividends[i] : 0, true, (v) => v > 0 ? '+' + formatEuro(v) : formatEuro(v));
+                setCell('spvLegalReserveAccrual', m.spvLegalReserveAccrual ? m.spvLegalReserveAccrual[i] : 0, true, formatMinusEuro);
+                setCell('spvRetainedEarnings', m.spvRetainedEarnings ? m.spvRetainedEarnings[i] : 0, true, formatEuro);
                 setCell('holdcoDividendReceived', m.holdcoDividendReceived[i], true, formatMinusEuro);
+                setCell('spvCapitalReserveReturned', m.spvCapitalReserveReturned ? m.spvCapitalReserveReturned[i] : 0, true, formatMinusEuro);
                 setCell('spvFCFE', m.spvFCFE ? m.spvFCFE[i] : 0, true, formatEuro);
-                setCell('spvCashTrap', m.spvCashTrap ? m.spvCashTrap[i] : 0, true, formatEuro);
+                setCell('spvCashTrap', m.spvCashTrap ? m.spvCashTrap[i] : 0, true, (v) => v > 0 ? '+' + formatEuro(v) : formatEuro(v));
+                setCell('spvCashTrapCumulative', m.spvCashTrapCumulative ? m.spvCashTrapCumulative[i] : ((m.spvLockedDividends ? m.spvLockedDividends[i] : 0) + (m.spvCashTrap ? m.spvCashTrap[i] : 0)), true, formatEuro);
                 setCell('bessAugmentationCost', m.bessAugmentationCost ? m.bessAugmentationCost[i] : 0, true, formatMinusEuro);
                 setCell('mraRelease', m.mraRelease ? m.mraRelease[i] : 0, true, formatPlusEuro);
                 setCell('dividendsPaid', m.dividendsPaid[i]);
-                setCell('holdcoInflowTotal', m.holdcoInflowTotal[i]);
+                // ── SEZIONE C: CONTO ECONOMICO CIVILISTICO HOLDING (HOLDCO LEVEL) ──
+                setCell('ce_holdcoProductionValue', m.holdcoProductionValue ? m.holdcoProductionValue[i] : (m.opexAssetManagement ? m.opexAssetManagement[i] : 0), true, formatEuro);
+                setCell('ce_holdcoAssetManagementReceived', m.opexAssetManagement ? m.opexAssetManagement[i] : 0, true, formatPlusEuro);
+                setCell('ce_holdcoProductionCosts', m.holdcoProductionCosts ? m.holdcoProductionCosts[i] : (m.holdcoOpex[i] + m.holdcoEarnoutPaid[i]), true, formatMinusEuro);
+                setCell('ce_holdcoOpex', m.holdcoOpex[i], true, formatMinusEuro);
+                setCell('ce_holdcoEarnoutPaid', m.holdcoEarnoutPaid[i], true, formatMinusEuro);
+                setCell('ce_holdcoEbitda', m.holdcoEbitda ? m.holdcoEbitda[i] : 0, true, formatEuro);
+                setCell('ce_holdcoDepreciation', 0, true, formatMinusEuro);
+                setCell('ce_holdcoDeprDetail', 0, true, formatMinusEuro);
+                setCell('ce_holdcoOperatingEbit', m.holdcoOperatingEbit ? m.holdcoOperatingEbit[i] : 0, true, formatEuro);
+                setCell('ce_holdcoDividendReceived', m.holdcoDividendReceived ? m.holdcoDividendReceived[i] : 0, true, formatPlusEuro);
+                setCell('ce_holdcoInterestReceived', m.holdcoInterestReceived ? m.holdcoInterestReceived[i] : 0, true, formatPlusEuro);
+                if (m.pdInterestPaid) setCell('ce_pdInterestPaid', m.pdInterestPaid[i], true, formatMinusEuro);
+                setCell('ce_holdcoFinancialNet', m.holdcoFinancialNet ? m.holdcoFinancialNet[i] : 0, true, (v) => v >= 0 ? '+' + formatEuro(v) : formatEuro(v));
+                setCell('ce_holdcoEbt', m.holdcoEbt ? m.holdcoEbt[i] : 0, true, formatEuro);
+                setCell('ce_holdcoTaxTotal', m.holdcoTaxTotal ? m.holdcoTaxTotal[i] : (m.holdcoIresTaxPaid[i] + (m.holdcoIrapTaxPaid ? m.holdcoIrapTaxPaid[i] : 0)), true, formatMinusEuro);
+                setCell('ce_holdcoIresTaxPaid', m.holdcoIresTaxPaid[i], true, formatMinusEuro);
+                if (m.holdcoIrapTaxPaid) setCell('ce_holdcoIrapTaxPaid', m.holdcoIrapTaxPaid[i], true, formatMinusEuro);
+                setCell('ce_holdcoNetProfit', m.holdcoNetProfit[i]);
+
+                // ── SEZIONE D: RENDICONTO FINANZIARIO HOLDING (STRUTTURA ORIGINALE COMPLETA) ──
+                setCell('holdcoInflowTotal', m.holdcoInflowTotal ? m.holdcoInflowTotal[i] : 0);
                 setCell('hc_holdcoInterestReceived', m.holdcoInterestReceived[i], true, formatPlusEuro);
                 setCell('hc_holdcoLoanRepaymentReceived', m.holdcoLoanRepaymentReceived[i], true, formatPlusEuro);
                 setCell('hc_holdcoDividendReceived', m.holdcoDividendReceived[i], true, formatPlusEuro);
-                setCell('hc_holdcoAssetManagementReceived', m.opexAssetManagement[i], true, formatPlusEuro);
+                if (m.holdcoCapitalReserveReceived) setCell('hc_holdcoCapitalReserveReceived', m.holdcoCapitalReserveReceived[i], true, formatPlusEuro);
+                setCell('hc_holdcoAssetManagementReceived', m.opexAssetManagement ? m.opexAssetManagement[i] : 0, true, formatPlusEuro);
                 setCell('holdcoOpex', m.holdcoOpex[i], true, formatMinusEuro);
                 setCell('holdcoEarnoutPaid', m.holdcoEarnoutPaid[i], true, formatMinusEuro);
                 setCell('holdcoIresTaxPaid', m.holdcoIresTaxPaid[i], true, formatMinusEuro);
                 if (m.holdcoIrapTaxPaid) setCell('holdcoIrapTaxPaid', m.holdcoIrapTaxPaid[i], true, formatMinusEuro);
                 setCell('holdcoNetProfit', m.holdcoNetProfit[i]);
                 setCell('hc_reconcileLoanRepayment', m.holdcoLoanRepaymentReceived[i], true, formatPlusEuro);
+                if (m.holdcoCapitalReserveReceived) setCell('hc_reconcileCapitalReserve', m.holdcoCapitalReserveReceived[i], true, formatPlusEuro);
+                setCell('holdcoOperatingCashflow', m.holdcoOperatingCashflow ? m.holdcoOperatingCashflow[i] : (m.holdcoNetProfit[i] + m.holdcoLoanRepaymentReceived[i] + (m.holdcoCapitalReserveReceived ? m.holdcoCapitalReserveReceived[i] : 0)));
+                if (m.pdInterestPaid) setCell('pdInterestPaid', m.pdInterestPaid[i], true, formatMinusEuro);
+                if (m.pdPrincipalPaid) setCell('pdPrincipalPaid', m.pdPrincipalPaid[i], true, formatMinusEuro);
                 // exitValuationGroup: mostra sempre un valore esplicito nell'anno exit
                 // (trasparenza: può essere negativo se default PD, l'equity sponsor è cappato a 0 da exitLimitedLiability)
                 setCell('exitValuationGroup', m.exitValuationGroup[i], true, (v) => {
@@ -6270,6 +6984,7 @@
         }
 
         // Render dashboard values
+        window.renderUI = renderUI;
         function renderUI() {
             window.syncExitFields('render');
             if (State.results && State.results.medioneKpiText) {
@@ -6327,17 +7042,41 @@
             setTxt('val-loan-term', p.loanTerm + " Anni");
             setTxt('val-senior-grace-period', p.seniorGracePeriodMonths + " Mesi");
             setTxt('val-construction-months', p.constructionMonths + " Mesi");
+            if (typeof updateCalculatedConstructionInfo === 'function') updateCalculatedConstructionInfo();
             setTxt('val-idc-drawdown', p.idcDrawdownFactor + " %");
             setTxt('val-fiscal-depreciation', (p.fiscalDeprRate * 100).toFixed(1) + " %");
-            setTxt('val-soci-equity-pct', p.sociEquityPct + " % dell'Equity");
+            setTxt('val-soci-pct-epc', (p.sociPctEpc !== undefined ? p.sociPctEpc : 100) + " %");
+            setTxt('val-soci-pct-bess', (p.sociPctBess !== undefined ? p.sociPctBess : 100) + " %");
+            setTxt('val-soci-pct-connection', (p.sociPctConnection !== undefined ? p.sociPctConnection : 100) + " %");
+            setTxt('val-soci-pct-land', (p.sociPctLand !== undefined ? p.sociPctLand : 100) + " %");
+            setTxt('val-soci-pct-development', (p.sociPctDevelopment !== undefined ? p.sociPctDevelopment : 100) + " %");
+            setTxt('val-soci-pct-spv', (p.sociPctSpv !== undefined ? p.sociPctSpv : 100) + " %");
+            setTxt('val-soci-pct-custom', (p.sociPctCustom !== undefined ? p.sociPctCustom : 100) + " %");
             setTxt('val-soci-interest-rate', p.sociInterestRate.toFixed(2) + " %");
             window.updateExternalFinancingLabels(p);
 
+            const sponsorLoan = (r.initialShareholderLoan !== undefined) ? r.initialShareholderLoan : 0;
+            const sponsorEquity = Math.max(0, (r.equityAmount !== undefined) ? r.equityAmount : 0);
+            const totalSponsorFunds = sponsorLoan + sponsorEquity;
+            const totalSponsorPct = r.totalProjectCost > 0 ? ((totalSponsorFunds / r.totalProjectCost) * 100).toFixed(0) : 0;
+
             setTxt('kpi-total-cost', formatEuro(r.totalProjectCost));
-            setTxt('kpi-equity-req', formatEuro(r.equityAmount));
+            setTxt('kpi-equity-req', formatEuro(totalSponsorFunds));
             setTxt('kpi-debt-amt', formatEuro(r.debtAmount));
-            setTxt('sub-kpi-equity-pct', `${((r.equityAmount / r.totalProjectCost) * 100).toFixed(0)}% Quota Sponsor`);
+            
+            let equitySubtitle = `${totalSponsorPct}% Quota Sponsor`;
+            if (sponsorLoan > 0 && sponsorEquity > 0) {
+                equitySubtitle += ` (${((sponsorLoan / totalSponsorFunds) * 100).toFixed(0)}% Soci)`;
+            } else if (sponsorLoan > 0) {
+                equitySubtitle += ` (100% Finanziamento Soci)`;
+            }
+            setTxt('sub-kpi-equity-pct', equitySubtitle);
             setTxt('sub-kpi-debt-pct', `${((r.debtAmount / r.totalProjectCost) * 100).toFixed(0)}% di Leva`);
+
+            const eqReqEl = document.getElementById('kpi-equity-req');
+            if (eqReqEl) {
+                eqReqEl.title = `Capitale Sociale: ${formatEuro(sponsorEquity)} | Finanziamento Soci: ${formatEuro(sponsorLoan)}`;
+            }
             
             const projectIrrEl = document.getElementById('kpi-project-irr');
             if (projectIrrEl) {
@@ -6355,21 +7094,26 @@
 
             const irrEl = document.getElementById('kpi-irr');
             if (irrEl) {
-                if (r.calculatedIrr > 0) {
-                    irrEl.textContent = `${fmtDec(r.calculatedIrr, 2)} %`;
+                const spvIrr = (r.calculatedSpvEquityIrr !== undefined && !isNaN(r.calculatedSpvEquityIrr))
+                    ? r.calculatedSpvEquityIrr
+                    : r.calculatedIrr;
+                if (spvIrr > 0) {
+                    irrEl.textContent = `${fmtDec(spvIrr, 2)} %`;
                     irrEl.className = "text-xl font-black text-emerald-400 mt-1";
-                } else if (r.calculatedIrr < 0 && r.calculatedIrr > -99.9) {
-                    irrEl.textContent = `${fmtDec(r.calculatedIrr, 2)} %`;
+                } else if (spvIrr < 0 && spvIrr > -99.9) {
+                    irrEl.textContent = `${fmtDec(spvIrr, 2)} %`;
                     irrEl.className = "text-xl font-black text-red-400 mt-1";
                 } else {
                     irrEl.textContent = "Rendimento Negativo";
                     irrEl.className = "text-xl font-black text-red-400 mt-1";
                 }
+                irrEl.title = `Equity IRR SPV: ${fmtDec(spvIrr, 2)}% | Equity IRR HoldCo (Sponsor): ${fmtDec(r.calculatedIrr, 2)}%`;
             }
 
             setTxt('kpi-npv', formatEuro(r.holdcoNpv));
             setTxt('kpi-moic', fmtDec(r.holdcoMoic, 2) + 'x');
             setTxt('kpi-payback', r.paybackPeriod);
+            setTxt('kpi-payback-unlevered', r.paybackPeriodUnlevered || r.paybackPeriod);
             setTxt('kpi-lcoe', `€ ${fmtDec(r.calculatedLcoe, 2)} /MWh`);
             setTxt('kpi-lcos', `€ ${fmtDec(r.calculatedLcos, 2)} /MWh`);
 
@@ -6382,14 +7126,13 @@
             const seniorDebt = r.debtAmount || 0;
             const privateDebt = r.pdAmount || 0;
             const privateEquity = r.peAmount || 0;
-            // Equity di costruzione SPV: CAPEX costruzione - senior - PE.
-            // Il PD NON si sottrae: è debito di Holding immesso come equity SPV (coerente col worker).
+            // Calcolo effettivo quota Finanziamento Soci e Capitale Proprio (Pure Equity) da risultati simulatore
             const constructionEquity = Math.max(0, constructionCapex - seniorDebt - privateEquity);
-            const sponsorLoan = constructionEquity * ((p.sociEquityPct || 0) / 100);
-            // equityAmount del worker è GIÀ al netto del prestito soci: non sottrarlo di nuovo,
-            // altrimenti le Fonti risultano inferiori agli Impieghi proprio di sponsorLoan.
-            const sponsorEquity = Math.max(0, r.equityAmount || 0);
             const totalSources = seniorDebt + privateDebt + privateEquity + sponsorLoan + sponsorEquity;
+
+            // Aggiorna etichetta ponderata complessiva % finanziamento soci
+            const effectiveSociPct = totalSponsorFunds > 0 ? ((sponsorLoan / totalSponsorFunds) * 100).toFixed(1) : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100);
+            setTxt('val-soci-equity-pct', effectiveSociPct + " % dell'Equity");
 
             setTxt('uses-spv-acquisition', formatEuro(spvAcquisition));
             setTxt('uses-construction-capex', formatEuro(constructionCapex));
@@ -6443,6 +7186,7 @@
 
             updateTableData(r.matrix, r.debtSchedule);
             renderChart(r.matrix, r.debtSchedule);
+            State.lastSimulationResult = r;
             renderMonthlyCashflow(r.monthlyCashflow);
             renderPlantsList(); // Update the plants table (including PUN Zonale Ponderato) when calculations are run
             renderDealValueBreakdownTable();
@@ -6494,8 +7238,9 @@
             // 4. Quadratura energetica anno 1 (se disponibili risultati)
             const m = State.results && State.results.matrix;
             if (m && m.qtySolarGen && m.qtySolarGen.length) {
-                const gen = m.qtySolarGen[0] || 0;
-                const bal = (m.qtySolarPpa[0] || 0) + (m.qtySolarRid[0] || 0) + (m.qtySolarToBess[0] || 0);
+                const idxY1 = (m.years && m.years[0] === 0) ? 1 : 0;
+                const gen = m.qtySolarGen[idxY1] || 0;
+                const bal = (m.qtySolarPpa[idxY1] || 0) + (m.qtySolarRid[idxY1] || 0) + (m.qtySolarToBess[idxY1] || 0);
                 const dev = gen > 0 ? Math.abs(gen - bal) / gen : 0;
                 add('Quadrature', 'Gen = PPA+RID+toBESS (Y1)', dev < 0.01 ? 'ok' : 'error', `${fmtDec(gen, 0)} vs ${fmtDec(bal, 0)} MWh (Δ ${fmtDec(dev * 100, 2)}%)`);
             } else {
@@ -6590,12 +7335,345 @@
             if (bHold) bHold.className = (State.monthlyView === 'holding') ? active : idle;
         }
 
-        window.setMonthlyView = function(view) {
-            State.monthlyView = view === 'holding' ? 'holding' : 'spv';
+        function updateMonthlyColumnFilterButtons() {
+            const current = (State.monthlyView === 'holding') ? 'holding' : (State.monthlyColumnFilter || 'all');
+            const btns = document.querySelectorAll('.mc-filter-btn');
+            const activeCls = 'mc-filter-btn px-2.5 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all';
+            const idleCls = 'mc-filter-btn px-2.5 py-0.5 rounded text-slate-400 hover:text-slate-200 border border-transparent transition-all';
+            btns.forEach(b => {
+                const f = b.getAttribute('data-mc-filter');
+                b.className = (f === current) ? activeCls : idleCls;
+            });
+        }
+
+        window.setMonthlyColumnFilter = function(filterMode) {
+            State.monthlyColumnFilter = filterMode;
+            if (filterMode === 'holding') {
+                State.monthlyView = 'holding';
+            } else {
+                State.monthlyView = 'spv';
+            }
+            updateMonthlyColumnFilterButtons();
+            updateMonthlyViewToggle();
             renderMonthlyCashflow(State.lastMonthlyCashflow);
         };
 
+        window.setMonthlyView = function(view) {
+            State.monthlyView = view === 'holding' ? 'holding' : 'spv';
+            if (State.monthlyView === 'holding') {
+                State.monthlyColumnFilter = 'holding';
+            } else if (State.monthlyColumnFilter === 'holding') {
+                State.monthlyColumnFilter = 'all';
+            }
+            updateMonthlyColumnFilterButtons();
+            updateMonthlyViewToggle();
+            renderMonthlyCashflow(State.lastMonthlyCashflow);
+        };
+
+        window.alignFundingToFirstCapex = function() {
+            let firstDate = null;
+            // 1. Cerca nei pagamenti capex espliciti
+            const capexObj = State.capexPaymentsSaved || State.capexPayments || {};
+            const allPayments = [];
+            Object.values(capexObj).forEach(rows => {
+                if (Array.isArray(rows)) {
+                    rows.forEach(r => {
+                        if (r && r.date && Number(r.amount) > 0) {
+                            allPayments.push(r.date);
+                        }
+                    });
+                }
+            });
+
+            if (allPayments.length > 0) {
+                allPayments.sort();
+                firstDate = allPayments[0];
+            }
+
+            // 2. Se non ci sono pagamenti espliciti, cerca nella COD degli impianti attivi
+            if (!firstDate && State.plants && State.plants.length > 0) {
+                const codDates = State.plants
+                    .filter(p => p.enabled !== false && p.codDate)
+                    .map(p => p.codDate)
+                    .sort();
+                if (codDates.length > 0) firstDate = codDates[0];
+            }
+
+            if (!firstDate) {
+                if (typeof showToast === 'function') {
+                    showToast('Nessun esborso CAPEX o data COD configurata.', 'warning');
+                }
+                return;
+            }
+
+            // 3. Applica a equity date e soci date (e debt date se vuota)
+            const eqInput = document.getElementById('input-funding-equity-date');
+            const sociInput = document.getElementById('input-funding-soci-date');
+            const debtInput = document.getElementById('input-funding-debt-date');
+            if (eqInput) eqInput.value = firstDate;
+            if (sociInput) sociInput.value = firstDate;
+            if (debtInput && !debtInput.value) debtInput.value = firstDate;
+
+            if (typeof syncConstructionFromCod === 'function') {
+                syncConstructionFromCod(true);
+            }
+
+            if (typeof showToast === 'function') {
+                showToast(`Funding allineato al 1° CAPEX: ${firstDate}`, 'success');
+            }
+            if (typeof saveConfigDebounced === 'function') {
+                saveConfigDebounced();
+            }
+            if (typeof triggerRecalculate === 'function') {
+                triggerRecalculate();
+            }
+        };
+
+        function calculateConstructionMonthsFromDates() {
+            // 1. Data di riferimento del debito
+            const debtInput = document.getElementById('input-funding-debt-date');
+            let debtDateStr = (debtInput && debtInput.value) ? debtInput.value : '';
+            if (!debtDateStr && State.inputs && State.inputs.fundingDebtDate) {
+                debtDateStr = State.inputs.fundingDebtDate;
+            }
+            if (!debtDateStr) {
+                const capexObj = State.capexPayments || {};
+                const allDates = [];
+                Object.values(capexObj).forEach(rows => {
+                    if (Array.isArray(rows)) {
+                        rows.forEach(r => { if (r && r.date && Number(r.amount) > 0) allDates.push(r.date); });
+                    }
+                });
+                if (allDates.length > 0) {
+                    allDates.sort();
+                    debtDateStr = allDates[0];
+                }
+            }
+
+            const activePlants = (State.plants || []).filter(p => p.enabled !== false && p.codDate);
+            if (!debtDateStr || activePlants.length === 0) return null;
+
+            const parseDate = (dstr) => {
+                if (!dstr) return null;
+                const s = String(dstr).trim();
+                let y = 0, m = 0, d = 0;
+                if (s.includes('-') || s.includes('/')) {
+                    const sep = s.includes('-') ? '-' : '/';
+                    const parts = s.split(sep);
+                    if (parts.length === 3) {
+                        const p0 = parseInt(parts[0], 10);
+                        const p1 = parseInt(parts[1], 10);
+                        const p2 = parseInt(parts[2], 10);
+                        if (p0 > 1000) { y = p0; m = p1; d = p2; }
+                        else if (p2 > 1000) { y = p2; m = p1; d = p0; }
+                    }
+                }
+                return (y > 0 && m > 0) ? { y, m, d } : null;
+            };
+
+            const debtParsed = parseDate(debtDateStr);
+            if (!debtParsed) return null;
+
+            let maxCodParsed = null;
+            let maxCodStr = '';
+            activePlants.forEach(p => {
+                const parsed = parseDate(p.codDate);
+                if (parsed) {
+                    const val = parsed.y * 10000 + parsed.m * 100 + parsed.d;
+                    if (!maxCodParsed || val > (maxCodParsed.y * 10000 + maxCodParsed.m * 100 + maxCodParsed.d)) {
+                        maxCodParsed = parsed;
+                        maxCodStr = p.codDate;
+                    }
+                }
+            });
+
+            if (!maxCodParsed) return null;
+
+            const diffMonths = (maxCodParsed.y - debtParsed.y) * 12 + (maxCodParsed.m - debtParsed.m);
+            const months = Math.max(0, diffMonths);
+            return {
+                months,
+                debtDateStr,
+                maxCodStr,
+                plantCount: activePlants.length
+            };
+        }
+
+        function syncConstructionMonthsAuto(triggerWorkerRecalc = false) {
+            const res = calculateConstructionMonthsFromDates();
+            const hiddenEl = document.getElementById('slide-construction-months');
+            const lbl = document.getElementById('val-construction-months');
+            const infoEl = document.getElementById('txt-calc-construction');
+
+            let months = 6;
+            if (res) {
+                months = res.months;
+                if (hiddenEl) hiddenEl.value = months;
+                if (lbl) lbl.textContent = months + ' Mesi';
+                if (infoEl) {
+                    infoEl.textContent = `${res.debtDateStr} → ${res.maxCodStr}`;
+                    infoEl.title = `Intervallo: ${res.debtDateStr} → ${res.maxCodStr} (${months} Mesi)`;
+                    infoEl.className = 'font-mono text-orange-400 font-semibold truncate text-[9.5px] text-right';
+                }
+            } else {
+                months = (State.inputs && State.inputs.constructionMonths !== undefined) ? Number(State.inputs.constructionMonths) : 6;
+                if (hiddenEl) hiddenEl.value = months;
+                if (lbl) lbl.textContent = months + ' Mesi';
+                if (infoEl) {
+                    infoEl.textContent = 'Date non impostate';
+                    infoEl.title = 'Imposta Data Debito e Data COD negli Impianti per il calcolo automatico';
+                    infoEl.className = 'font-mono text-slate-500 truncate text-[9px] text-right';
+                }
+            }
+
+            if (!State.inputs) State.inputs = {};
+            const prevMonths = State.inputs.constructionMonths;
+            State.inputs.constructionMonths = months;
+
+            if (triggerWorkerRecalc && prevMonths !== months) {
+                if (typeof saveConfigDebounced === 'function') saveConfigDebounced();
+                if (typeof triggerRecalculateDebounced === 'function') {
+                    triggerRecalculateDebounced(250);
+                } else if (typeof triggerRecalculate === 'function') {
+                    triggerRecalculate();
+                }
+            }
+            return months;
+        }
+
+        function updateCalculatedConstructionInfo() {
+            syncConstructionMonthsAuto(false);
+        }
+
+        window.syncConstructionMonthsAuto = syncConstructionMonthsAuto;
+
+        window.syncConstructionFromCod = function(silent = false) {
+            const months = syncConstructionMonthsAuto(!silent);
+            const res = calculateConstructionMonthsFromDates();
+            if (!silent && typeof showToast === 'function') {
+                if (res) {
+                    showToast(`Durata costruzione aggiornata a ${res.months} Mesi (${res.debtDateStr} → ${res.maxCodStr})`, 'success');
+                } else {
+                    showToast('Durata costruzione non calcolabile: date mancanti.', 'warning');
+                }
+            }
+            return months;
+        };
+
+        function showMonthlyCapexPopover(cell, monthIdx) {
+            const popover = document.getElementById('mc-capex-popover');
+            if (!popover || !cell) return;
+            const mc = State.lastMonthlyCashflow;
+            if (!mc || !mc.capexOutflow || !(mc.capexOutflow[monthIdx] > 0)) {
+                hideMonthlyCapexPopover();
+                return;
+            }
+
+            const rawItems = (mc.capexBreakdown && mc.capexBreakdown[monthIdx]) || [];
+            // Raggruppa per impianto e voce per massima pulizia contabile
+            const grouped = {};
+            let totalAmt = 0;
+            if (rawItems.length > 0) {
+                rawItems.forEach(it => {
+                    const pName = (it.plantName || 'Portafoglio').trim();
+                    const lbl = (it.label || 'CAPEX').trim();
+                    const key = `${pName}:::${lbl}`;
+                    if (!grouped[key]) {
+                        grouped[key] = { plantName: pName, label: lbl, amount: 0 };
+                    }
+                    const amt = parseFloat(it.amount) || 0;
+                    grouped[key].amount += amt;
+                    totalAmt += amt;
+                });
+            } else {
+                grouped['Portafoglio:::CAPEX'] = {
+                    plantName: 'Portafoglio',
+                    label: 'CAPEX',
+                    amount: mc.capexOutflow[monthIdx]
+                };
+                totalAmt = mc.capexOutflow[monthIdx];
+            }
+
+            const items = Object.values(grouped).sort((a, b) => {
+                const cmp = a.plantName.localeCompare(b.plantName);
+                if (cmp !== 0) return cmp;
+                return a.label.localeCompare(b.label);
+            });
+
+            const monthLabel = (mc.labels && mc.labels[monthIdx]) || `Mese ${monthIdx + 1}`;
+
+            const rowsHtml = items.map(it => `
+                <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors">
+                    <td class="py-1.5 pr-3 font-semibold text-slate-100 whitespace-nowrap">${escapeHtml(it.plantName)}</td>
+                    <td class="py-1.5 pr-3 text-slate-300 text-[10px] whitespace-nowrap">${escapeHtml(it.label)}</td>
+                    <td class="py-1.5 text-right font-mono text-orange-300 whitespace-nowrap font-medium">${_fmtE(it.amount)}</td>
+                </tr>
+            `).join('');
+
+            popover.innerHTML = `
+                <div class="flex items-center justify-between border-b border-slate-700/80 pb-1.5 mb-2 gap-3">
+                    <div class="flex items-center space-x-1.5">
+                        <i class="fa-solid fa-layer-group text-orange-400 text-xs"></i>
+                        <span class="font-bold text-white text-xs">${escapeHtml(monthLabel)}</span>
+                    </div>
+                    <span class="text-[9px] uppercase tracking-wider font-bold text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded border border-orange-500/20 whitespace-nowrap">Dettaglio CAPEX</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-[10px] border-collapse">
+                        <thead>
+                            <tr class="text-slate-400 uppercase tracking-wider border-b border-slate-800 text-[9px]">
+                                <th class="pb-1 pr-3 font-semibold">Impianto</th>
+                                <th class="pb-1 pr-3 font-semibold">Voce</th>
+                                <th class="pb-1 text-right font-semibold">Importo (netto)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                        <tfoot>
+                            <tr class="border-t border-slate-700 font-bold text-slate-200">
+                                <td class="pt-1.5 pr-3 text-[10px]">Totale Mese</td>
+                                <td class="pt-1.5 pr-3 text-[9px] text-slate-400 font-normal">${items.length} ${items.length === 1 ? 'voce' : 'voci'}</td>
+                                <td class="pt-1.5 text-right font-mono text-orange-300 text-[11px] font-black">${_fmtE(totalAmt)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            `;
+
+            popover.classList.remove('hidden');
+            popover.style.display = 'block';
+
+            // Calcolo posizionamento fisso rispetto al viewport (fixed coordinates)
+            const rect = cell.getBoundingClientRect();
+            const popWidth = popover.offsetWidth || 300;
+            const popHeight = popover.offsetHeight || 120;
+
+            let left = rect.left + (rect.width / 2) - (popWidth / 2);
+            if (left < 12) left = 12;
+            if (left + popWidth > window.innerWidth - 12) {
+                left = window.innerWidth - popWidth - 12;
+            }
+
+            let top = rect.top - popHeight - 8;
+            if (top < 10) {
+                top = rect.bottom + 8;
+            }
+
+            popover.style.left = `${Math.round(left)}px`;
+            popover.style.top = `${Math.round(top)}px`;
+        }
+
+        function hideMonthlyCapexPopover() {
+            const popover = document.getElementById('mc-capex-popover');
+            if (popover) {
+                popover.classList.add('hidden');
+                popover.style.display = 'none';
+            }
+        }
+
         function renderMonthlyCashflow(mc) {
+            hideMonthlyCapexPopover();
             const kMin = document.getElementById('mc-kpi-min-cash');
             const kMinFunded = document.getElementById('mc-kpi-min-cash-funded');
             const kXirr = document.getElementById('mc-kpi-xirr');
@@ -6607,6 +7685,15 @@
             const banner = document.getElementById('mc-shortfall-banner');
             State.lastMonthlyCashflow = mc || null;
             updateMonthlyViewToggle();
+            updateMonthlyColumnFilterButtons();
+
+            // CF12: Card Sintesi Fiscale & Accise
+            const taxVatPeak = document.getElementById('tax-kpi-vat-peak');
+            const taxVatRefund = document.getElementById('tax-kpi-vat-refund');
+            const taxExciseTot = document.getElementById('tax-kpi-excise-total');
+            const taxUtfFee = document.getElementById('tax-kpi-utf-fee');
+            const simRes = State.lastSimulationResult || null;
+
             if (!mc || !mc.months || mc.months.length === 0) {
                 if (kMin) kMin.textContent = '—';
                 if (kMinFunded) kMinFunded.textContent = '—';
@@ -6615,8 +7702,13 @@
                 if (kNegNet) kNegNet.textContent = '—';
                 if (kNeg) kNeg.textContent = '—';
                 if (banner) banner.classList.add('hidden');
+                if (taxVatPeak) taxVatPeak.textContent = '—';
+                if (taxVatRefund) taxVatRefund.textContent = '—';
+                if (taxExciseTot) taxExciseTot.textContent = '—';
+                if (taxUtfFee) taxUtfFee.textContent = '—';
                 if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="py-4 text-center text-slate-500">Esegui un calcolo per visualizzare il cash flow mensile.</td></tr>';
-                if (State.monthlyChartInstance) { State.monthlyChartInstance.destroy(); State.monthlyChartInstance = null; }
+                safeDestroyChart(canvas, State.monthlyChartInstance);
+                State.monthlyChartInstance = null;
                 return;
             }
             const dated = mc.mode === 'dated';
@@ -6664,6 +7756,22 @@
                     banner.classList.add('hidden');
                 }
             }
+
+            // Popola KPI Sintesi Fiscale & Accise
+            if (taxVatPeak) {
+                taxVatPeak.textContent = (mc.vatMaxCredit !== undefined) ? _fmtE(mc.vatMaxCredit) : '—';
+            }
+            if (taxVatRefund) {
+                const totRef = mc.vatRefundReceived ? mc.vatRefundReceived.reduce((a, b) => a + (b || 0), 0) : 0;
+                taxVatRefund.textContent = mc.vatRefundReceived ? _fmtE(totRef) : '—';
+            }
+            if (taxExciseTot) {
+                taxExciseTot.textContent = (simRes && simRes.totalExciseY1 !== undefined) ? _fmtE(simRes.totalExciseY1) + ' /anno' : '—';
+            }
+            if (taxUtfFee) {
+                taxUtfFee.textContent = (simRes && simRes.totalUtfLicenseFee !== undefined) ? _fmtE(simRes.totalUtfLicenseFee) + ' /anno' : '—';
+            }
+
             // CF9: pannello budget CAPEX/OPEX con contatori residuo
             const budgetPanel = document.getElementById('mc-budget-panel');
             if (budgetPanel) {
@@ -6722,6 +7830,8 @@
                     ? `Anno 0 + Anni 1-5 (72 mesi) · Àncora ${mc.anchorYear}`
                     : 'Anni 1-5 (60 mesi)';
             }
+
+            const colFilter = (s.holding) ? 'holding' : (State.monthlyColumnFilter || 'all');
             const thead = document.getElementById('mc-thead');
             if (thead) {
                 if (s.holding) {
@@ -6733,6 +7843,33 @@
                         <th class="px-2 py-2 text-right" title="Earnout + OPEX + imposte Holding">Oneri HoldCo</th>
                         <th class="px-2 py-2 text-right">Netto Holding</th>
                         <th class="px-2 py-2 text-right">Cassa Holding</th>
+                    </tr>`;
+                } else if (colFilter === 'operational') {
+                    thead.innerHTML = `<tr class="text-slate-400 uppercase tracking-wider">
+                        <th class="px-2 py-2 text-left">Mese</th>
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Ricavi di competenza del mese">Ricavi Maturati</th>' : ''}
+                        <th class="px-2 py-2 text-right">${dated ? 'Ricavi Incassati' : 'Ricavi Tot.'}</th>
+                        <th class="px-2 py-2 text-right">OPEX</th>
+                        <th class="px-2 py-2 text-right">Imposte</th>
+                        <th class="px-2 py-2 text-right">Serv. Debito</th>
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Esborsi CAPEX datati (netto IVA)">CAPEX</th>' : ''}
+                        <th class="px-2 py-2 text-right" title="Incassati − OPEX − Imposte − Serv. Debito − CAPEX + IVA CF">Net Cashflow</th>
+                        <th class="px-2 py-2 text-right" title="Cassa cumulata SENZA funding (fabbisogno lordo)">Cassa Finale</th>
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Cassa cumulata DOPO gli afflussi equity/soci/debito alle date FINANZA">Cassa con Funding</th>' : ''}
+                    </tr>`;
+                } else if (colFilter === 'vat') {
+                    thead.innerHTML = `<tr class="text-slate-400 uppercase tracking-wider">
+                        <th class="px-2 py-2 text-left">Mese</th>
+                        <th class="px-2 py-2 text-right">${dated ? 'Ricavi Incassati' : 'Ricavi Tot.'}</th>
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Esborsi CAPEX datati (netto IVA)">CAPEX</th>' : ''}
+                        <th class="px-2 py-2 text-right">OPEX</th>
+                        <th class="px-2 py-2 text-right" title="IVA incassata sui ricavi (a debito)">IVA Inc.</th>
+                        <th class="px-2 py-2 text-right" title="IVA pagata ai fornitori su CAPEX+OPEX (a credito)">IVA Pag.</th>
+                        <th class="px-2 py-2 text-right" title="IVA versata all erario alla liquidazione (mensile/trimestrale)">IVA Vers.</th>
+                        <th class="px-2 py-2 text-right" title="IVA rimborsata o compensata dall erario (Modello IVA TR)">IVA Rimb.</th>
+                        <th class="px-2 py-2 text-right" title="Credito IVA a fine mese (portato a nuovo)">Credito IVA</th>
+                        <th class="px-2 py-2 text-right" title="Effetto IVA sulla cassa del mese = IVA incassata − IVA pagata − IVA versata + IVA rimborsata">IVA CF</th>
+                        <th class="px-2 py-2 text-right" title="Cassa cumulata">${dated ? 'Cassa con Funding' : 'Cassa Finale'}</th>
                     </tr>`;
                 } else {
                     thead.innerHTML = `<tr class="text-slate-400 uppercase tracking-wider">
@@ -6747,8 +7884,9 @@
                         ${dated ? '<th class="px-2 py-2 text-right" title="IVA incassata sui ricavi (a debito)">IVA Inc.</th>' : ''}
                         ${dated ? '<th class="px-2 py-2 text-right" title="IVA pagata ai fornitori su CAPEX+OPEX (a credito)">IVA Pag.</th>' : ''}
                         ${dated ? '<th class="px-2 py-2 text-right" title="IVA versata all erario alla liquidazione (mensile/trimestrale)">IVA Vers.</th>' : ''}
+                        ${dated ? '<th class="px-2 py-2 text-right" title="IVA rimborsata o compensata dall erario (Modello IVA TR)">IVA Rimb.</th>' : ''}
                         ${dated ? '<th class="px-2 py-2 text-right" title="Credito IVA a fine mese (portato a nuovo)">Credito IVA</th>' : ''}
-                        ${dated ? '<th class="px-2 py-2 text-right" title="Effetto IVA sulla cassa del mese = IVA incassata − IVA pagata − IVA versata">IVA CF</th>' : ''}
+                        ${dated ? '<th class="px-2 py-2 text-right" title="Effetto IVA sulla cassa del mese = IVA incassata − IVA pagata − IVA versata + IVA rimborsata">IVA CF</th>' : ''}
                         <th class="px-2 py-2 text-right" title="Incassati − OPEX − Imposte − Serv. Debito − CAPEX + IVA CF. Il funding NON è incluso: entra nella Cassa con Funding.">Net Cashflow</th>
                         <th class="px-2 py-2 text-right" title="Cassa cumulata SENZA funding (fabbisogno lordo)">Cassa Finale</th>
                         ${dated ? '<th class="px-2 py-2 text-right" title="Cassa cumulata DOPO gli afflussi equity/soci/debito alle date FINANZA">Cassa con Funding</th>' : ''}
@@ -6770,19 +7908,51 @@
                             <td class="px-2 py-1.5 text-right font-mono ${s.net[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(s.net[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(s.closing[i], 0)}</td>
                         </tr>`;
+                    } else if (colFilter === 'operational') {
+                        html += `<tr class="${rowCls} border-t border-slate-850/60">
+                            <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono text-slate-500">${fmtDec(mc.revenueAccrued[i], 0)}</td>` : ''}
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.opex[i], 0)}</td>
+                            ${(mc.vatCompensated && mc.vatCompensated[i] > 0) ?
+                                `<td class="px-2 py-1.5 text-right font-mono ${mc.taxes[i] === 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400'}" title="Imposte P&L: € ${fmtDec(mc.taxes[i] + mc.vatCompensated[i], 0)} compensate con Credito IVA (F24) per € ${fmtDec(mc.vatCompensated[i], 0)} — Uscita effettiva di cassa: € ${fmtDec(mc.taxes[i], 0)}">${fmtDec(-mc.taxes[i], 0)} <span class="text-[8px] text-emerald-300 font-bold ml-0.5">(${mc.taxes[i] === 0 ? 'comp.' : 'part. comp.'})</span></td>` :
+                                `<td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.taxes[i], 0)}</td>`}
+                            <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(-mc.debtService[i], 0)}</td>
+                            ${dated ? `<td data-mc-capex-idx="${i}" class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400 font-semibold cursor-pointer hover:bg-orange-500/20 hover:text-orange-300 underline decoration-dotted decoration-orange-500/40 underline-offset-2 transition-colors' : 'text-slate-600'}">${fmtDec(-mc.capexOutflow[i], 0)}</td>` : ''}
+                            <td class="px-2 py-1.5 text-right font-mono ${s.net[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(s.net[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono font-bold ${negRow ? 'text-rose-400' : 'text-sky-300'}">${fmtDec(s.closing[i], 0)}</td>
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono font-bold ${(mc.fundedCashClosing[i] || 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(mc.fundedCashClosing[i], 0)}</td>` : ''}
+                        </tr>`;
+                    } else if (colFilter === 'vat') {
+                        html += `<tr class="${rowCls} border-t border-slate-850/60">
+                            <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
+                            ${dated ? `<td data-mc-capex-idx="${i}" class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400 font-semibold cursor-pointer hover:bg-orange-500/20 hover:text-orange-300 underline decoration-dotted decoration-orange-500/40 underline-offset-2 transition-colors' : 'text-slate-600'}">${fmtDec(-mc.capexOutflow[i], 0)}</td>` : ''}
+                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.opex[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono ${mc.vatCollected[i] > 0 ? 'text-emerald-400' : 'text-slate-600'}">${fmtDec(mc.vatCollected[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono ${mc.vatPaidToSuppliers[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(-mc.vatPaidToSuppliers[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono ${mc.vatRemitted[i] > 0 ? 'text-rose-400' : 'text-slate-600'}">${fmtDec(-mc.vatRemitted[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono ${(mc.vatRefundReceived && mc.vatRefundReceived[i] > 0) ? 'text-emerald-300 font-bold' : 'text-slate-600'}">${fmtDec((mc.vatRefundReceived && mc.vatRefundReceived[i]) || 0, 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono ${mc.vatCreditEnd[i] > 0 ? 'text-sky-300' : 'text-slate-600'}">${fmtDec(mc.vatCreditEnd[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono ${(mc.vatCashFlow[i] || 0) < 0 ? 'text-rose-400' : ((mc.vatCashFlow[i] || 0) > 0 ? 'text-emerald-400' : 'text-slate-600')}">${fmtDec(mc.vatCashFlow[i], 0)}</td>
+                            <td class="px-2 py-1.5 text-right font-mono font-bold ${dated ? ((mc.fundedCashClosing[i] || 0) < 0 ? 'text-rose-400' : 'text-emerald-400') : (negRow ? 'text-rose-400' : 'text-sky-300')}">${fmtDec(dated ? (mc.fundedCashClosing[i] || 0) : s.closing[i], 0)}</td>
+                        </tr>`;
                     } else {
                         html += `<tr class="${rowCls} border-t border-slate-850/60">
                             <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono text-slate-500">${fmtDec(mc.revenueAccrued[i], 0)}</td>` : ''}
                             <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.opex[i], 0)}</td>
-                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.taxes[i], 0)}</td>
+                            ${(mc.vatCompensated && mc.vatCompensated[i] > 0) ?
+                                `<td class="px-2 py-1.5 text-right font-mono ${mc.taxes[i] === 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400'}" title="Imposte P&L: € ${fmtDec(mc.taxes[i] + mc.vatCompensated[i], 0)} compensate con Credito IVA (F24) per € ${fmtDec(mc.vatCompensated[i], 0)} — Uscita effettiva di cassa: € ${fmtDec(mc.taxes[i], 0)}">${fmtDec(-mc.taxes[i], 0)} <span class="text-[8px] text-emerald-300 font-bold ml-0.5">(${mc.taxes[i] === 0 ? 'comp.' : 'part. comp.'})</span></td>` :
+                                `<td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.taxes[i], 0)}</td>`}
                             <td class="px-2 py-1.5 text-right font-mono text-amber-400/80">${fmtDec(-mc.debtService[i], 0)}</td>
-                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(-mc.capexOutflow[i], 0)}</td>` : ''}
+                            ${dated ? `<td data-mc-capex-idx="${i}" class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400 font-semibold cursor-pointer hover:bg-orange-500/20 hover:text-orange-300 underline decoration-dotted decoration-orange-500/40 underline-offset-2 transition-colors' : 'text-slate-600'}">${fmtDec(-mc.capexOutflow[i], 0)}</td>` : ''}
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.fundingInflow[i] > 0 ? 'text-violet-300 font-bold' : 'text-slate-600'}">${fmtDec(mc.fundingInflow[i], 0)}</td>` : ''}
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.vatCollected[i] > 0 ? 'text-emerald-400' : 'text-slate-600'}">${fmtDec(mc.vatCollected[i], 0)}</td>` : ''}
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.vatPaidToSuppliers[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(-mc.vatPaidToSuppliers[i], 0)}</td>` : ''}
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.vatRemitted[i] > 0 ? 'text-rose-400' : 'text-slate-600'}">${fmtDec(-mc.vatRemitted[i], 0)}</td>` : ''}
+                            ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${(mc.vatRefundReceived && mc.vatRefundReceived[i] > 0) ? 'text-emerald-300 font-bold' : 'text-slate-600'}">${fmtDec((mc.vatRefundReceived && mc.vatRefundReceived[i]) || 0, 0)}</td>` : ''}
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${mc.vatCreditEnd[i] > 0 ? 'text-sky-300' : 'text-slate-600'}">${fmtDec(mc.vatCreditEnd[i], 0)}</td>` : ''}
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono ${(mc.vatCashFlow[i] || 0) < 0 ? 'text-rose-400' : ((mc.vatCashFlow[i] || 0) > 0 ? 'text-emerald-400' : 'text-slate-600')}">${fmtDec(mc.vatCashFlow[i], 0)}</td>` : ''}
                             <td class="px-2 py-1.5 text-right font-mono ${s.net[i] < 0 ? 'text-rose-400' : 'text-emerald-400'}">${fmtDec(s.net[i], 0)}</td>
@@ -6794,7 +7964,8 @@
                 tbody.innerHTML = html;
             }
             if (canvas && window.Chart) {
-                if (State.monthlyChartInstance) State.monthlyChartInstance.destroy();
+                safeDestroyChart(canvas, State.monthlyChartInstance);
+                State.monthlyChartInstance = null;
                 State.monthlyChartInstance = new Chart(canvas.getContext('2d'), {
                     type: 'bar',
                     data: {
@@ -6874,11 +8045,12 @@
                         num(mc.holdcoOtherCosts[i]), num(s.net[i]), num(s.closing[i])].join(';') + '\n';
                 }
             } else if (dated) {
-                csv += 'Mese;Ricavi Maturati;Ricavi Incassati;OPEX;Imposte;Serv. Debito;CAPEX;Funding;IVA Incassata;IVA Pagata;IVA Versata;Credito IVA;IVA CF;Net Cashflow;Cassa Finale;Cassa con Funding\n';
+                csv += 'Mese;Ricavi Maturati;Ricavi Incassati;OPEX;Imposte;Serv. Debito;CAPEX;Funding;IVA Incassata;IVA Pagata;IVA Versata;IVA Rimborsata;Credito IVA;IVA CF;Net Cashflow;Cassa Finale;Cassa con Funding\n';
                 for (let i = 0; i < mc.months.length; i++) {
                     csv += [mc.labels[i], num(mc.revenueAccrued[i]), num(mc.revenueTotal[i]), num(mc.opex[i]), num(mc.taxes[i]),
                         num(mc.debtService[i]), num(mc.capexOutflow[i]), num(mc.fundingInflow[i]),
                         num(mc.vatCollected[i]), num(mc.vatPaidToSuppliers[i]), num(mc.vatRemitted[i]),
+                        num((mc.vatRefundReceived && mc.vatRefundReceived[i]) || 0),
                         num(mc.vatCreditEnd[i]), num(mc.vatCashFlow[i]),
                         num(s.net[i]), num(s.closing[i]), num(mc.fundedCashClosing[i])].join(';') + '\n';
                 }
@@ -6909,9 +8081,8 @@
             const canvasRevenues = document.getElementById('chart-revenues');
             if (canvasRevenues) {
                 const ctxRev = canvasRevenues.getContext('2d');
-                if (State.revenueChartInstance) {
-                    State.revenueChartInstance.destroy();
-                }
+                safeDestroyChart(canvasRevenues, State.revenueChartInstance);
+                State.revenueChartInstance = null;
                 
                 const ppaData = (matrix.revenuePpa || []).map(v => Math.round(v));
                 const ridData = (matrix.revenueRid || []).map(v => Math.round(v));
@@ -6990,9 +8161,8 @@
                 const fcfeData = matrix.holdcoFCFE.map(v => Math.round(v));
                 const dscrData = debtSchedule.dscr.map(v => v === -1 ? null : parseFloat(v.toFixed(2)));
 
-                if (State.chartInstance) {
-                    State.chartInstance.destroy();
-                }
+                safeDestroyChart(canvasCashflow, State.chartInstance);
+                State.chartInstance = null;
 
                 State.chartInstance = new Chart(ctxCash, {
                     type: 'bar',
@@ -7149,9 +8319,17 @@
                 selectedZones.push("CNOR");
             }
 
+            const punDiscountPct = (State.inputs && State.inputs.punDiscountPct !== undefined) ? Number(State.inputs.punDiscountPct) : 0;
+            const punDiscountMult = Math.max(0, 1 - (punDiscountPct / 100));
+
             const zonalPricesHourly = {};
+            const zonalPricesHourlyRaw = {};
+            const zoneGenHourly = {};
             selectedZones.forEach(zone => {
-                zonalPricesHourly[zone] = State.zonalPun[zone] || State.zonalPun["CNOR"];
+                const base = State.zonalPun[zone] || State.zonalPun["CNOR"];
+                zonalPricesHourlyRaw[zone] = base;
+                zonalPricesHourly[zone] = (punDiscountMult !== 1.0) ? base.map(v => v * punDiscountMult) : base;
+                zoneGenHourly[zone] = new Float64Array(8760);
             });
 
             const solGenHourly = new Float64Array(8760);
@@ -7159,6 +8337,7 @@
             const batDischargeHourly = new Float64Array(8760);
             const batSoCHourly = new Float64Array(8760);
             const pricesHourly = new Float64Array(8760);
+            const pricesHourlyRaw = new Float64Array(8760);
             
             const batChargeSolarHourly = new Float64Array(8760);
             const batChargeGridHourly = new Float64Array(8760);
@@ -7191,6 +8370,7 @@
             const cerGseIncentiveBessHourly = new Float64Array(8760);
 
             const weightedPunNum = new Float64Array(8760);
+            const weightedPunNumRaw = new Float64Array(8760);
             const weightedPunDen = new Float64Array(8760);
             const totalBessSoC = new Float64Array(8760);
             let totalBessMwh = 0;
@@ -7199,12 +8379,19 @@
                 const pm = State.results && State.results.plantsMetrics ? State.results.plantsMetrics.find(m => m.id === plant.id) : null;
                 const sim = pm ? pm.sim : null;
                 totalBessMwh += (plant.bessMwh || 0);
-                const zonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                const pZoneUpper = String(plant.zone).toUpperCase();
+                const baseZonePrices = State.zonalPun[pZoneUpper] || State.zonalPun["CNOR"];
+                const zonePrices = (punDiscountMult !== 1) ? baseZonePrices.map(v => v * punDiscountMult) : baseZonePrices;
                 
                 for (let t = 0; t < 8760; t++) {
-                    solGenHourly[t] += plant.generation[t] || 0;
-                    weightedPunNum[t] += (plant.generation[t] || 0) * zonePrices[t];
-                    weightedPunDen[t] += plant.generation[t] || 0;
+                    const g = plant.generation[t] || 0;
+                    solGenHourly[t] += g;
+                    weightedPunNum[t] += g * zonePrices[t];
+                    weightedPunNumRaw[t] += g * baseZonePrices[t];
+                    weightedPunDen[t] += g;
+                    if (zoneGenHourly[pZoneUpper]) {
+                        zoneGenHourly[pZoneUpper][t] += g;
+                    }
                     
                     if (sim) {
                         batChargeHourly[t] += sim.hourlyCharge[t] || 0;
@@ -7241,10 +8428,12 @@
             });
 
             const fallbackZone = selectedPlants.length > 0 ? selectedPlants[0].zone : "CNOR";
-            const fallbackPrices = State.zonalPun[String(fallbackZone).toUpperCase()] || State.zonalPun["CNOR"];
+            const baseFallbackPrices = State.zonalPun[String(fallbackZone).toUpperCase()] || State.zonalPun["CNOR"];
+            const fallbackPrices = (punDiscountMult !== 1) ? baseFallbackPrices.map(v => v * punDiscountMult) : baseFallbackPrices;
             
             for (let t = 0; t < 8760; t++) {
                 pricesHourly[t] = weightedPunDen[t] > 0 ? (weightedPunNum[t] / weightedPunDen[t]) : fallbackPrices[t];
+                pricesHourlyRaw[t] = weightedPunDen[t] > 0 ? (weightedPunNumRaw[t] / weightedPunDen[t]) : baseFallbackPrices[t];
                 if (totalBessMwh > 0) {
                     batSoCHourly[t] = (totalBessSoC[t] / (totalBessMwh * 1000)) * 100;
                 }
@@ -7292,6 +8481,47 @@
                 return monthly;
             };
 
+            const toWeightedDaily = (hourlyPrice, hourlyGen) => {
+                const daily = new Float64Array(365);
+                for (let d = 0; d < 365; d++) {
+                    let num = 0;
+                    let den = 0;
+                    let sum = 0;
+                    for (let h = 0; h < 24; h++) {
+                        const idx = d * 24 + h;
+                        const p = hourlyPrice[idx] || 0;
+                        const g = hourlyGen ? (hourlyGen[idx] || 0) : 0;
+                        num += p * g;
+                        den += g;
+                        sum += p;
+                    }
+                    daily[d] = den > 0 ? (num / den) : (sum / 24);
+                }
+                return daily;
+            };
+
+            const toWeightedMonthly = (hourlyPrice, hourlyGen) => {
+                const monthly = new Float64Array(12);
+                let hourOffset = 0;
+                for (let m = 0; m < 12; m++) {
+                    const hoursInMonth = monthDays[m] * 24;
+                    let num = 0;
+                    let den = 0;
+                    let sum = 0;
+                    for (let h = 0; h < hoursInMonth; h++) {
+                        const idx = hourOffset + h;
+                        const p = hourlyPrice[idx] || 0;
+                        const g = hourlyGen ? (hourlyGen[idx] || 0) : 0;
+                        num += p * g;
+                        den += g;
+                        sum += p;
+                    }
+                    monthly[m] = den > 0 ? (num / den) : (sum / hoursInMonth);
+                    hourOffset += hoursInMonth;
+                }
+                return monthly;
+            };
+
             const toDailySum = (hourly) => {
                 const daily = new Float64Array(365);
                 for (let d = 0; d < 365; d++) {
@@ -7320,6 +8550,7 @@
             let batDischargeSource = batDischargeHourly;
             let batSoCSource = batSoCHourly;
             let pricesSource = pricesHourly;
+            let pricesRawSource = pricesHourlyRaw;
             let stabLoadSource = stabLoadHourly;
             let stabSelfConsSource = stabSelfConsHourly;
             
@@ -7355,7 +8586,8 @@
                 batChargeSource = toDailySum(batChargeHourly);
                 batDischargeSource = toDailySum(batDischargeHourly);
                 batSoCSource = toDaily(batSoCHourly); // Keep as avg
-                pricesSource = toDaily(pricesHourly); // Keep as avg
+                pricesSource = toWeightedDaily(pricesHourly, solGenHourly);
+                pricesRawSource = toWeightedDaily(pricesHourlyRaw, solGenHourly);
                 stabLoadSource = toDailySum(stabLoadHourly);
                 stabSelfConsSource = toDailySum(stabSelfConsHourly);
                 
@@ -7390,7 +8622,8 @@
                 batChargeSource = toMonthlySum(batChargeHourly);
                 batDischargeSource = toMonthlySum(batDischargeHourly);
                 batSoCSource = toMonthly(batSoCHourly); // Keep as avg
-                pricesSource = toMonthly(pricesHourly); // Keep as avg
+                pricesSource = toWeightedMonthly(pricesHourly, solGenHourly);
+                pricesRawSource = toWeightedMonthly(pricesHourlyRaw, solGenHourly);
                 stabLoadSource = toMonthlySum(stabLoadHourly);
                 stabSelfConsSource = toMonthlySum(stabSelfConsHourly);
                 
@@ -7423,14 +8656,20 @@
             }
 
             const aggregatedZonalPrices = {};
+            const aggregatedZonalPricesRaw = {};
             selectedZones.forEach(zone => {
                 const hourlySeries = zonalPricesHourly[zone];
+                const hourlyRawSeries = zonalPricesHourlyRaw[zone];
+                const genSeries = zoneGenHourly[zone];
                 if (aggregation === 'giornaliero') {
-                    aggregatedZonalPrices[zone] = toDaily(hourlySeries);
+                    aggregatedZonalPrices[zone] = toWeightedDaily(hourlySeries, genSeries);
+                    aggregatedZonalPricesRaw[zone] = toWeightedDaily(hourlyRawSeries, genSeries);
                 } else if (aggregation === 'mensile') {
-                    aggregatedZonalPrices[zone] = toMonthly(hourlySeries);
+                    aggregatedZonalPrices[zone] = toWeightedMonthly(hourlySeries, genSeries);
+                    aggregatedZonalPricesRaw[zone] = toWeightedMonthly(hourlyRawSeries, genSeries);
                 } else {
                     aggregatedZonalPrices[zone] = hourlySeries;
+                    aggregatedZonalPricesRaw[zone] = hourlyRawSeries;
                 }
             });
 
@@ -7562,6 +8801,7 @@
             const slicedBatDischarge = Array.from(batDischargeSource.slice(start, start + length));
             const slicedBatSoC = Array.from(batSoCSource.slice(start, start + length));
             const slicedPrices = Array.from(pricesSource.slice(start, start + length));
+            const slicedPricesRaw = Array.from(pricesRawSource.slice(start, start + length));
             
             const slicedBatChargeSolar = Array.from(batChargeSolarSource.slice(start, start + length));
             const slicedBatChargeGrid = Array.from(batChargeGridSource.slice(start, start + length));
@@ -7573,7 +8813,7 @@
             const slicedSelfConsBess = Array.from(selfConsBessSource.slice(start, start + length));
             const slicedSelfConsBessArb = Array.from(selfConsBessArbSource.slice(start, start + length));
             const slicedSelfConsBessTs = Array.from(selfConsBessTsSource.slice(start, start + length));
-            const slicedLossesRte = Array.from(lossesRteSource.slice(start, start + length));
+            const lossesRte = Array.from(lossesRteSource.slice(start, start + length));
             const slicedBatGridFeedPv = Array.from(batGridFeedPvSource.slice(start, start + length));
             const slicedRevRidPure = Array.from(revRidPureSource.slice(start, start + length));
             const slicedRevRidActual = Array.from(revRidActualSource.slice(start, start + length));
@@ -7594,8 +8834,10 @@
             const slicedStabSelfCons = hasOnSiteStab ? Array.from(stabSelfConsSource.slice(start, start + length)) : [];
 
             const slicedZonalPrices = {};
+            const slicedZonalPricesRaw = {};
             selectedZones.forEach(zone => {
                 slicedZonalPrices[zone] = Array.from(aggregatedZonalPrices[zone].slice(start, start + length));
+                slicedZonalPricesRaw[zone] = Array.from(aggregatedZonalPricesRaw[zone].slice(start, start + length));
             });
 
             return {
@@ -7612,7 +8854,7 @@
                 selfConsBess: slicedSelfConsBess,
                 selfConsBessArb: slicedSelfConsBessArb,
                 selfConsBessTs: slicedSelfConsBessTs,
-                lossesRte: slicedLossesRte,
+                lossesRte: lossesRte,
                 batGridFeedPv: slicedBatGridFeedPv,
                 revRidPure: slicedRevRidPure,
                 revRidActual: slicedRevRidActual,
@@ -7629,8 +8871,10 @@
                 cerGseIncentiveBess: slicedCerGseIncentiveBess,
                 batSoC: slicedBatSoC,
                 prices: slicedPrices,
+                pricesRaw: slicedPricesRaw,
                 selectedZones: selectedZones,
                 zonalPrices: slicedZonalPrices,
+                zonalPricesRaw: slicedZonalPricesRaw,
                 stabLoad: slicedStabLoad,
                 stabSelfCons: slicedStabSelfCons,
                 labels: labelList,
@@ -7666,10 +8910,8 @@
             setTimeout(() => {
                 try {
                     // Clean up previous chart instance
-                    if (State.hourlyChartInstance) {
-                        State.hourlyChartInstance.destroy();
-                        State.hourlyChartInstance = null;
-                    }
+                    safeDestroyChart(canvas, State.hourlyChartInstance);
+                    State.hourlyChartInstance = null;
 
                     const resolution = State.chartResolution || 'giorno';
                     const periodIndex = State.selectedPeriodIndex || 1;
@@ -8197,7 +9439,7 @@
             });
 
             // Render corresponding data table below the chart
-            renderHourlyProfileTable(data.labels, data.solGen, data.batChargeSolar, data.batChargeGrid, data.batDischargeGrid, data.batDischargeGridArb, data.batDischargeGridTs, data.batDischargePpa, data.lossesRte, data.batSoC, data.prices, data.stabLoad, data.selfConsSolar, data.selfConsBess, data.batGridFeedPv, data.revRidPure, data.revRidActual, data.revArbitrage, data.revTimeshifting, data.costWithdrawal, data.revPpaPv, data.revPpaBess, data.dates, data.selectedZones, data.zonalPrices, data.selfConsBessArb, data.selfConsBessTs, data.revPpaBessArb, data.revPpaBessTs, data.cerGseIncentivePv, data.cerGseIncentiveBessArb, data.cerGseIncentiveBessTs);
+            renderHourlyProfileTable(data.labels, data.solGen, data.batChargeSolar, data.batChargeGrid, data.batDischargeGrid, data.batDischargeGridArb, data.batDischargeGridTs, data.batDischargePpa, data.lossesRte, data.batSoC, data.prices, data.stabLoad, data.selfConsSolar, data.selfConsBess, data.batGridFeedPv, data.revRidPure, data.revRidActual, data.revArbitrage, data.revTimeshifting, data.costWithdrawal, data.revPpaPv, data.revPpaBess, data.dates, data.selectedZones, data.zonalPrices, data.selfConsBessArb, data.selfConsBessTs, data.revPpaBessArb, data.revPpaBessTs, data.cerGseIncentivePv, data.cerGseIncentiveBessArb, data.cerGseIncentiveBessTs, data.zonalPricesRaw, data.pricesRaw);
                 } catch (err) {
                     console.error("Errore durante il rendering del grafico orario:", err);
                 } finally {
@@ -8232,7 +9474,7 @@
         }
 
         // Render detailed dispatch profile data table below the chart
-        function renderHourlyProfileTable(labels, solGen, batChargeSolar, batChargeGrid, batDischargeGrid, batDischargeGridArb, batDischargeGridTs, batDischargePpa, lossesRte, batSoC, prices, stabLoad, selfConsSolar, selfConsBess, batGridFeedPv, revRidPure, revRidActual, revArbitrage, revTimeshifting, costWithdrawal, revPpaPv, revPpaBess, dates, selectedZones, zonalPrices, selfConsBessArb, selfConsBessTs, revPpaBessArb, revPpaBessTs, cerGseIncentivePv, cerGseIncentiveBessArb, cerGseIncentiveBessTs) {
+        function renderHourlyProfileTable(labels, solGen, batChargeSolar, batChargeGrid, batDischargeGrid, batDischargeGridArb, batDischargeGridTs, batDischargePpa, lossesRte, batSoC, prices, stabLoad, selfConsSolar, selfConsBess, batGridFeedPv, revRidPure, revRidActual, revArbitrage, revTimeshifting, costWithdrawal, revPpaPv, revPpaBess, dates, selectedZones, zonalPrices, selfConsBessArb, selfConsBessTs, revPpaBessArb, revPpaBessTs, cerGseIncentivePv, cerGseIncentiveBessArb, cerGseIncentiveBessTs, zonalPricesRaw, pricesRaw) {
             const table = document.getElementById('table-hourly-profile');
             if (!table) return;
             const thead = table.querySelector('thead');
@@ -8259,6 +9501,7 @@
                 lossesRte: lossesRte,
                 batSoC: batSoC,
                 prices: prices,
+                pricesRaw: pricesRaw,
                 stabLoad: stabLoad,
                 selfConsSolar: selfConsSolar,
                 selfConsBess: selfConsBess,
@@ -8278,7 +9521,8 @@
                 cerGseIncentiveBessArb: cerGseIncentiveBessArb,
                 cerGseIncentiveBessTs: cerGseIncentiveBessTs,
                 selectedZones: selectedZones,
-                zonalPrices: zonalPrices
+                zonalPrices: zonalPrices,
+                zonalPricesRaw: zonalPricesRaw
             };
 
             const hasStab = stabLoad && stabLoad.length > 0;
@@ -8323,8 +9567,18 @@
 
             (selectedZones || ["CNOR"]).forEach((zone, idx) => {
                 const borderClass = idx === 0 ? 'border-l border-slate-800/60' : '';
-                headerHTML += `<th class="px-4 py-3 text-rose-400 font-semibold border-b border-slate-800 text-right bg-rose-950/10 ${borderClass}">Prezzo PUN ${zone} (€/MWh)</th>`;
+                headerHTML += `
+                    <th class="px-4 py-3 text-rose-400 font-semibold border-b border-slate-800 text-right bg-rose-950/10 ${borderClass}">Prezzo PUN ${zone} Reale (€/MWh)</th>
+                    <th class="px-4 py-3 text-rose-300 font-semibold border-b border-slate-800 text-right bg-rose-950/10">Prezzo PUN ${zone} Corretto (€/MWh)</th>
+                `;
             });
+
+            if (selectedZones && selectedZones.length > 1) {
+                headerHTML += `
+                    <th class="px-4 py-3 text-amber-400 font-semibold border-b border-slate-800 text-right bg-amber-950/10 border-l border-slate-800/60">Prezzo PUN Medio Reale (€/MWh)</th>
+                    <th class="px-4 py-3 text-amber-300 font-semibold border-b border-slate-800 text-right bg-amber-950/10">Prezzo PUN Medio Corretto (€/MWh)</th>
+                `;
+            }
 
             headerHTML += `
                     <th class="px-4 py-3 text-slate-400 font-semibold border-b border-slate-800 text-right bg-emerald-950/10 border-l border-slate-800/60">Ricavi RID / FER X (Pure)</th>
@@ -8437,11 +9691,25 @@
                 `;
 
                 (selectedZones || ["CNOR"]).forEach((zone, idx) => {
+                    const zPricesRaw = (zonalPricesRaw && zonalPricesRaw[zone]) ? zonalPricesRaw[zone] : [];
+                    const zPriceRaw = zPricesRaw[i] !== undefined ? Math.round(zPricesRaw[i]) : 0;
                     const zPrices = (zonalPrices && zonalPrices[zone]) ? zonalPrices[zone] : [];
                     const zPrice = zPrices[i] !== undefined ? Math.round(zPrices[i]) : 0;
                     const borderClass = idx === 0 ? 'border-l border-slate-850/60' : '';
-                    rowsHTML += `<td class="px-4 py-2.5 text-right font-mono text-rose-400 bg-rose-950/5 ${borderClass}">€${zPrice.toLocaleString('it-IT')}</td>`;
+                    rowsHTML += `
+                        <td class="px-4 py-2.5 text-right font-mono text-rose-400 bg-rose-950/5 ${borderClass}">€${zPriceRaw.toLocaleString('it-IT')}</td>
+                        <td class="px-4 py-2.5 text-right font-mono text-rose-300 bg-rose-950/5">€${zPrice.toLocaleString('it-IT')}</td>
+                    `;
                 });
+
+                if (selectedZones && selectedZones.length > 1) {
+                    const pRaw = pricesRaw && pricesRaw[i] !== undefined ? Math.round(pricesRaw[i]) : 0;
+                    const pCorr = prices && prices[i] !== undefined ? Math.round(prices[i]) : 0;
+                    rowsHTML += `
+                        <td class="px-4 py-2.5 text-right font-mono text-amber-400 bg-amber-950/5 border-l border-slate-850/60">€${pRaw.toLocaleString('it-IT')}</td>
+                        <td class="px-4 py-2.5 text-right font-mono text-amber-300 bg-amber-950/5">€${pCorr.toLocaleString('it-IT')}</td>
+                    `;
+                }
 
                 if (_isCerTable) {
                     const revPpaBessArbVal = revPpaBessArb[i] !== undefined ? Math.round(revPpaBessArb[i]) : 0;
@@ -8493,6 +9761,7 @@
             const _isCer = State.stabilimenti.filter(s => s.enabled !== false).some(s => s.ppaType === 'cer');
             const zones = activeData.selectedZones || ["CNOR"];
             const zonalPrices = activeData.zonalPrices || {};
+            const zonalPricesRaw = activeData.zonalPricesRaw || {};
 
             let csv = "Periodo/Tempo;Fascia;Generazione FV (kWh);Cessione FV alla Rete (kWh);";
             if (hasStab) {
@@ -8505,8 +9774,11 @@
             csv += "Carica BESS da FV (kWh);Carica BESS da Rete (kWh);Scarica BESS alla Rete (kWh);Scarica BESS alla Rete da Arbitraggio (kWh);Scarica BESS alla Rete da Timeshifting (kWh);Scarica BESS a Stabilimento (kWh);Perdite RTE BESS (kWh);SoC (%);";
             
             zones.forEach(zone => {
-                csv += `Prezzo PUN ${zone} (EUR/MWh);`;
+                csv += `Prezzo PUN ${zone} Reale (EUR/MWh);Prezzo PUN ${zone} Corretto (EUR/MWh);`;
             });
+            if (zones.length > 1) {
+                csv += `Prezzo PUN Medio Reale (EUR/MWh);Prezzo PUN Medio Corretto (EUR/MWh);`;
+            }
 
             if (_isCer) {
                 csv += "Ricavi RID / FER X (Pure) (EUR);Ricavi RID / FER X (Reali) (EUR);Ricavi Arbitraggio (EUR);Ricavi Timeshifting (EUR);Costi Prelievo (EUR);Ricavi SPV da CER FV (EUR);Ricavi SPV da CER BESS da Arbitraggio (EUR);Ricavi SPV da CER BESS da Timeshifting (EUR);Incentivo GSE CER FV (EUR);Incentivo GSE CER BESS da Arbitraggio (EUR);Incentivo GSE CER BESS da Timeshifting (EUR)\n";
@@ -8562,10 +9834,17 @@
                 rowStr += `;${chgSolar};${chgGrid};${disGrid};${disGridArb};${disGridTs};${disPpa};${loss};${soc}`;
 
                 zones.forEach(zone => {
+                    const zPricesRaw = (zonalPricesRaw && zonalPricesRaw[zone]) ? zonalPricesRaw[zone] : [];
+                    const zPriceRawVal = zPricesRaw[i] !== undefined ? formatDec(zPricesRaw[i]) : "0,00";
                     const zPrices = zonalPrices[zone] || [];
                     const zPriceVal = zPrices[i] !== undefined ? formatDec(zPrices[i]) : "0,00";
-                    rowStr += `;${zPriceVal}`;
+                    rowStr += `;${zPriceRawVal};${zPriceVal}`;
                 });
+                if (zones.length > 1) {
+                    const pRawVal = (activeData.pricesRaw && activeData.pricesRaw[i] !== undefined) ? formatDec(activeData.pricesRaw[i]) : "0,00";
+                    const pCorrVal = (activeData.prices && activeData.prices[i] !== undefined) ? formatDec(activeData.prices[i]) : "0,00";
+                    rowStr += `;${pRawVal};${pCorrVal}`;
+                }
 
                 const revPure = activeData.revRidPure[i] !== undefined ? formatDec(activeData.revRidPure[i]) : 0;
                 const revActual = activeData.revRidActual[i] !== undefined ? formatDec(activeData.revRidActual[i]) : 0;
@@ -8617,6 +9896,7 @@
             const isCER = activeStabs.some(s => s.ppaType === 'cer');
             const zones = activeData.selectedZones || ["CNOR"];
             const zonalPrices = activeData.zonalPrices || {};
+            const zonalPricesRaw = activeData.zonalPricesRaw || {};
 
             const formatDateForExport = (date, agg) => {
                 if (!date) return "";
@@ -8688,9 +9968,16 @@
                 row["SoC (%)"] = soc;
 
                 zones.forEach(zone => {
+                    const zPricesRaw = (zonalPricesRaw && zonalPricesRaw[zone]) ? zonalPricesRaw[zone] : [];
                     const zPrices = zonalPrices[zone] || [];
-                    row[`Prezzo PUN ${zone} (€/MWh)`] = zPrices[i] !== undefined ? formatDec(zPrices[i]) : 0;
+                    row[`Prezzo PUN ${zone} Reale (€/MWh)`] = zPricesRaw[i] !== undefined ? formatDec(zPricesRaw[i]) : 0;
+                    row[`Prezzo PUN ${zone} Corretto (€/MWh)`] = zPrices[i] !== undefined ? formatDec(zPrices[i]) : 0;
                 });
+
+                if (zones.length > 1) {
+                    row[`Prezzo PUN Medio Reale (€/MWh)`] = (activeData.pricesRaw && activeData.pricesRaw[i] !== undefined) ? formatDec(activeData.pricesRaw[i]) : 0;
+                    row[`Prezzo PUN Medio Corretto (€/MWh)`] = (activeData.prices && activeData.prices[i] !== undefined) ? formatDec(activeData.prices[i]) : 0;
+                }
 
                 const revPure = activeData.revRidPure[i] !== undefined ? formatDec(activeData.revRidPure[i]) : 0;
                 const revActual = activeData.revRidActual[i] !== undefined ? formatDec(activeData.revRidActual[i]) : 0;
@@ -9050,8 +10337,10 @@
         function attachEventListeners() {
             const sliders = [
                 'slide-leverage', 'slide-interest', 'slide-loan-term', 'slide-fiscal-depreciation',
-                'slide-senior-grace-period', 'slide-construction-months', 'slide-idc-drawdown',
+                'slide-senior-grace-period', 'slide-idc-drawdown',
                 'slide-soci-equity-pct', 'slide-soci-interest-rate',
+                'slide-soci-pct-epc', 'slide-soci-pct-bess', 'slide-soci-pct-connection',
+                'slide-soci-pct-land', 'slide-soci-pct-development', 'slide-soci-pct-spv', 'slide-soci-pct-custom',
                 'slide-pd-interest-rate', 'slide-pe-hurdle-rate', 'slide-pe-preferred-pct', 'slide-pe-royalty-pct',
                 'slide-af-revenue-pct', 'slide-af-exit-pct', 'slide-af-warrant-pct', 'slide-af-convertible-rate', 'slide-af-convertible-pct',
                 'input-exit-option'
@@ -9060,9 +10349,10 @@
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
             });
-            const selects = ['select-debt-basis', 'select-sweep-type', 'select-price-scenario-type', 'select-bess-optimizer',
+            const selects = ['select-debt-basis', 'select-debt-repayment-frequency', 'select-sweep-type', 'select-price-scenario-type', 'select-bess-optimizer',
                 'select-pd-amount-type', 'select-pd-mode', 'select-pd-waterfall-rank',
-                'select-pe-amount-type', 'select-pe-mode', 'select-af-type'
+                'select-pe-amount-type', 'select-pe-mode', 'select-af-type',
+                'select-distribution-policy', 'select-cash-trap-deployment'
             ];
             selects.forEach(id => {
                 const el = document.getElementById(id);
@@ -9071,7 +10361,7 @@
             const sweepInputs = [
                 'input-sweep-value', 'input-sweep-years', 'input-sculpting-enabled', 'input-target-dscr',
                 'input-dsra-months', 'input-refi-enabled', 'input-refi-year', 'input-refi-rate', 'input-refi-term',
-                'input-soci-interest-grace', 'input-soci-principal-grace',
+                'input-soci-interest-grace', 'input-soci-principal-grace', 'input-soci-loan-term',
                 'input-holdco-capital',
                 'input-pd-amount-value', 'input-pd-interest-grace', 'input-pd-principal-grace', 'input-pd-loan-term',
                 'input-pd-enabled', 'input-pd-tax-deductible',
@@ -9094,16 +10384,34 @@
             fundingDateInputs.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
-                    el.addEventListener('change', triggerRecalculate);
-                    el.addEventListener('input', () => triggerRecalculateDebounced(350));
+                    el.addEventListener('change', () => {
+                        if (id === 'input-funding-debt-date' && typeof syncConstructionMonthsAuto === 'function') {
+                            syncConstructionMonthsAuto(false);
+                        }
+                        if (typeof saveConfigDebounced === 'function') saveConfigDebounced();
+                        triggerRecalculate();
+                    });
+                    el.addEventListener('input', () => {
+                        if (id === 'input-funding-debt-date' && typeof syncConstructionMonthsAuto === 'function') {
+                            syncConstructionMonthsAuto(false);
+                        }
+                        if (typeof saveConfigDebounced === 'function') saveConfigDebounced();
+                        triggerRecalculateDebounced(350);
+                    });
                 }
             });
-            // CF10: campi IVA (solo cash flow)
-            ['input-vat-enabled'].forEach(id => {
+
+            // Inizializza widget durata costruzione automatica
+            if (typeof syncConstructionMonthsAuto === 'function') {
+                syncConstructionMonthsAuto(false);
+            }
+            // CF10/Step 3: campi IVA (solo cash flow)
+            ['input-vat-enabled', 'input-vat-refund-enabled'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', triggerRecalculate);
             });
             ['vat-rev-rid', 'vat-rev-ppa', 'vat-rev-brp', 'vat-rev-cer', 'vat-rev-ferx',
+             'input-vat-refund-lag',
              'vat-capex-epc-fv', 'vat-capex-epc-bess', 'vat-capex-connection', 'vat-capex-development', 'vat-capex-spv', 'vat-capex-land',
              'vat-opex-om-fv', 'vat-opex-om-bess', 'vat-opex-insurance', 'vat-opex-imu', 'vat-opex-security', 'vat-opex-asset-mgmt'].forEach(id => {
                 const el = document.getElementById(id);
@@ -9115,9 +10423,18 @@
                     triggerRecalculateDebounced(350);
                 });
             });
-            ['input-vat-settlement'].forEach(id => {
+            ['input-vat-settlement', 'input-vat-tr-mode'].forEach(id => {
                 const el = document.getElementById(id);
-                if (el) el.addEventListener('change', triggerRecalculate);
+                if (el) el.addEventListener('change', () => {
+                    const chk = document.getElementById('input-vat-refund-enabled');
+                    const trMode = document.getElementById('input-vat-tr-mode');
+                    if (chk && trMode) chk.checked = (trMode.value !== 'riporto');
+                    triggerRecalculate();
+                });
+            });
+            ['input-vat-refund-lag'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
             });
             // CF2/CF5: lag di incasso per regime e mese pagamento imposte — ricalcolo in tempo reale
             ['mc-lag-rid', 'mc-lag-brp', 'mc-lag-cer', 'mc-lag-ferx', 'mc-tax-pay-month'].forEach(id => {
@@ -9125,7 +10442,7 @@
                 if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
             });
             const inputs = [
-                'input-ke-val', 'input-wacc', 'input-inflation', 'input-ires-rate', 'input-irap-rate', 'input-pun-zonal-floor', 'input-pun-bearish-decay-rate', 'input-ts-bearish-decay-rate', 'input-arb-bearish-decay-rate', 'input-dividend-lock',
+                'input-ke-val', 'input-wacc', 'input-inflation', 'input-ires-rate', 'input-irap-rate', 'input-pun-discount-pct', 'input-pun-zonal-floor', 'input-pun-bearish-decay-rate', 'input-ts-bearish-decay-rate', 'input-arb-bearish-decay-rate', 'input-dividend-lock', 'select-distribution-policy', 'select-cash-trap-deployment',
                 'input-ridLossInjectBt', 'input-ridLossInjectMt', 'input-ridLossInjectAt',
                 'input-ridLossWithdrawBt', 'input-ridLossWithdrawMt', 'input-ridLossWithdrawAt',
                 'input-cerLossCprBt', 'input-cerLossCprMt', 'input-cerLossCprAt',
@@ -9141,19 +10458,118 @@
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('input', () => triggerRecalculateDebounced(350));
             });
+            const punDiscountEl = document.getElementById('input-pun-discount-pct');
+            if (punDiscountEl) {
+                punDiscountEl.addEventListener('input', () => {
+                    State.inputs.punDiscountPct = Number(punDiscountEl.value || 0);
+                    renderPlantsList();
+                });
+            }
+
+            // Real-time label updates for Soci CAPEX sliders
+            const sociSliders = [
+                { sliderId: 'slide-soci-pct-epc', labelId: 'val-soci-pct-epc' },
+                { sliderId: 'slide-soci-pct-bess', labelId: 'val-soci-pct-bess' },
+                { sliderId: 'slide-soci-pct-connection', labelId: 'val-soci-pct-connection' },
+                { sliderId: 'slide-soci-pct-land', labelId: 'val-soci-pct-land' },
+                { sliderId: 'slide-soci-pct-development', labelId: 'val-soci-pct-development' },
+                { sliderId: 'slide-soci-pct-spv', labelId: 'val-soci-pct-spv' },
+                { sliderId: 'slide-soci-pct-custom', labelId: 'val-soci-pct-custom' }
+            ];
+            sociSliders.forEach(({ sliderId, labelId }) => {
+                const el = document.getElementById(sliderId);
+                const lbl = document.getElementById(labelId);
+                if (el && lbl) {
+                    el.addEventListener('input', () => {
+                        lbl.textContent = el.value + ' %';
+                    });
+                }
+            });
+
+            // Global helper to set all soci capex sliders at once
+            window.setAllSociSliders = function(val) {
+                sociSliders.forEach(({ sliderId, labelId }) => {
+                    const el = document.getElementById(sliderId);
+                    if (el) el.value = val;
+                    const lbl = document.getElementById(labelId);
+                    if (lbl) lbl.textContent = val + ' %';
+                });
+                if (typeof triggerRecalculate === 'function') {
+                    triggerRecalculate();
+                }
+            };
+
+            // Event delegation per il popover informativo sulla colonna CAPEX della tabella Cash Flow Mensile
+            const cfBody = document.getElementById('monthly-cf-body');
+            if (cfBody) {
+                cfBody.addEventListener('mouseover', (e) => {
+                    const cell = e.target.closest('[data-mc-capex-idx]');
+                    if (!cell) {
+                        hideMonthlyCapexPopover();
+                        return;
+                    }
+                    const idx = parseInt(cell.getAttribute('data-mc-capex-idx'), 10);
+                    if (!isNaN(idx)) {
+                        showMonthlyCapexPopover(cell, idx);
+                    }
+                });
+
+                cfBody.addEventListener('mouseout', (e) => {
+                    const cell = e.target.closest('[data-mc-capex-idx]');
+                    if (!cell) return;
+                    const rel = e.relatedTarget;
+                    if (rel && cell.contains(rel)) return;
+                    hideMonthlyCapexPopover();
+                });
+
+                cfBody.addEventListener('mouseleave', hideMonthlyCapexPopover);
+            }
+
+            const cfScroll = document.querySelector('#monthly-cf-body')?.closest('.overflow-auto');
+            if (cfScroll) {
+                cfScroll.addEventListener('scroll', hideMonthlyCapexPopover, { passive: true });
+            }
+            window.addEventListener('scroll', hideMonthlyCapexPopover, { passive: true });
+            window.addEventListener('resize', hideMonthlyCapexPopover, { passive: true });
 
             // Event delegation for plant form changes
             const formContainer = document.getElementById('plant-form-container');
             if (formContainer) {
-                formContainer.addEventListener('input', updateFormSubmitButtonState);
-                formContainer.addEventListener('change', updateFormSubmitButtonState);
+                formContainer.addEventListener('input', (e) => {
+                    updateFormSubmitButtonState();
+                    if (e.target && (e.target.id === 'plant-prod-multiplier' || e.target.id.startsWith('plant-capex') || e.target.id.startsWith('plant-opex') || e.target.id.startsWith('plant-capacity') || e.target.id.startsWith('plant-connection') || e.target.id.startsWith('plant-development') || e.target.id.startsWith('plant-spv') || e.target.id.startsWith('plant-land'))) {
+                        recalcPlantKpis();
+                    }
+                });
+                formContainer.addEventListener('change', (e) => {
+                    updateFormSubmitButtonState();
+                    if (e.target && (e.target.id === 'plant-prod-multiplier' || e.target.id.startsWith('plant-land-type') || e.target.id.startsWith('plant-service'))) {
+                        recalcPlantKpis();
+                    }
+                });
             }
 
             // PVGIS File: full header + generation parse on file selection
-            // Enter key nel form di login
+            // Enter key nei form di autenticazione e modal password
             ['auth-email', 'auth-password'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') loginUser(); });
+            });
+            ['auth-signup-email', 'auth-signup-password', 'auth-signup-confirm-password'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') signupUser(); });
+            });
+            ['auth-forgot-email'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') forgotPasswordUser(); });
+            });
+            ['auth-reset-password', 'auth-reset-confirm'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') updatePasswordUser(); });
+            });
+            ['modal-new-password', 'modal-confirm-password'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitChangePassword(); });
             });
 
             const pvgisFileEl = document.getElementById('pvgis-file');
@@ -9374,18 +10790,52 @@
             });
         }
 
-        // Synchronize horizontal scrolling between financials and debt tables
+        // Synchronize horizontal scrolling between financials and debt tables without recursion or flickering
         function initScrollSync() {
             const containers = document.querySelectorAll('.sync-scroll');
+            if (!containers.length || window._scrollSyncInitialized) return;
+            window._scrollSyncInitialized = true;
+
+            let activeScroller = null;
+            let resetTimer = null;
+
             containers.forEach(container => {
+                // Prevent native HTML5 drag-and-drop of highlighted text from hijacking pointer events
+                container.addEventListener('dragstart', (e) => {
+                    e.preventDefault();
+                    return false;
+                });
+
+                // Reset active master on any pointerdown/click so text selection and clicks never deadlock
+                container.addEventListener('pointerdown', () => {
+                    activeScroller = null;
+                    clearTimeout(resetTimer);
+                }, { passive: true });
+
                 container.addEventListener('scroll', () => {
+                    // Set active master on the first container that initiates scrolling
+                    if (!activeScroller) {
+                        activeScroller = container;
+                    }
+
+                    // Ignore scroll events fired programmatically on non-active containers
+                    if (activeScroller !== container) return;
+
                     const scrollLeft = container.scrollLeft;
+
+                    // Synchronously update all other tables in lockstep with zero dropped frames
                     containers.forEach(other => {
-                        if (other !== container && Math.abs(other.scrollLeft - scrollLeft) > 1) {
+                        if (other !== container && Math.abs(other.scrollLeft - scrollLeft) >= 0.5) {
                             other.scrollLeft = scrollLeft;
                         }
                     });
-                });
+
+                    // Clear and reset the lock shortly after scrolling pauses
+                    clearTimeout(resetTimer);
+                    resetTimer = setTimeout(() => {
+                        activeScroller = null;
+                    }, 50);
+                }, { passive: true });
             });
         }
 
@@ -9486,6 +10936,7 @@
             const { xVals, kpiVals, targetKpi, config } = results;
             const xLabel = getVarLabel(config.xVar) + (['wacc','inflation','euribor'].includes(config.xVar) ? ' (Abs %)' : ' (Rel %)');
             
+            safeDestroyChart('sens-chart', null);
             let html = '<div class="w-full h-full relative" style="min-height:300px"><canvas id="sens-chart"></canvas></div>';
             container.innerHTML = html;
 
@@ -9900,6 +11351,7 @@ window.REPORT_DESCRIPTIONS = {
     relazione_tecnica: 'Descrizione fisica e tecnica degli impianti (FV e Storage BESS), dettaglio inverter e consumi/utenze sottese (PPA/CER).',
     conto_economico: 'Conto Economico SPV completo a 20 anni: ricavi, OPEX, EBITDA, ammortamenti, interessi (senior/soci/PD/AF), EBT, imposte (IRES+IRAP, Art.96 TUIR), utile netto. Formato landscape tabellare.',
     rendiconto_finanziario: 'Bridge CFADS (da utile netto a cassa disponibile ante debito), servizio debito senior, cascata distribuzione SPV->HoldCo (waterfall) con Private Debt e Private Equity. Formato landscape.',
+    bilancio_holding: 'Bilancio civilistico e rendiconto finanziario della Holding (HoldCo Level): conto economico con proventi da partecipazioni, proventi finanziari, ricavi per servizi, OPEX, imposte e rendiconto con raccordo utile, incassi patrimoniali, debito e FCFE. Formato landscape.',
     piano_ammortamento: 'Piano ammortamento dettagliato: Senior Debt bancario, Finanziamento Soci, Private Debt (con modalità bullet PIK / ammortamento / interessi annuali). DSCR annuo. Formato landscape.',
     struttura_finanziaria: 'Struttura del capitale: fonti/impieghi, breakdown CAPEX (EPC, BESS, connessione, land, sviluppo, SPV), stratificazione equity (Senior/PD/PE/Soci/Sponsor Equity), leverage ratio.',
     exit_valutazione: 'Analisi exit: Enterprise Value (multiplo EBITDA), payoff debito senior + PD bullet, quota Private Equity, costi Altra Forma, PEX tax, net proceeds Sponsor, MOIC e multiplo realizzato.',
@@ -10180,9 +11632,15 @@ function vatRatePctForCapexLabel(label, plant) {
     const p = State.inputs || {};
     const map = {
         'EPC FV': p.vatCapexEpcFv, 'EPC BESS': p.vatCapexEpcBess, 'Connessione rete': p.vatCapexConnection,
-        'Sviluppo': p.vatCapexDevelopment, 'Acquisto SPV': p.vatCapexSpv, 'Terreno': p.vatCapexLand
+        'Compensazioni': p.vatCapexDevelopment, 'Sviluppo': p.vatCapexDevelopment, 'Acquisto SPV': p.vatCapexSpv, 'Terreno': p.vatCapexLand
     };
     if (map[label] !== undefined && map[label] !== null && isFinite(map[label])) return map[label];
+    if (plant && plant.customCosts) {
+        const match = plant.customCosts.find(c => c.cost_type === 'capex' && (c.label || '').trim() === (label || '').trim());
+        if (match && match.vat_rate !== undefined && match.vat_rate !== null && isFinite(parseFloat(match.vat_rate))) {
+            return parseFloat(match.vat_rate);
+        }
+    }
     const r = (v, def) => (v !== undefined && v !== null && isFinite(v)) ? v : def;
     if (!plant) return r(p.vatCapexEpcFv, 22);
     let customVat = 0;
@@ -10221,11 +11679,17 @@ function capexCategoryBudgetEur(label, plant) {
         case 'EPC FV': return epcFv;
         case 'EPC BESS': return epcBess;
         case 'Connessione rete': return plant.connectionCost || 0;
+        case 'Compensazioni':
         case 'Sviluppo': return plant.developmentCost || 0;
         case 'Acquisto SPV': return plant.spvAcquisitionCost || 0;
         case 'Terreno': return plant.landType === 'dds_annuo' ? 0 : (plant.landCost || 0);
-        default: // "Altro": CAPEX impianto non coperto dalle voci mappate (incl. voci personalizzate)
+        default: {
+            if (plant.customCosts) {
+                const match = plant.customCosts.find(c => c.cost_type === 'capex' && (c.label || '').trim() === (label || '').trim());
+                if (match) return customCostEur(match, plant);
+            }
             return Math.max(0, (plant.customCapexEur || 0));
+        }
     }
 }
 function opexCategoryBudgetEur(label, plant) {
@@ -10242,16 +11706,18 @@ function opexCategoryBudgetEur(label, plant) {
         default: return 0; // "Manutenzione straordinaria"/"Altro": nessuna voce dedicata per impianto
     }
 }
-function capexAllocatedByLabel(label, pid) {
+function capexAllocatedByLabel(label, pid, excludeIdx) {
     let a = 0;
-    (((State.capexPayments || {})[pid]) || []).forEach(pm => {
+    (((State.capexPayments || {})[pid]) || []).forEach((pm, i) => {
+        if (excludeIdx !== undefined && excludeIdx !== null && i === excludeIdx) return;
         if ((pm.label || '') === label) a += parseFloat(pm.amount) || 0;
     });
     return a;
 }
-function opexAllocatedByLabel(label, pid) {
+function opexAllocatedByLabel(label, pid, excludeIdx) {
     let a = 0;
-    (((State.opexEvents || {})[pid]) || []).forEach(ev => {
+    (((State.opexEvents || {})[pid]) || []).forEach((ev, i) => {
+        if (excludeIdx !== undefined && excludeIdx !== null && i === excludeIdx) return;
         if ((ev.label || '') === label) a += parseFloat(ev.amount) || 0;
     });
     return a;
@@ -10284,8 +11750,10 @@ window.updateCapexCategoryInfo = function() {
     const plant = (State.plants || []).find(p => p.id === pid);
     const label = labelEl.value;
     const typing = amountEl ? (parseFloat(amountEl.value) || 0) : 0;
+    const ed = State._capexEditing;
+    const excludeIdx = (ed && ed.pid === pid) ? ed.idx : null;
     _renderCategoryInfo(document.getElementById('capex-pay-cat-info'), plant ? plant.name : '', label,
-        plant ? capexCategoryBudgetEur(label, plant) : 0, capexAllocatedByLabel(label, pid), typing);
+        plant ? capexCategoryBudgetEur(label, plant) : 0, capexAllocatedByLabel(label, pid, excludeIdx), typing);
 };
 window.updateOpexCategoryInfo = function() {
     const labelEl = document.getElementById('opexev-label');
@@ -10296,8 +11764,59 @@ window.updateOpexCategoryInfo = function() {
     const plant = (State.plants || []).find(p => p.id === pid);
     const label = labelEl.value;
     const typing = amountEl ? (parseFloat(amountEl.value) || 0) : 0;
+    const ed = State._opexEditing;
+    const excludeIdx = (ed && ed.pid === pid) ? ed.idx : null;
     _renderCategoryInfo(document.getElementById('opexev-cat-info'), plant ? plant.name : '', label,
-        plant ? opexCategoryBudgetEur(label, plant) : null, opexAllocatedByLabel(label, pid), typing);
+        plant ? opexCategoryBudgetEur(label, plant) : null, opexAllocatedByLabel(label, pid, excludeIdx), typing);
+};
+
+window.updateCapexPayLabelOptions = function() {
+    const sel = document.getElementById('capex-plant-select');
+    const labelEl = document.getElementById('capex-pay-label');
+    if (!sel || !labelEl) return;
+    const pid = sel.value;
+    const plant = (State.plants || []).find(p => p.id === pid);
+    const prevVal = labelEl.value;
+
+    const standardCategories = [
+        { value: 'EPC FV', label: 'EPC FV' },
+        { value: 'EPC BESS', label: 'EPC BESS' },
+        { value: 'Connessione rete', label: 'Connessione rete' },
+        { value: 'Compensazioni', label: 'Compensazioni' },
+        { value: 'Acquisto SPV', label: 'Acquisto SPV' },
+        { value: 'Terreno', label: 'Terreno' }
+    ];
+
+    let html = standardCategories.map(c => `<option value="${escapeHtml(c.value)}">${escapeHtml(c.label)}</option>`).join('');
+
+    if (plant && Array.isArray(plant.customCosts)) {
+        plant.customCosts.filter(c => c.cost_type === 'capex').forEach(c => {
+            const lbl = (c.label || '').trim();
+            if (lbl && !standardCategories.some(sc => sc.value === lbl)) {
+                html += `<option value="${escapeHtml(lbl)}">${escapeHtml(lbl)} (Custom)</option>`;
+            }
+        });
+    }
+    html += `<option value="Altro">Altro</option>`;
+
+    labelEl.innerHTML = html;
+
+    if (State._capexEditing && State._capexEditing.pid === pid) {
+        const edRow = (((State.capexPayments || {})[pid]) || [])[State._capexEditing.idx];
+        if (edRow && edRow.label) {
+            if (![...labelEl.options].some(o => o.value === edRow.label)) {
+                const opt = document.createElement('option');
+                opt.value = edRow.label;
+                opt.textContent = edRow.label;
+                labelEl.appendChild(opt);
+            }
+            labelEl.value = edRow.label;
+            return;
+        }
+    }
+    if (prevVal && [...labelEl.options].some(o => o.value === prevVal)) {
+        labelEl.value = prevVal;
+    }
 };
 
 window.renderCapexPaymentOptions = function() {
@@ -10312,6 +11831,7 @@ window.renderCapexPaymentOptions = function() {
         const withRows = enabledPlants.find(p => ((State.capexPayments || {})[p.id] || []).length > 0);
         if (withRows) sel.value = withRows.id;
     }
+    updateCapexPayLabelOptions();
     renderCapexPaymentRows();
 };
 
@@ -10319,6 +11839,7 @@ window.renderCapexPaymentRows = function() {
     const box = document.getElementById('capex-pay-rows');
     if (!box) return;
     updateCapexSaveIndicator();
+    updateCapexPayLabelOptions();
     updateCapexCategoryInfo();
     const sel = document.getElementById('capex-plant-select');
     const pid = sel ? sel.value : null;
@@ -10326,9 +11847,10 @@ window.renderCapexPaymentRows = function() {
     if (State._capexEditing && State._capexEditing.pid !== pid) cancelCapexPaymentEdit(true);
     const list = (pid && State.capexPayments && State.capexPayments[pid]) || [];
     updateCapexEditModeUI();
-    if (!pid) { box.innerHTML = ''; return; }
+    if (!pid) { box.innerHTML = ''; renderDealValueBreakdownTable(); return; }
     if (!list.length) {
         box.innerHTML = '<div class="text-[10px] text-slate-500 italic py-1">Nessun esborso configurato: default = 100% del CAPEX impianto alla data COD.</div>';
+        renderDealValueBreakdownTable();
         return;
     }
     const plant = (State.plants || []).find(p => p.id === pid);
@@ -10349,6 +11871,7 @@ window.renderCapexPaymentRows = function() {
             <button onclick="event.stopPropagation(); removeCapexPayment(${pm._i})" class="text-rose-400 hover:text-rose-300 font-bold px-1" title="Rimuovi esborso"><i class="fa-solid fa-xmark"></i></button>
         </div>`;
     }).join('');
+    renderDealValueBreakdownTable();
 };
 
 // CF11: edit in linea — clic su una riga → popola l'editor (modificabili solo Data e Importo)
@@ -10365,7 +11888,13 @@ window.selectCapexPayment = function(idx) {
     if (dateEl) dateEl.value = row.date || '';
     if (amountEl) amountEl.value = row.amount;
     if (labelEl) {
-        if ([...labelEl.options].some(o => o.value === (row.label || ''))) labelEl.value = row.label || '';
+        if (![...labelEl.options].some(o => o.value === (row.label || ''))) {
+            const opt = document.createElement('option');
+            opt.value = row.label || '';
+            opt.textContent = row.label || '';
+            labelEl.appendChild(opt);
+        }
+        labelEl.value = row.label || '';
         labelEl.disabled = true;
     }
     renderCapexPaymentRows();
@@ -10379,7 +11908,7 @@ window.cancelCapexPaymentEdit = function(silent) {
     if (amountEl) amountEl.value = '';
     if (labelEl) labelEl.disabled = false;
     if (!silent) renderCapexPaymentRows();
-    else updateCapexEditModeUI();
+    else { updateCapexEditModeUI(); updateCapexCategoryInfo(); }
 };
 function updateCapexEditModeUI() {
     const banner = document.getElementById('capex-edit-banner');
@@ -10400,7 +11929,7 @@ function updateCapexEditModeUI() {
     }
 }
 
-window.addCapexPayment = function() {
+window.addCapexPayment = async function() {
     const sel = document.getElementById('capex-plant-select');
     const dateEl = document.getElementById('capex-pay-date');
     const amountEl = document.getElementById('capex-pay-amount');
@@ -10412,20 +11941,35 @@ window.addCapexPayment = function() {
     if (!isFinite(amount) || amount <= 0) { showToast('Importo non valido.', 'warning'); return; }
     State.capexPayments = State.capexPayments || {};
     if (!State.capexPayments[sel.value]) State.capexPayments[sel.value] = [];
+    
     // Modalità modifica: aggiorna la riga selezionata (data + importo)
     const ed = State._capexEditing;
-    if (ed && ed.pid === sel.value && State.capexPayments[sel.value][ed.idx]) {
+    const isEdit = !!(ed && ed.pid === sel.value && State.capexPayments[sel.value][ed.idx]);
+    if (isEdit) {
         State.capexPayments[sel.value][ed.idx] = { ...State.capexPayments[sel.value][ed.idx], date, amount };
         cancelCapexPaymentEdit();
-        renderCapexPaymentRows();
-        showToast('Esborso aggiornato (non ancora salvato): clicca "Salva esborsi CAPEX" per registrarlo nel database e applicarlo ai calcoli.', 'info');
-        return;
+    } else {
+        State.capexPayments[sel.value].push({ date, amount, label: labelEl ? labelEl.value.trim().substring(0, 60) : '' });
+        if (dateEl) dateEl.value = '';
+        if (amountEl) amountEl.value = '';
     }
-    State.capexPayments[sel.value].push({ date, amount, label: labelEl ? labelEl.value.trim().substring(0, 60) : '' });
-    if (dateEl) dateEl.value = '';
-    if (amountEl) amountEl.value = '';
     renderCapexPaymentRows();
-    showToast('Esborso aggiunto (non ancora salvato): clicca "Salva esborsi CAPEX" per registrarlo nel database e applicarlo ai calcoli.', 'info');
+
+    // Salvataggio automatico in tempo reale (budget_row_realtime_save_rule)
+    if (canWrite() && supabaseClient) {
+        try {
+            await persistCapexPaymentsToDb(State.capexPayments || {});
+            State.capexPaymentsSaved = JSON.parse(JSON.stringify(State.capexPayments || {}));
+            updateCapexSaveIndicator();
+            showToast(isEdit ? 'Esborso aggiornato e salvato nel database.' : 'Esborso aggiunto e salvato nel database.', 'success');
+            triggerRecalculate();
+        } catch (err) {
+            showToast('Errore salvataggio esborso: ' + err.message, 'error');
+        }
+    } else {
+        showToast(isEdit ? 'Esborso aggiornato.' : 'Esborso aggiunto.', 'info');
+        triggerRecalculate();
+    }
 };
 
 // Persistenza su simulation_config (chiavi chunkate capexpay::<pid>::<i>)
@@ -10449,31 +11993,27 @@ window.removeCapexPayment = async function(idx) {
     const pid = sel ? sel.value : null;
     const list = (pid && State.capexPayments && State.capexPayments[pid]) || null;
     if (!list || !list[idx]) return;
-    const row = list[idx];
     if (State._capexEditing && State._capexEditing.pid === pid) {
         if (State._capexEditing.idx === idx) State._capexEditing = null;
         else if (State._capexEditing.idx > idx) State._capexEditing.idx--;
     }
     list.splice(idx, 1);
     renderCapexPaymentRows();
-    // La riga era già salvata nel DB? → persisti la rimozione e ricalcola in tempo reale
-    const savedList = (((State.capexPaymentsSaved || {})[pid]) || []);
-    const sIdx = savedList.findIndex(r => JSON.stringify(r) === JSON.stringify(row));
-    if (sIdx >= 0 && canWrite() && supabaseClient) {
-        savedList.splice(sIdx, 1);
-        const newSaved = { ...(State.capexPaymentsSaved || {}) };
-        if (savedList.length) newSaved[pid] = savedList; else delete newSaved[pid];
+
+    // Salvataggio automatico in tempo reale della rimozione
+    if (canWrite() && supabaseClient) {
         try {
-            await persistCapexPaymentsToDb(newSaved);
-            State.capexPaymentsSaved = newSaved;
+            await persistCapexPaymentsToDb(State.capexPayments || {});
+            State.capexPaymentsSaved = JSON.parse(JSON.stringify(State.capexPayments || {}));
             updateCapexSaveIndicator();
-            showToast('Esborso (salvato) rimosso dal database: ricalcolo in corso...', 'success');
+            showToast('Esborso rimosso e salvato.', 'success');
             triggerRecalculate();
         } catch (err) {
             showToast('Errore rimozione esborso: ' + err.message, 'error');
         }
     } else {
-        showToast('Esborso non salvato rimosso.', 'info');
+        showToast('Esborso rimosso.', 'info');
+        triggerRecalculate();
     }
 };
 
@@ -10620,7 +12160,7 @@ window.cancelOpexEventEdit = function(silent) {
     if (ruleEl) ruleEl.value = 'sempre';
     if (labelEl) labelEl.disabled = false;
     if (!silent) renderOpexEventRows();
-    else updateOpexEditModeUI();
+    else { updateOpexEditModeUI(); updateOpexCategoryInfo(); }
 };
 function updateOpexEditModeUI() {
     const banner = document.getElementById('opexev-edit-banner');
@@ -10641,7 +12181,7 @@ function updateOpexEditModeUI() {
     }
 }
 
-window.addOpexEvent = function() {
+window.addOpexEvent = async function() {
     const sel = document.getElementById('opexev-plant-select');
     const monthEl = document.getElementById('opexev-month');
     const amountEl = document.getElementById('opexev-amount');
@@ -10656,21 +12196,36 @@ window.addOpexEvent = function() {
     if (!isFinite(amount) || amount <= 0) { showToast('Importo non valido.', 'warning'); return; }
     State.opexEvents = State.opexEvents || {};
     if (!State.opexEvents[sel.value]) State.opexEvents[sel.value] = [];
+    
     // Modalità modifica: aggiorna la riga selezionata (mese + importo + regola)
     const ed = State._opexEditing;
-    if (ed && ed.pid === sel.value && State.opexEvents[sel.value][ed.idx]) {
+    const isEdit = !!(ed && ed.pid === sel.value && State.opexEvents[sel.value][ed.idx]);
+    if (isEdit) {
         State.opexEvents[sel.value][ed.idx] = { ...State.opexEvents[sel.value][ed.idx], month, amount, rule };
         cancelOpexEventEdit();
-        renderOpexEventRows();
-        showToast('Evento OPEX aggiornato (non ancora salvato): clicca "Salva eventi OPEX" per registrarlo nel database e applicarlo ai calcoli.', 'info');
-        return;
+    } else {
+        State.opexEvents[sel.value].push({ month, amount, label: labelEl ? labelEl.value.trim().substring(0, 60) : '', rule });
+        if (amountEl) amountEl.value = '';
+        if (monthEl) monthEl.value = '';
+        if (ruleEl) ruleEl.value = 'sempre';
     }
-    State.opexEvents[sel.value].push({ month, amount, label: labelEl ? labelEl.value.trim().substring(0, 60) : '', rule });
-    if (amountEl) amountEl.value = '';
-    if (monthEl) monthEl.value = '';
-    if (ruleEl) ruleEl.value = 'sempre';
     renderOpexEventRows();
-    showToast('Evento OPEX aggiunto (non ancora salvato): clicca "Salva eventi OPEX" per registrarlo nel database e applicarlo ai calcoli.', 'info');
+
+    // Salvataggio automatico in tempo reale (budget_row_realtime_save_rule)
+    if (canWrite() && supabaseClient) {
+        try {
+            await persistOpexEventsToDb(State.opexEvents || {});
+            State.opexEventsSaved = JSON.parse(JSON.stringify(State.opexEvents || {}));
+            updateOpexSaveIndicator();
+            showToast(isEdit ? 'Evento OPEX aggiornato e salvato nel database.' : 'Evento OPEX aggiunto e salvato nel database.', 'success');
+            triggerRecalculate();
+        } catch (err) {
+            showToast('Errore salvataggio evento OPEX: ' + err.message, 'error');
+        }
+    } else {
+        showToast(isEdit ? 'Evento OPEX aggiornato.' : 'Evento OPEX aggiunto.', 'info');
+        triggerRecalculate();
+    }
 };
 
 // Persistenza su simulation_config (chiavi chunkate opexev::<pid>::<i>)
@@ -10694,31 +12249,27 @@ window.removeOpexEvent = async function(idx) {
     const pid = sel ? sel.value : null;
     const list = (pid && State.opexEvents && State.opexEvents[pid]) || null;
     if (!list || !list[idx]) return;
-    const row = list[idx];
     if (State._opexEditing && State._opexEditing.pid === pid) {
         if (State._opexEditing.idx === idx) State._opexEditing = null;
         else if (State._opexEditing.idx > idx) State._opexEditing.idx--;
     }
     list.splice(idx, 1);
     renderOpexEventRows();
-    // La riga era già salvata nel DB? → persisti la rimozione e ricalcola in tempo reale
-    const savedList = (((State.opexEventsSaved || {})[pid]) || []);
-    const sIdx = savedList.findIndex(r => JSON.stringify(r) === JSON.stringify(row));
-    if (sIdx >= 0 && canWrite() && supabaseClient) {
-        savedList.splice(sIdx, 1);
-        const newSaved = { ...(State.opexEventsSaved || {}) };
-        if (savedList.length) newSaved[pid] = savedList; else delete newSaved[pid];
+
+    // Salvataggio automatico in tempo reale della rimozione
+    if (canWrite() && supabaseClient) {
         try {
-            await persistOpexEventsToDb(newSaved);
-            State.opexEventsSaved = newSaved;
+            await persistOpexEventsToDb(State.opexEvents || {});
+            State.opexEventsSaved = JSON.parse(JSON.stringify(State.opexEvents || {}));
             updateOpexSaveIndicator();
-            showToast('Evento OPEX (salvato) rimosso dal database: ricalcolo in corso...', 'success');
+            showToast('Evento OPEX rimosso e salvato.', 'success');
             triggerRecalculate();
         } catch (err) {
             showToast('Errore rimozione evento OPEX: ' + err.message, 'error');
         }
     } else {
-        showToast('Evento OPEX non salvato rimosso.', 'info');
+        showToast('Evento OPEX rimosso.', 'info');
+        triggerRecalculate();
     }
 };
 
@@ -10809,8 +12360,25 @@ window.saveCustomCosts = async function(silent) {
     const plant = State.plants.find(p => p.id === editingPlantId);
     if (!plant) { showToast('Apri un impianto in modifica.', 'warning'); return; }
     if (!supabaseClient) { showToast('Database non connesso.', 'warning'); return; }
+
+    // Snapshot existing rows from DB for rollback in case insert fails
+    let previousRows = [];
     try {
-        await supabaseClient.from('plant_custom_costs').delete().eq('plant_id', plant.id);
+        const { data: prevData, error: prevErr } = await supabaseClient
+            .from('plant_custom_costs')
+            .select('*')
+            .eq('plant_id', plant.id);
+        if (!prevErr && prevData) {
+            previousRows = prevData;
+        }
+    } catch (e) {
+        console.warn('Impossibile ottenere snapshot precedente di plant_custom_costs:', e);
+    }
+
+    try {
+        const { error: delErr } = await supabaseClient.from('plant_custom_costs').delete().eq('plant_id', plant.id);
+        if (delErr) throw delErr;
+
         const rows = (plant.customCosts || []).map(r => ({
             plant_id: plant.id,
             cost_type: r.cost_type,
@@ -10821,13 +12389,26 @@ window.saveCustomCosts = async function(silent) {
             user_id: currentUserId()
         }));
         if (rows.length) {
-            const { error } = await supabaseClient.from('plant_custom_costs').insert(rows);
-            if (error) throw error;
+            const { error: insErr } = await supabaseClient.from('plant_custom_costs').insert(rows);
+            if (insErr) {
+                // Rollback: restore previous rows
+                if (previousRows.length > 0) {
+                    try {
+                        await supabaseClient.from('plant_custom_costs').insert(previousRows);
+                    } catch (rbErr) {
+                        console.error('Rollback fallito per plant_custom_costs:', rbErr);
+                    }
+                }
+                throw insErr;
+            }
         }
         const { data } = await supabaseClient.from('plant_custom_costs').select('*').eq('plant_id', plant.id);
         plant.customCosts = data || [];
         applyCustomCostTotals(plant);
         renderCustomCostsUI();
+        if (typeof updateCapexPayLabelOptions === 'function') updateCapexPayLabelOptions();
+        if (typeof renderCapexPaymentRows === 'function') renderCapexPaymentRows();
+        if (typeof renderDealValueBreakdownTable === 'function') renderDealValueBreakdownTable();
         Audit.log('customcosts.save', `${plant.name}: ${rows.length} voci`);
         if (!silent) showToast('Voci CAPEX/OPEX personalizzate salvate nel database.', 'success');
     } catch (err) {
@@ -10925,6 +12506,7 @@ window.generateReport = async function(reportType) {
             case 'relazione_tecnica':       _repRelazioneTecnica(doc); filename = 'Relazione_Tecnica.pdf'; break;
             case 'conto_economico':         doc = _repContoEconomico(doc); filename = 'Conto_Economico_SPV.pdf'; break;
             case 'rendiconto_finanziario':  doc = _repRendicontoFinanziario(doc); filename = 'Rendiconto_Finanziario_SPV.pdf'; break;
+            case 'bilancio_holding':        doc = _repBilancioHolding(doc); filename = 'Bilancio_Rendiconto_Holding.pdf'; break;
             case 'piano_ammortamento':      doc = _repPianoAmmortamento(doc); filename = 'Piano_Ammortamento_Debito.pdf'; break;
             case 'struttura_finanziaria':   _repStrutturaFinanziaria(doc); filename = 'Struttura_Finanziaria.pdf'; break;
             case 'exit_valutazione':        _repExitValutazione(doc); filename = 'Exit_Valutazione.pdf'; break;
@@ -10976,10 +12558,12 @@ function _repExecutiveSummary(doc) {
         bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
         head: [['Indicatore', 'Valore', 'Soglia/Commento']],
         body: [
-            ['IRR Equity (HoldCo)', _fmtPct(r.calculatedIrr), 'Target sponsor ≥ 8%'],
+            ['Project IRR (Unlevered SPV)', _fmtPct(r.calculatedProjectIrr), 'Rendimento intrinseco progetto'],
+            ['Equity IRR (Levered SPV)', _fmtPct(r.calculatedSpvEquityIrr || r.calculatedIrr), 'Target equity ≥ 8%'],
             ['NPV @ Ke (' + _fmtPct(p.keVal * 100) + ')', _fmtE(r.holdcoNpv), 'Positivo = crea valore'],
-            ['MOIC (multiplo cash investito)', _fmtX(r.holdcoMoic), '≥ 1.5x tipicamente atteso'],
-            ['Payback Period', r.paybackPeriod, 'Anni a recupero capitale'],
+            ['MOIC (multiplo cash investito)', _fmtX(r.spvMoic || r.holdcoMoic), '≥ 1.5x tipicamente atteso'],
+            ['Payback Equity (Levered SPV)', r.paybackPeriod, 'Anni a recupero equity SPV'],
+            ['Payback Progetto (Unlevered SPV)', r.paybackPeriodUnlevered || r.paybackPeriod, 'Anni a recupero Capex progetto'],
             ['DSCR medio', _fmtX(r.avgDscr), 'Covenant bancario tipico ≥ 1.30x'],
             ['DSCR minimo', _fmtX(r.minDscr), 'Allarme se < 1.15x'],
             ['LCOE (energia solare)', _fmtE(r.calculatedLcoe) + '/MWh', 'Costo livellato FV'],
@@ -11000,7 +12584,7 @@ function _repExecutiveSummary(doc) {
     const peAmt = r.peAmount || 0;
     // Equity di costruzione SPV senza PD (debito di Holding) - coerente col worker
     const constructionEquity = Math.max(0, constructionCapex - seniorDebt - peAmt);
-    const sponsorLoan = constructionEquity * ((p.sociEquityPct || 0) / 100);
+    const sponsorLoan = (r.initialShareholderLoan !== undefined) ? r.initialShareholderLoan : (constructionEquity * ((p.sociEquityPct || 0) / 100));
     // equityAmount del worker è già al netto del prestito soci
     const sponsorEquity = Math.max(0, r.equityAmount || 0);
     doc.autoTable({
@@ -11058,7 +12642,7 @@ function _yearTable(doc, title, subtitle, rows, startY, extraOptions = {}) {
     let exitYear = (exitOption && exitOption !== 'none') ? parseInt(exitOption) : 20;
     if (isNaN(exitYear) || exitYear < 1) exitYear = 20;
 
-    const years = (m.years || []).slice(0, exitYear);
+    const years = (m.years || []).slice(0, exitYear + 1);
     const head = [['Voce', ...years.map(y => 'Anno ' + y)]];
     const body = rows.map(r => {
         const key = r.key;
@@ -11270,52 +12854,40 @@ function _repRendicontoFinanziario(doc) {
         { key: 'principalScheduled', label: '(-) Quota Capitale Senior Programmata', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'principalVoluntary', label: '(-) Cash Sweep Senior Volontario', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'spvFCFE', label: 'CASSA POST-DEBITO SENIOR (FCFE SPV)' },
-        { key: 'pdInterestPaid', label: '(-) Interessi Private Debt Pagati' },
-        { key: 'pdPrincipalPaid', label: '(-) Quota Capitale Private Debt' },
-        { key: 'peDividendPaid', label: '(-) Quota Dividendi/Preferred PE' },
+        { key: 'pdInterestPaid', label: '(-) Servizio Debito: Interessi Private Debt (HoldCo)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'pdPrincipalPaid', label: '(-) Servizio Debito: Quota Capitale Private Debt (HoldCo)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'peDividendPaid', label: '(-) Distribuzioni: Quota Dividendi / Preferred PE (HoldCo)', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'holdcoInterestReceived', label: '(-) Interessi Soci -> HoldCo', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'holdcoLoanRepaymentReceived', label: '(-) Rimborso Capitale Soci -> HoldCo', fmt: v => _fmtEFull(-Math.abs(v)) },
-        { key: 'spvLockedDividends', label: '  (+) Cassa SPV Vincolata Accumulata da Anni Precedenti' },
         { key: 'holdcoDividendReceived', label: '(-) Dividendi -> HoldCo (quota Sponsor)', fmt: v => _fmtEFull(-Math.abs(v)) },
-        { key: 'spvCashTrap', label: '(=) Cassa Residua SPV (Cash Trap)' }
+        { key: 'spvCashTrap', label: '(=) Flusso Netto SPV non distribuito (Cash Trap Annuo)' },
+        { key: 'spvLockedDividends', label: '  (+) Cassa SPV Vincolata a Inizio Anno' },
+        { key: 'spvCashTrapCumulative', label: '(=) Saldo Cassa Vincolata SPV (Cash Trap Cumulato a Fine Anno)' }
     ];
     y = _yearTable(doc, 'Rendiconto Finanziario', '', rows, y);
 
-    // D2: Cash flow mensile anni 1-5 (disponibilità di cassa)
+    // D2: Cash flow mensile analitico (disponibilità di cassa e fabbisogni 72 mesi)
     const mc = (window.State.results || {}).monthlyCashflow;
     if (mc && mc.months && mc.months.length > 0) {
         doc.addPage('a4', 'landscape');
-        _pdfHeader(doc, 'Rendiconto Finanziario SPV - CFADS & Waterfall', 'Report N. 03');
-        let ym = 30;
-        ym = _sectionTitleLS(doc, 'Cash Flow Mensile & Disponibilità di Cassa (Anni 1-5)', ym);
-        doc.autoTable({
-            startY: ym,
-            theme: 'striped',
-            headStyles: { fillColor: [15, 23, 42], textColor: [148, 163, 184], fontSize: 6, halign: 'right' },
-            bodyStyles: { fontSize: 5.5, textColor: [30, 41, 59] },
-            columnStyles: { 0: { cellWidth: 16, halign: 'left', fontStyle: 'bold' } },
-            head: [['Mese', 'Ricavi Tot.', 'OPEX', 'Imposte', 'Serv. Debito', 'Net Cashflow', 'Cassa Finale']],
-            body: mc.months.map((_, i) => [
-                mc.labels[i],
-                _fmtEFull(mc.revenueTotal[i]), _fmtEFull(mc.opex[i]), _fmtEFull(mc.taxes[i]),
-                _fmtEFull(mc.debtService[i]), _fmtEFull(mc.netCashflow[i]), _fmtEFull(mc.cashClosing[i])
-            ]),
-            didParseCell: (data) => {
-                if (data.section === 'body') {
-                    const i = data.row.index;
-                    if (data.column.index === 5 && mc.netCashflow[i] < 0) data.cell.styles.textColor = [185, 28, 50];
-                    if (data.column.index === 6 && mc.cashClosing[i] < 0) {
-                        data.cell.styles.textColor = [185, 28, 50];
-                        data.cell.styles.fontStyle = 'bold';
-                    }
-                }
-            }
-        });
-        const yEnd = doc.lastAutoTable.finalY + 6;
-        doc.setFontSize(7);
-        doc.setTextColor(71, 85, 105);
-        doc.text(`Cassa minima 60m: ${_fmtE(mc.minCashClosing)} (mese ${mc.minCashMonth})  -  Mesi con cassa negativa: ${mc.negativeMonths}`, 14, yEnd);
+        _pdfHeader(doc, 'Rendiconto Finanziario SPV - Cash Flow Mensile & Fabbisogni', 'Report N. 03');
+        _repCashFlowMensileInline(doc, 30);
     }
+    return doc;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// REPORT 3.5: BILANCIO & RENDICONTO FINANZIARIO HOLDING
+// ═══════════════════════════════════════════════════════════════════
+function _repBilancioHolding(doc) {
+    doc = _landscapeDoc();
+    _pdfHeader(doc, 'Conto Economico Civilistico Holding - HoldCo Level', 'Report N. 04');
+    let y = 30;
+    _repContoEconomicoHoldingInline(doc, y);
+
+    doc.addPage('a4', 'landscape');
+    _pdfHeader(doc, 'Rendiconto Finanziario Holding & Flusso Netto Investitore', 'Report N. 04');
+    _repRendicontoFinanziarioHoldingInline(doc, 30);
     return doc;
 }
 
@@ -11437,7 +13009,7 @@ function _repStrutturaFinanziaria(doc) {
     const peAmt = r.peAmount || 0;
     // Equity di costruzione SPV senza PD (debito di Holding) - coerente col worker
     const constructionEquity = Math.max(0, constructionCapex - seniorDebt - peAmt);
-    const sponsorLoan = constructionEquity * ((p.sociEquityPct || 0) / 100);
+    const sponsorLoan = (r.initialShareholderLoan !== undefined) ? r.initialShareholderLoan : (constructionEquity * ((p.sociEquityPct || 0) / 100));
     // equityAmount del worker è già al netto del prestito soci
     const sponsorEquity = Math.max(0, r.equityAmount || 0);
     const totalSources = seniorDebt + pdAmt + peAmt + sponsorLoan + sponsorEquity;
@@ -11476,7 +13048,7 @@ function _repStrutturaFinanziaria(doc) {
             ['Costi di Connessione alla rete', _fmtEFull(r.totalConnectionCapex || 0), _fmtPct(r.totalProjectCost ? r.totalConnectionCapex/r.totalProjectCost*100 : 0)],
             ['Acquisto Terreno', _fmtEFull(r.totalLandPurchaseCapex || 0), _fmtPct(r.totalProjectCost ? r.totalLandPurchaseCapex/r.totalProjectCost*100 : 0)],
             ['DDS Terreno (attualizzato)', _fmtEFull(r.totalLandDdsAttualizzatoCapex || 0), _fmtPct(r.totalProjectCost ? r.totalLandDdsAttualizzatoCapex/r.totalProjectCost*100 : 0)],
-            ['Costi di Sviluppo', _fmtEFull(r.totalDevelopmentCapex || 0), _fmtPct(r.totalProjectCost ? r.totalDevelopmentCapex/r.totalProjectCost*100 : 0)],
+            ['Costi di Compensazioni', _fmtEFull(r.totalDevelopmentCapex || 0), _fmtPct(r.totalProjectCost ? r.totalDevelopmentCapex/r.totalProjectCost*100 : 0)],
             ['Acquisizione SPV', _fmtEFull(r.totalSpvAcquisitionCapex || 0), _fmtPct(r.totalProjectCost ? r.totalSpvAcquisitionCapex/r.totalProjectCost*100 : 0)],
             ...((r.totalCustomCapex || 0) > 0 ? [['Voci CAPEX personalizzate', _fmtEFull(r.totalCustomCapex), _fmtPct(r.totalProjectCost ? r.totalCustomCapex/r.totalProjectCost*100 : 0)]] : []),
             ['TOTALE PROGETTO', _fmtEFull(r.totalProjectCost || 0), '100,00%']
@@ -11497,7 +13069,8 @@ function _repStrutturaFinanziaria(doc) {
     const capexOnly = (r.totalProjectCost || 0) - spvAcq;
     const effLevCapex = capexOnly ? (seniorDebt / capexOnly) : 0;
     
-    const equityPct = r.totalProjectCost ? (r.equityAmount / r.totalProjectCost * 100) : 0;
+    const totalSponsorFunds = (r.initialShareholderLoan !== undefined ? r.initialShareholderLoan : 0) + (r.equityAmount || 0);
+    const equityPct = r.totalProjectCost ? (totalSponsorFunds / r.totalProjectCost * 100) : 0;
     
     doc.autoTable({
         startY: y,
@@ -11510,7 +13083,9 @@ function _repStrutturaFinanziaria(doc) {
             ['Leva Finanziaria Target (Input)', _fmtPct(targetLeveragePct * 100)],
             ['Leva Finanziaria Effettiva (su Intero EV)', _fmtPct(effLevEV * 100)],
             ['Leva Finanziaria Effettiva (su EV Ex SPV)', _fmtPct(effLevCapex * 100)],
-            ['Quota equity Sponsor su EV Totale', _fmtPct(equityPct)],
+            ['Quota Mezzi Propri Sponsor su EV Totale', _fmtPct(equityPct)],
+            ...((r.initialShareholderLoan || 0) > 0 ? [['  di cui: Finanziamento Soci', _fmtPct(r.totalProjectCost ? ((r.initialShareholderLoan || 0) / r.totalProjectCost * 100) : 0)]] : []),
+            ...((r.equityAmount || 0) > 0 ? [['  di cui: Capitale Sociale (Pure Equity)', _fmtPct(r.totalProjectCost ? ((r.equityAmount || 0) / r.totalProjectCost * 100) : 0)]] : []),
             ['Tasso debito senior', _fmtPct((p.interestRate || 0) * 100)],
             ['Durata mutuo senior', (p.loanTerm || 0) + ' anni'],
             ['Cash Sweep', p.sweepType === 'none' ? 'Nessuno' : (p.sweepType === 'pct_cfads' ? p.sweepValue + '% CFADS' : '€' + (p.sweepValue || 0) + '/anno')],
@@ -11566,6 +13141,7 @@ function _repExitValutazione(doc) {
     y = _ensureSpace(doc, 50, y);
     y = _sectionTitle(doc, '2. Rendimenti Realizzati Sponsor', y);
     const moic = r.holdcoMoic || 0;
+    const totalSponsorFunds = (r.initialShareholderLoan !== undefined ? r.initialShareholderLoan : 0) + (r.equityAmount || 0);
     doc.autoTable({
         startY: y,
         theme: 'grid',
@@ -11573,7 +13149,9 @@ function _repExitValutazione(doc) {
         bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
         head: [['Metrica', 'Valore']],
         body: [
-            ['Equity investito Sponsor', _fmtEFull(r.equityAmount || 0)],
+            ['Mezzi Propri investiti Sponsor (Equity + Fin. Soci)', _fmtEFull(totalSponsorFunds)],
+            ...((r.initialShareholderLoan || 0) > 0 ? [['  di cui: Finanziamento Soci', _fmtEFull(r.initialShareholderLoan || 0)]] : []),
+            ...((r.equityAmount || 0) > 0 ? [['  di cui: Capitale Sociale (Pure Equity)', _fmtEFull(r.equityAmount || 0)]] : []),
             ['Totale FCFE HoldCo cumulato (fino a exit)', _fmtEFull((m.holdcoFCFE || []).slice(0, exitYear).reduce((a, b) => a + (b || 0), 0))],
             ['Net Proceeds Exit', _fmtEFull(netProceeds)],
             ['MOIC (Multiplo su investito)', _fmtX(moic)],
@@ -11738,7 +13316,18 @@ function _repFullDueDiligence(doc) {
     doc.setFontSize(10);
     doc.text('Indice del Report:', 14, y);
     y += 6;
-    const toc = ['Sezione 1 - Executive Summary (KPI & commento)', 'Sezione 2 - Relazione Tecnica & Descrittiva', 'Sezione 3 - Struttura Finanziaria & Fonti/Impieghi', 'Sezione 4 - Conto Economico SPV (20 anni, landscape)', 'Sezione 5 - Rendiconto Finanziario SPV (landscape)', 'Sezione 6 - Piano di Ammortamento (landscape)', 'Sezione 7 - Exit & Valutazione'];
+    const toc = [
+        'Sezione 1 - Executive Summary (KPI & commento)',
+        'Sezione 2 - Relazione Tecnica & Descrittiva',
+        'Sezione 3 - Struttura Finanziaria & Fonti/Impieghi',
+        'Sezione 4 - Conto Economico SPV (20 anni, landscape)',
+        'Sezione 5 - Rendiconto Finanziario SPV (landscape)',
+        'Sezione 6 - Conto Economico Holding (HoldCo Level, landscape)',
+        'Sezione 7 - Rendiconto Finanziario Holding (HoldCo Level, landscape)',
+        'Sezione 8 - Piano di Ammortamento (landscape)',
+        'Sezione 9 - Exit & Valutazione (portrait)',
+        'Sezione 10 - Cash Flow Mensile & Fabbisogno di Cassa (landscape)'
+    ];
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     toc.forEach(line => { doc.text('•  ' + line, 16, y); y += 5; });
@@ -11755,7 +13344,7 @@ function _repFullDueDiligence(doc) {
     doc.addPage();
     _repStrutturaFinanziaria(doc);
 
-    // Sezioni 4, 5, 6 (landscape): aggiungiamo pagine in orientation landscape
+    // Sezioni 4, 5, 6, 7, 8 (landscape): aggiungiamo pagine in orientation landscape
     // jsPDF: addPage accetta formato/orientamento; cambiamo poi il layout page corrente.
     doc.addPage('a4', 'landscape');
     _pdfHeader(doc, 'Sezione 4 - Conto Economico SPV', 'Due Diligence N. 08');
@@ -11766,13 +13355,29 @@ function _repFullDueDiligence(doc) {
     _repRendicontoFinanziarioInline(doc, 30);
 
     doc.addPage('a4', 'landscape');
-    _pdfHeader(doc, 'Sezione 6 - Piano di Ammortamento', 'Due Diligence N. 08');
+    _pdfHeader(doc, 'Sezione 6 - Conto Economico Holding', 'Due Diligence N. 08');
+    _repContoEconomicoHoldingInline(doc, 30);
+
+    doc.addPage('a4', 'landscape');
+    _pdfHeader(doc, 'Sezione 7 - Rendiconto Finanziario Holding', 'Due Diligence N. 08');
+    _repRendicontoFinanziarioHoldingInline(doc, 30);
+
+    doc.addPage('a4', 'landscape');
+    _pdfHeader(doc, 'Sezione 8 - Piano di Ammortamento', 'Due Diligence N. 08');
     _repPianoAmmortamentoInline(doc, 30);
 
-    // Sezione 7 (portrait)
+    // Sezione 9 (portrait)
     doc.addPage('a4', 'portrait');
-    _pdfHeader(doc, 'Sezione 7 - Exit & Valutazione', 'Due Diligence N. 08');
+    _pdfHeader(doc, 'Sezione 9 - Exit & Valutazione', 'Due Diligence N. 08');
     _repExitValutazione(doc);
+
+    // Sezione 10 (landscape) - Cash Flow Mensile & Fabbisogno di Cassa
+    const mc = (window.State.results || {}).monthlyCashflow;
+    if (mc && mc.months && mc.months.length > 0) {
+        doc.addPage('a4', 'landscape');
+        _pdfHeader(doc, 'Sezione 10 - Cash Flow Mensile & Fabbisogno di Cassa', 'Due Diligence N. 08');
+        _repCashFlowMensileInline(doc, 30);
+    }
 }
 
 // ── Versioni inline (rendering sul doc corrente senza ricreare header/copertina) ──
@@ -11825,16 +13430,65 @@ function _repRendicontoFinanziarioInline(doc, startY) {
         { key: 'principalScheduled', label: '(-) Quota Capitale Senior Programmata', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'principalVoluntary', label: '(-) Cash Sweep Senior Volontario', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'spvFCFE', label: 'CASSA POST-DEBITO SENIOR (FCFE SPV)' },
-        { key: 'pdInterestPaid', label: '(-) Interessi Private Debt Pagati' },
-        { key: 'pdPrincipalPaid', label: '(-) Quota Capitale Private Debt' },
-        { key: 'peDividendPaid', label: '(-) Quota Dividendi/Preferred PE' },
+        { key: 'pdInterestPaid', label: '(-) Servizio Debito: Interessi Private Debt (HoldCo)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'pdPrincipalPaid', label: '(-) Servizio Debito: Quota Capitale Private Debt (HoldCo)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'peDividendPaid', label: '(-) Distribuzioni: Quota Dividendi / Preferred PE (HoldCo)', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'holdcoInterestReceived', label: '(-) Interessi Soci -> HoldCo', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'holdcoLoanRepaymentReceived', label: '(-) Rimborso Capitale Soci -> HoldCo', fmt: v => _fmtEFull(-Math.abs(v)) },
-        { key: 'spvLockedDividends', label: '  (+) Cassa SPV Vincolata Accumulata da Anni Precedenti' },
         { key: 'holdcoDividendReceived', label: '(-) Dividendi -> HoldCo (quota Sponsor)', fmt: v => _fmtEFull(-Math.abs(v)) },
-        { key: 'spvCashTrap', label: '(=) Cassa Residua SPV (Cash Trap)' }
+        { key: 'spvCashTrap', label: '(=) Flusso Netto SPV non distribuito (Cash Trap Annuo)' },
+        { key: 'spvLockedDividends', label: '  (+) Cassa SPV Vincolata a Inizio Anno' },
+        { key: 'spvCashTrapCumulative', label: '(=) Saldo Cassa Vincolata SPV (Cash Trap Cumulato a Fine Anno)' }
     ];
     return _yearTable(doc, 'Rendiconto Finanziario', '', rows, startY);
+}
+function _repContoEconomicoHoldingInline(doc, startY) {
+    const { p } = _ctx();
+    const rows = [
+        { key: 'opexAssetManagement', label: '  (+) Ricavi per Servizi: Gestione Amministrativa & Asset Management a SPV' },
+        { key: 'holdcoProductionValue', label: '(=) TOTALE VALORE DELLA PRODUZIONE (A)' },
+        { key: 'holdcoOpex', label: '  (-) Spese Generali e Costi di Funzionamento Holding (OPEX)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'holdcoEarnoutPaid', label: '  (-) Oneri Diversi di Gestione: Quota Earn-Out Holding', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'holdcoProductionCosts', label: '(=) TOTALE COSTI DELLA PRODUZIONE (B)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'holdcoOperatingEbit', label: '(=) DIFFERENZA TRA VALORE E COSTI DELLA PRODUZIONE (A - B) [EBIT HOLDCO]' },
+        { key: 'holdcoDividendReceived', label: '  (+) Proventi da Partecipazioni: Dividendi SPV da Utili (Art. 2433 c.c.)' },
+        { key: 'holdcoInterestReceived', label: '  (+) Altri Proventi Finanziari: Interessi Attivi Finanziamento Soci SPV' },
+        ...(p && p.pdEnabled ? [
+            { key: 'pdInterestPaid', label: '  (-) Interessi Passivi e Oneri Finanziari: Private Debt Holding', fmt: v => _fmtEFull(-Math.abs(v)) }
+        ] : []),
+        { key: 'holdcoFinancialNet', label: '(=) TOTALE PROVENTI E ONERI FINANZIARI (C)' },
+        { key: 'holdcoEbt', label: '(=) RISULTATO PRIMA DELLE IMPOSTE (EBT HOLDCO) [ (A - B) + C ]' },
+        { key: 'holdcoIresTaxPaid', label: '  (-) Imposta IRES HoldCo (24% su dividendi PEX e interessi netti)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'holdcoIrapTaxPaid', label: '  (-) Imposta IRAP HoldCo (3,9% su Valore Produzione Netta)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'holdcoTaxTotal', label: '(=) TOTALE IMPOSTE SUL REDDITO DELL\'ESERCIZIO (20)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'holdcoNetProfit', label: '(=) 21) UTILE (PERDITA) DELL\'ESERCIZIO - UTILE NETTO CIVILISTICO HOLDING' }
+    ];
+    return _yearTable(doc, 'Conto Economico Holding', '', rows, startY);
+}
+function _repRendicontoFinanziarioHoldingInline(doc, startY) {
+    const { p } = _ctx();
+    const rows = [
+        { key: 'holdcoNetProfit', label: '-> Utile Netto Civilistico Holding (da Sez. C)' },
+        { key: 'holdcoLoanRepaymentReceived', label: '(+) Incassi Patrimoniali: Rimborso Quota Capitale Soci da SPV' },
+        { key: 'holdcoCapitalReserveReceived', label: '(+) Incassi Patrimoniali: Restituzione Riserve di Capitale SPV' },
+        { key: 'holdcoOperatingCashflow', label: '(=) CASSA GENERATA DALLA GESTIONE ORDINARIA HOLDING' },
+        ...(p && p.pdEnabled ? [
+            { key: 'pdPrincipalPaid', label: '(-) Quota Capitale Private Debt Holding', fmt: v => _fmtEFull(-Math.abs(v)) }
+        ] : []),
+        { key: 'exitEnterpriseValue', label: '  (+) Enterprise Value di Exit' },
+        { key: 'exitDebtPayoff', label: '  (-) Rimborso Debito Residuo Mutuo Bancario', fmt: v => _fmtEFull(-Math.abs(v)) },
+        ...(p && p.peEnabled ? [{ key: 'peExitShare', label: '  (-) Quota Liquidazione Private Equity', fmt: v => _fmtEFull(-Math.abs(v)) }] : []),
+        ...(p && p.afEnabled ? [{ key: 'afExitCost', label: '  (-) Costo Liquidazione Altra Forma', fmt: v => _fmtEFull(-Math.abs(v)) }] : []),
+        { key: 'exitPexTaxRow', label: '  (-) Imposte PEX su Plusvalenza Exit', fmt: v => _fmtEFull(-Math.abs(v)) },
+        ...(p && p.pdEnabled ? [
+            { key: 'pdBulletPayoff', label: '  (-) Payoff Private Debt a Exit', fmt: v => _fmtEFull(-Math.abs(v)) },
+            { key: 'exitLimitedLiability', label: '  (+) Limited Liability Holding / Debt Forgiveness PD' }
+        ] : []),
+        { key: 'holdcoFCFE', label: '(=) FCFE - FLUSSO NETTO INVESTITORE (SPONSOR)' },
+        { key: 'holdcoFCFECumulated', label: 'FCFE CUMULATO INVESTITORE' },
+        { key: 'holdcoInflowTotal', label: '(=) Totale Liquidità Trasferita da SPV a Holding' }
+    ];
+    return _yearTable(doc, 'Rendiconto Finanziario Holding', '', rows, startY);
 }
 function _repPianoAmmortamentoInline(doc, startY) {
     const { d, p } = _ctx();
@@ -11902,6 +13556,137 @@ function _repPianoAmmortamentoInline(doc, startY) {
         });
     }
     return y;
+}
+
+// ── Cash Flow Mensile Analitico & Fabbisogni (Landscape, 11 colonne) ──
+function _repCashFlowMensileInline(doc, startY) {
+    const mc = (window.State.results || {}).monthlyCashflow;
+    if (!mc || !mc.months || mc.months.length === 0) return startY;
+    const isDated = mc.mode === 'dated';
+    let ym = startY;
+    const titleTxt = isDated
+        ? `8. CASH FLOW MENSILE ANALITICO & DISPONIBILITÀ DI CASSA (ANNO 0 + ANNI 1-5 - ${mc.months.length} MESI)`
+        : `8. CASH FLOW MENSILE & DISPONIBILITÀ DI CASSA (ANNI 1-5 - ${mc.months.length} MESI)`;
+    ym = _sectionTitleLS(doc, titleTxt, ym);
+
+    const anchorTxt = mc.anchorYear ? ` · Àncora temporale: ${mc.anchorYear}` : '';
+    const vatTxt = mc.vatQuarterlyRefund ? ' · Regime IVA: Liquidazione periodica con Modello IVA TR trimestrale' : '';
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Tutti i valori in Euro (€). Uscite con segno negativo, entrate/funding con segno positivo.${anchorTxt}${vatTxt}`, 12, ym);
+    ym += 4;
+
+    doc.autoTable({
+        startY: ym,
+        theme: 'striped',
+        headStyles: { fillColor: [15, 23, 42], textColor: [226, 232, 240], fontSize: 5.5, halign: 'right', cellPadding: 1 },
+        bodyStyles: { fontSize: 5, textColor: [30, 41, 59], cellPadding: 0.9 },
+        columnStyles: {
+            0: { cellWidth: 20, halign: 'left', fontStyle: 'bold' },
+            1: { cellWidth: 23, halign: 'right' },
+            2: { cellWidth: 23, halign: 'right' },
+            3: { cellWidth: 21, halign: 'right' },
+            4: { cellWidth: 21, halign: 'right' },
+            5: { cellWidth: 23, halign: 'right' },
+            6: { cellWidth: 24, halign: 'right' },
+            7: { cellWidth: 24, halign: 'right' },
+            8: { cellWidth: 21, halign: 'right' },
+            9: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
+            10: { cellWidth: 26, halign: 'right', fontStyle: 'bold' }
+        },
+        head: [[
+            'Mese / Anno', 'Ricavi Mat.', 'Ricavi Inc.', 'OPEX', 'Imposte',
+            'Serv. Debito', 'CAPEX Datati', 'Funding', 'IVA CF', 'Net Cashflow', 'Cassa Funding'
+        ]],
+        body: mc.months.map((_, i) => {
+            const revAccrued = (mc.revenueAccrued && mc.revenueAccrued[i] !== undefined) ? mc.revenueAccrued[i] : (mc.revenueTotal ? mc.revenueTotal[i] : 0);
+            const revCollected = mc.revenueTotal ? mc.revenueTotal[i] : 0;
+            const opexVal = mc.opex ? mc.opex[i] : 0;
+            const taxesVal = mc.taxes ? mc.taxes[i] : 0;
+            const debtVal = mc.debtService ? mc.debtService[i] : 0;
+            const capexVal = mc.capexOutflow ? mc.capexOutflow[i] : 0;
+            const fundVal = (mc.fundingInflow && mc.fundingInflow[i]) ? mc.fundingInflow[i] : 0;
+            const vatVal = (mc.vatCashFlow && mc.vatCashFlow[i]) ? mc.vatCashFlow[i] : 0;
+            const netVal = mc.netCashflow ? mc.netCashflow[i] : 0;
+            const closeFunded = (mc.fundedCashClosing && mc.fundedCashClosing[i] !== undefined) ? mc.fundedCashClosing[i] : (mc.cashClosing ? mc.cashClosing[i] : 0);
+
+            return [
+                mc.labels ? mc.labels[i] : `Mese ${i + 1}`,
+                _fmtEFull(revAccrued),
+                _fmtEFull(revCollected),
+                _fmtEFull(-Math.abs(opexVal)),
+                _fmtEFull(-Math.abs(taxesVal)),
+                _fmtEFull(-Math.abs(debtVal)),
+                _fmtEFull(-Math.abs(capexVal)),
+                _fmtEFull(fundVal),
+                _fmtEFull(vatVal),
+                _fmtEFull(netVal),
+                _fmtEFull(closeFunded)
+            ];
+        }),
+        didParseCell: (data) => {
+            if (data.section === 'body') {
+                const i = data.row.index;
+                const netVal = mc.netCashflow ? mc.netCashflow[i] : 0;
+                const closeFunded = (mc.fundedCashClosing && mc.fundedCashClosing[i] !== undefined) ? mc.fundedCashClosing[i] : (mc.cashClosing ? mc.cashClosing[i] : 0);
+                const fundVal = (mc.fundingInflow && mc.fundingInflow[i]) ? mc.fundingInflow[i] : 0;
+                const capexVal = mc.capexOutflow ? mc.capexOutflow[i] : 0;
+
+                // Colonna 6: CAPEX datati
+                if (data.column.index === 6 && capexVal > 0) {
+                    data.cell.styles.textColor = [194, 65, 12]; // Orange 700
+                }
+                // Colonna 7: Funding
+                if (data.column.index === 7 && fundVal > 0) {
+                    data.cell.styles.textColor = [67, 56, 202]; // Indigo 700
+                    data.cell.styles.fontStyle = 'bold';
+                }
+                // Colonna 9: Net Cashflow
+                if (data.column.index === 9) {
+                    data.cell.styles.textColor = netVal < 0 ? [185, 28, 50] : [4, 120, 87];
+                }
+                // Colonna 10: Cassa con Funding
+                if (data.column.index === 10) {
+                    if (closeFunded < 0) {
+                        data.cell.styles.textColor = [185, 28, 50];
+                        data.cell.styles.fillColor = [254, 242, 242]; // Light red
+                    } else {
+                        data.cell.styles.textColor = [3, 105, 161]; // Sky 700
+                    }
+                }
+            }
+        }
+    });
+
+    let yEnd = doc.lastAutoTable.finalY + 4;
+    yEnd = _ensureSpaceLS(doc, 22, yEnd);
+
+    // Box KPI Due Diligence in calce
+    doc.setFillColor(241, 245, 249);
+    doc.roundedRect(10, yEnd, doc.internal.pageSize.getWidth() - 20, 18, 1.5, 1.5, 'F');
+    doc.setDrawColor(203, 213, 225);
+    doc.roundedRect(10, yEnd, doc.internal.pageSize.getWidth() - 20, 18, 1.5, 1.5, 'S');
+
+    doc.setFontSize(6.5);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.text('SINTESI INDICATORI BANCARI & LIQUIDITÀ (DUE DILIGENCE)', 13, yEnd + 4.5);
+
+    const fMin = (mc.fundedMinCashClosing !== undefined ? mc.fundedMinCashClosing : mc.minCashClosing) || 0;
+    const xirrTxt = (mc.datedXirr !== undefined && mc.datedXirr !== 0) ? `${fmtDec(mc.datedXirr, 2)}%` : 'N/A';
+    const vatCreditTxt = _fmtE(mc.vatMaxCredit || 0);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(51, 65, 85);
+    const kpiL1 = `• Cassa Minima con Funding: ${_fmtE(fMin)} (mese: ${mc.fundedMinMonth || '—'})   |   • Fabbisogno Lordo Massimo: ${_fmtE(mc.minCashClosing || 0)} (mese: ${mc.minCashMonth || '—'})   |   • Mesi con Cassa Negativa: ${mc.negativeMonths || 0}`;
+    const kpiL2 = `• XIRR Datato Equity HoldCo: ${xirrTxt}   |   • Credito IVA di Picco: ${vatCreditTxt}   |   • Effetto Netto IVA: ${_fmtE(mc.vatNetCumulative || 0)}   |   • Budget CAPEX Residuo: ${_fmtE(mc.capexResidual || 0)}`;
+
+    doc.text(kpiL1, 13, yEnd + 9.5);
+    doc.text(kpiL2, 13, yEnd + 14.5);
+
+    return yEnd + 22;
 }
 
 // ── Helper: merge di un secondo doc PDF nel principale (legacy placeholder, non usato) ──

@@ -71,6 +71,28 @@ function codMonthActiveFraction(cod, calYear, m) {
     const dim = codDaysInMonth(calYear, m);
     return (dim - cod.d + 1) / dim;
 }
+// Intervallo orario esatto [hStart, hEnd) in cui l'impianto è in esercizio (CF3 - no pro-die)
+function getPlantActiveHourRange(cod, calYear) {
+    if (!cod || calYear === null || calYear === undefined) {
+        return { hStart: 0, hEnd: 8760, isActive: true, isFullYear: true };
+    }
+    if (calYear < cod.y) {
+        return { hStart: 8760, hEnd: 8760, isActive: false, isFullYear: false };
+    }
+    if (calYear > cod.y) {
+        return { hStart: 0, hEnd: 8760, isActive: true, isFullYear: true };
+    }
+    // calYear === cod.y: COD cade nell'anno di calendario corrente
+    const m = Math.max(1, Math.min(12, cod.m));
+    const d = Math.max(1, Math.min(31, cod.d));
+    const hStart = Math.min(8760, Math.max(0, monthStartHours[m - 1] + (d - 1) * 24));
+    return {
+        hStart,
+        hEnd: 8760,
+        isActive: hStart < 8760,
+        isFullYear: hStart === 0
+    };
+}
 // Lag di incasso (mesi) per l'impianto in base al regime di mercato
 function collectionLagForPlant(plant, inputs, plantHasCer) {
     if (plantHasCer) return Math.max(0, parseInt(inputs.collectionLagCer, 10) || 0);
@@ -81,8 +103,53 @@ function collectionLagForPlant(plant, inputs, plantHasCer) {
     }
 }
 
-// Festività italiane 2025 (indice giorno 0-based dal 1° gennaio) — usate dai generatori di curve di carico
-const IT_HOLIDAYS_2025 = new Set([0, 5, 109, 110, 114, 120, 152, 226, 304, 341, 358, 359]);
+// Calcolo dinamico festività italiane (fisse e mobili ex Computus Pasqua di Butcher-Meeus)
+function getItalianHolidays(year = 2025) {
+    const fixedHolidays = [
+        { m: 0, d: 1 },   // Capodanno
+        { m: 0, d: 6 },   // Epifania
+        { m: 3, d: 25 },  // Liberazione
+        { m: 4, d: 1 },   // Festa del Lavoro
+        { m: 5, d: 2 },   // Festa della Repubblica
+        { m: 7, d: 15 },  // Ferragosto
+        { m: 10, d: 1 },  // Ognissanti
+        { m: 11, d: 8 },  // Immacolata
+        { m: 11, d: 25 }, // Natale
+        { m: 11, d: 26 }  // Santo Stefano
+    ];
+    // Algoritmo di Butcher-Meeus per la Pasqua
+    const a = year % 19;
+    const b = Math.floor(year / 100);
+    const c = year % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const easterMonth = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+    const easterDay = ((h + l - 7 * m + 114) % 31) + 1;
+
+    const holidays = new Set();
+    const startYearMs = Date.UTC(year, 0, 1);
+
+    fixedHolidays.forEach(h => {
+        const dayIdx = Math.floor((Date.UTC(year, h.m, h.d) - startYearMs) / 86400000);
+        if (dayIdx >= 0 && dayIdx < 365) holidays.add(dayIdx);
+    });
+
+    const easterMs = Date.UTC(year, easterMonth, easterDay);
+    const easterDayIdx = Math.floor((easterMs - startYearMs) / 86400000);
+    const easterMonIdx = easterDayIdx + 1; // Pasquetta
+    if (easterDayIdx >= 0 && easterDayIdx < 365) holidays.add(easterDayIdx);
+    if (easterMonIdx >= 0 && easterMonIdx < 365) holidays.add(easterMonIdx);
+
+    return holidays;
+}
+const IT_HOLIDAYS_2025 = getItalianHolidays(2025);
 
 self.onmessage = async function(e) {
     const { action, payload } = e.data;
@@ -330,7 +397,7 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
         const month = getMonthOfHour(t);
         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
         const pricePPA = ppaPrice / 1000;
@@ -668,7 +735,7 @@ function runSensitivityLoop(baseState, config) {
                     const pricePUN = punProfile[t];
                     const month = getMonthOfHour(t);
                     const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
                     const pricePPA = ppaPrice / 1000;
 
@@ -917,9 +984,11 @@ function runSensitivityLoop(baseState, config) {
                         
                         const solVal = solarProfile[h];
                         const pricePUN = punProfile[h];
-                        const priceRID = (pricePUN * lossMult - gseImb) / 1000;
-                        const pricePPA = ppaPrice / 1000;
                         const month = getMonthOfHour(h);
+                        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
+                            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+                            : ((pricePUN * lossMult - gseImb) / 1000);
+                        const pricePPA = ppaPrice / 1000;
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
                         
@@ -1166,8 +1235,8 @@ function runSensitivityLoop(baseState, config) {
                         const pricePUN = punProfile[h];
                         const month = getMonthOfHour(h);
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
-            : ((pricePUN * lossMult - gseImb) / 1000);
+                            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+                            : ((pricePUN * lossMult - gseImb) / 1000);
                         const pricePPA = ppaPrice / 1000;
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
@@ -1244,6 +1313,18 @@ function runSensitivityLoop(baseState, config) {
                 totalUplift,
                 annualShifted: annualShiftedKwh / 1000
             };
+        }
+
+        function classifyOpexLabel(label) {
+            const l = (label || '').toLowerCase().trim();
+            if (l.includes('bess') || l.includes('batteri')) return 'opexBess';
+            if (l.includes('assicura') || l.includes('insurance') || l.includes('all risk')) return 'opexInsurance';
+            if (l.includes('imu') || l.includes('tass') || l.includes('tasi') || l.includes('imposte local')) return 'opexTaxes';
+            if (l.includes('sicurez') || l.includes('security') || l.includes('vigil')) return 'opexSecurity';
+            if (l.includes('asset') || l.includes('gestione amm') || l.includes('amministra')) return 'opexAssetManagement';
+            if (l.includes('dds') || l.includes('canone') || l.includes('terren') || l.includes('affitto')) return 'landDdsAnnuo';
+            if (l.includes('o&m') || l.includes('om ') || l.includes('manutenz') || l.includes('impiant')) return 'opexPlants';
+            return 'opexPlants';
         }
 
         function executeCalculation(State) {
@@ -1326,6 +1407,24 @@ function runSensitivityLoop(baseState, config) {
             const capexBreakdown = [];
             const opexBreakdown = [];
 
+            // ── CF13: Riduzione PUN Zonale (%) applicata a tutti i calcoli orari ──
+            const punDiscountPct = (State.inputs && State.inputs.punDiscountPct !== undefined) ? Number(State.inputs.punDiscountPct) : 0;
+            const punDiscountMult = Math.max(0, 1 - (punDiscountPct / 100));
+            const rawZonalPun = State.zonalPun || {};
+            const effectiveZonalPun = {};
+            Object.keys(rawZonalPun).forEach(z => {
+                const raw = rawZonalPun[z];
+                if (raw) {
+                    if (punDiscountMult !== 1.0) {
+                        const scaled = new Float64Array(8760);
+                        for (let t = 0; t < 8760; t++) scaled[t] = raw[t] * punDiscountMult;
+                        effectiveZonalPun[z] = scaled;
+                    } else {
+                        effectiveZonalPun[z] = raw;
+                    }
+                }
+            });
+
             activePlants.forEach(plant => {
                 const plantBessMw = plant.bessMw !== undefined ? plant.bessMw : 0;
                 const plantBessMwh = plant.bessMwh !== undefined ? plant.bessMwh : 0;
@@ -1335,8 +1434,26 @@ function runSensitivityLoop(baseState, config) {
                 const plantBessType = plant.bessType || 'none';
                 const plantBessConnection = plant.bessConnection || 'ac';
 
+                // Apply plant production multiplier to raw generation without in-place compounding
+                if (!plant._rawGeneration && plant.generation) {
+                    plant._rawGeneration = plant.generation;
+                }
+                const rawGen = plant._rawGeneration || plant.generation;
+                const mult = (plant.prodMultiplier !== undefined && plant.prodMultiplier !== null) 
+                    ? Number(plant.prodMultiplier) 
+                    : ((plant.prod_multiplier !== undefined && plant.prod_multiplier !== null) ? Number(plant.prod_multiplier) : 1.0);
+                if (rawGen) {
+                    if (mult !== 1.0) {
+                        const scaledGen = new Float64Array(8760);
+                        for (let t = 0; t < 8760; t++) scaledGen[t] = (rawGen[t] || 0) * mult;
+                        plant.generation = scaledGen;
+                    } else if (plant.generation !== rawGen) {
+                        plant.generation = rawGen;
+                    }
+                }
+
                 // Precompute annual solar production (MWh)
-                plant.annualSolarProductionMWh = plant.generation.reduce((a, b) => a + b, 0) / 1000;
+                plant.annualSolarProductionMWh = plant.generation ? (plant.generation.reduce((a, b) => a + b, 0) / 1000) : 0;
 
                 const plantBessCAPEX = plantBessMwh * 1000 * plantBessCapexKwh;
                 totalBessCAPEX += plantBessCAPEX;
@@ -1402,7 +1519,7 @@ function runSensitivityLoop(baseState, config) {
 
                 // Run BESS simulation for this plant
                 const plantGeneration = plant.generation || new Float64Array(8760);
-                const plantZonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                const plantZonePrices = effectiveZonalPun[String(plant.zone).toUpperCase()] || effectiveZonalPun["CNOR"];
                 const bessParams = {
                     bessMw: plantBessMw,
                     bessMwh: plantBessMwh,
@@ -1475,7 +1592,7 @@ function runSensitivityLoop(baseState, config) {
                 let bessSelfConsTsMwhY1 = 0;
                 let bessGridFeedMwhY1 = 0;
 
-                const zonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                const zonePrices = effectiveZonalPun[String(plant.zone).toUpperCase()] || effectiveZonalPun["CNOR"];
                 const lossInject = resolveGridLosses(plant.gridVoltage, 'inject');
                 const lossWithdraw = resolveGridLosses(plant.gridVoltage, 'withdraw');
                 const lossMult = 1 + (lossInject / 100);
@@ -1806,13 +1923,13 @@ function runSensitivityLoop(baseState, config) {
             for (let t = 0; t < 8760; t++) {
                 numSum += portfolioWeightedPunProfile[t];
                 denSum += combinedSolarProfile[t];
-                generalMedionePrices[t] = combinedSolarProfile[t] > 0 ? (portfolioWeightedPunProfile[t] / combinedSolarProfile[t]) : State.zonalPun["CNOR"][t];
+                generalMedionePrices[t] = combinedSolarProfile[t] > 0 ? (portfolioWeightedPunProfile[t] / combinedSolarProfile[t]) : effectiveZonalPun["CNOR"][t];
             }
             const generalMedioneKpiValue = denSum > 0 ? (numSum / denSum) : 0;
             // For the medione, weight grid-fed energy (for CER/off-site, all generation goes to grid)
             let ridNumSum = 0, ridDenSum = 0;
             activePlants.forEach(plant => {
-                const zonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                const zonePrices = effectiveZonalPun[String(plant.zone).toUpperCase()] || effectiveZonalPun["CNOR"];
                 const plantStab = plant._stab;
                 for (let t = 0; t < 8760; t++) {
                     let gridKw = 0;
@@ -1908,19 +2025,96 @@ function runSensitivityLoop(baseState, config) {
                 else if (p.peAmountType === 'pct_equity') peAmount = Math.max(0, equityGrossSpv * ((p.peAmountValue || 0) / 100));
             }
 
-            // ── Sizing con PD a livello HOLDING ──
-            // Il PD è un debito della Holding (non della SPV). La Holding prende in prestito il PD
-            // e lo immette nella SPV come equity. Quindi:
-            // - L'equity SPV (quello che la SPV riceve) = totalProjectCost - senior - PE (il PD non riduce l'equity SPV)
-            // - L'equity Sponsor puro = equity SPV - sponsorLoan - PD (il PD è debt Holding, riduce l'esposizione Sponsor)
-            const equityFromHolding = Math.max(0, totalProjectCost + (typeof p.holdcoCapital === 'number' ? p.holdcoCapital : 10000) - debtAmount - peAmount);
-            // equityAmount = esborso iniziale Sponsor puro (per IRR): equity totale - PD (debt Holding) - sponsorLoan (intra-gruppo)
-            const equityAmount = Math.max(0, equityFromHolding - pdAmount - (Math.max(0, (totalProjectCost - totalSpvAcquisitionCapex) - debtAmount - peAmount) * (p.sociEquityPct / 100)));
+            // ── Sizing per Categoria (con supporto slider FINANZA e SPV Acquisition) ──
+            const c_epc = totalEpcCapex;
+            const c_bess = bessCAPEX;
+            const c_conn = totalConnectionCapex;
+            const c_land = totalLandPurchaseCapex + totalLandDdsAttualizzatoCapex;
+            const c_dev = totalDevelopmentCapex;
+            const c_spv = totalSpvAcquisitionCapex;
+            const c_cust = totalCustomCapex;
 
-            // Subordinated Debt (finanziamento soci) - sized sull'equity di costruzione SPV (senza PD, che è a Holding)
-            const constructionEquity = Math.max(0, (totalProjectCost - totalSpvAcquisitionCapex) - debtAmount - peAmount);
-            let remainingShareholderLoan = constructionEquity * (p.sociEquityPct / 100);
-            const initialShareholderLoan = remainingShareholderLoan; // quota a inception (per PE ownership %)
+            const isHardCosts = p.debtBasis === 'hard_costs';
+            const isEvExSpv = p.debtBasis === 'ev_ex_spv';
+
+            // Allocazione del debito senior per categoria (in proporzione alla base bancabile)
+            const debtAlloc = (c, isBankable) => {
+                if (!isBankable || bankableBase <= 0 || debtAmount <= 0) return 0;
+                return c * (debtAmount / bankableBase);
+            };
+
+            const d_epc = debtAlloc(c_epc, true);
+            const d_bess = debtAlloc(c_bess, true);
+            const d_conn = debtAlloc(c_conn, true);
+            const d_land = debtAlloc(c_land, !isHardCosts);
+            const d_dev = debtAlloc(c_dev, !isHardCosts);
+            const d_cust = debtAlloc(c_cust, !isHardCosts);
+            const d_spv = debtAlloc(c_spv, !isHardCosts && !isEvExSpv);
+
+            // Fabbisogno lordo di equity per categoria (al netto del debito senior allocato)
+            const eq_epc = Math.max(0, c_epc - d_epc);
+            const eq_bess = Math.max(0, c_bess - d_bess);
+            const eq_conn = Math.max(0, c_conn - d_conn);
+            const eq_land = Math.max(0, c_land - d_land);
+            const eq_dev = Math.max(0, c_dev - d_dev);
+            const eq_cust = Math.max(0, c_cust - d_cust);
+            const eq_spv = Math.max(0, c_spv - d_spv);
+            const totalEqGross = eq_epc + eq_bess + eq_conn + eq_land + eq_dev + eq_cust + eq_spv;
+
+            // Allocazione Private Equity (se presente)
+            const peAlloc = (eq) => {
+                if (peAmount <= 0 || totalEqGross <= 0) return 0;
+                return peAmount * (eq / totalEqGross);
+            };
+
+            // Fabbisogno residuo a carico dello Sponsor per categoria
+            const sp_epc = Math.max(0, eq_epc - peAlloc(eq_epc));
+            const sp_bess = Math.max(0, eq_bess - peAlloc(eq_bess));
+            const sp_conn = Math.max(0, eq_conn - peAlloc(eq_conn));
+            const sp_land = Math.max(0, eq_land - peAlloc(eq_land));
+            const sp_dev = Math.max(0, eq_dev - peAlloc(eq_dev));
+            const sp_cust = Math.max(0, eq_cust - peAlloc(eq_cust));
+            const sp_spv = Math.max(0, eq_spv - peAlloc(eq_spv));
+
+            // Percentuali di copertura da Finanziamento Soci (slider categoria in FINANZA, fallback su p.sociEquityPct)
+            const fallbackSociPct = p.sociEquityPct !== undefined ? p.sociEquityPct : 100;
+            const pct_epc = (p.sociPctEpc !== undefined ? p.sociPctEpc : fallbackSociPct) / 100;
+            const pct_bess = (p.sociPctBess !== undefined ? p.sociPctBess : fallbackSociPct) / 100;
+            const pct_conn = (p.sociPctConnection !== undefined ? p.sociPctConnection : fallbackSociPct) / 100;
+            const pct_land = (p.sociPctLand !== undefined ? p.sociPctLand : fallbackSociPct) / 100;
+            const pct_dev = (p.sociPctDevelopment !== undefined ? p.sociPctDevelopment : fallbackSociPct) / 100;
+            const pct_cust = (p.sociPctCustom !== undefined ? p.sociPctCustom : fallbackSociPct) / 100;
+            const pct_spv = (p.sociPctSpv !== undefined ? p.sociPctSpv : fallbackSociPct) / 100;
+
+            // Quote Finanziamento Soci per categoria
+            const soci_epc = sp_epc * pct_epc;
+            const soci_bess = sp_bess * pct_bess;
+            const soci_conn = sp_conn * pct_conn;
+            const soci_land = sp_land * pct_land;
+            const soci_dev = sp_dev * pct_dev;
+            const soci_cust = sp_cust * pct_cust;
+            const soci_spv = sp_spv * pct_spv;
+
+            const initialShareholderLoan = soci_epc + soci_bess + soci_conn + soci_land + soci_dev + soci_cust + soci_spv;
+            let remainingShareholderLoan = initialShareholderLoan;
+
+            // Quote Capitale Proprio Sponsor (Pure Equity) per categoria
+            const pure_epc = sp_epc - soci_epc;
+            const pure_bess = sp_bess - soci_bess;
+            const pure_conn = sp_conn - soci_conn;
+            const pure_land = sp_land - soci_land;
+            const pure_dev = sp_dev - soci_dev;
+            const pure_cust = sp_cust - soci_cust;
+            const pure_spv = sp_spv - soci_spv;
+            const totalProjectPureEquity = pure_epc + pure_bess + pure_conn + pure_land + pure_dev + pure_cust + pure_spv;
+
+            const holdcoCap = typeof p.holdcoCapital === 'number' ? p.holdcoCapital : 10000;
+            // equityAmount = Capitale Proprio Sponsor puro: pure equity + dotazione HoldCo - PD (debito Holding)
+            const equityAmount = Math.max(0, totalProjectPureEquity + holdcoCap - pdAmount);
+            // totalSponsorCommittedEquity = Totale fondi propri Sponsor (Pure Equity + Finanziamento Soci + HoldCo Setup - PD)
+            const totalSponsorCommittedEquity = Math.max(0, totalProjectPureEquity + initialShareholderLoan + holdcoCap - pdAmount);
+            // totalSpvEquityTicket = Fabbisogno azionario totale a livello SPV (CAPEX totale - Debito Senior)
+            const totalSpvEquityTicket = Math.max(0, totalProjectCost - debtAmount);
             let remainingDebt = debtAmount;
 
             // ── Private Debt running balance & schedule (ora a livello HOLDING) ──
@@ -1942,20 +2136,42 @@ function runSensitivityLoop(baseState, config) {
             const gracePeriodYears = Math.min(seniorGracePeriodMonths / 12, Math.max(0, (p.loanTerm || 0) - 1));
             const graceFullYears = Math.floor(gracePeriodYears);
             const graceFrac = gracePeriodYears - graceFullYears;
+            let remainingGraceYears = gracePeriodYears;
             const constructionYears = constructionMonths / 12;
 
             // IDC = Interest During Construction
             const idcAmount = p.loanTerm > 0 ? (debtAmount * p.interestRate * constructionYears * (idcDrawdownFactor / 100)) : 0;
 
+            // Frequenza rimborso debito senior: 'mensile' (12), 'trimestrale' (4), 'semestrale' (2), 'annuale' (1)
+            let mDebt = 1; // Default legacy annuale se non specificato
+            if (p.debtRepaymentFrequency === 'mensile') mDebt = 12;
+            else if (p.debtRepaymentFrequency === 'trimestrale') mDebt = 4;
+            else if (p.debtRepaymentFrequency === 'semestrale') mDebt = 2;
+            else if (p.debtRepaymentFrequency === 'annuale') mDebt = 1;
+
             let annualDebtService = 0;
+            let periodicAnnuity = 0;
             if (p.loanTerm > 0 && debtAmount > 0) {
                 // Ammortamento calcolato sugli anni effettivi (scadenza originaria - preammortamento)
                 const amortizingYears = Math.max(0.1, p.loanTerm - gracePeriodYears);
                 const r = p.interestRate;
-                if (amortizingYears > 0 && r > 0) {
-                    annualDebtService = debtAmount * (r * Math.pow(1 + r, amortizingYears)) / (Math.pow(1 + r, amortizingYears) - 1);
-                } else if (amortizingYears > 0) {
-                    annualDebtService = debtAmount / amortizingYears;
+                if (mDebt === 1) {
+                    if (amortizingYears > 0 && r > 0) {
+                        annualDebtService = debtAmount * (r * Math.pow(1 + r, amortizingYears)) / (Math.pow(1 + r, amortizingYears) - 1);
+                    } else if (amortizingYears > 0) {
+                        annualDebtService = debtAmount / amortizingYears;
+                    }
+                    periodicAnnuity = annualDebtService;
+                } else {
+                    const i_m = r / mDebt;
+                    const nPeriods = Math.max(1, Math.round(amortizingYears * mDebt));
+                    if (nPeriods > 0 && i_m > 0) {
+                        periodicAnnuity = debtAmount * (i_m * Math.pow(1 + i_m, nPeriods)) / (Math.pow(1 + i_m, nPeriods) - 1);
+                        annualDebtService = periodicAnnuity * mDebt;
+                    } else if (nPeriods > 0) {
+                        periodicAnnuity = debtAmount / nPeriods;
+                        annualDebtService = periodicAnnuity * mDebt;
+                    }
                 }
             }
 
@@ -1965,6 +2181,7 @@ function runSensitivityLoop(baseState, config) {
 
             // ── Refinancing / Miniperm: stato del prestito corrente (cambia al refiYear) ──
             let activeRate = p.interestRate;
+            let activePeriodicAnnuity = periodicAnnuity;
             let activeAnnuity = annualDebtService;
             let activeMaturity = p.loanTerm;
             const refiYear = (p.refiEnabled && (parseInt(p.refiYear) || 0) >= 1) ? Math.min(19, parseInt(p.refiYear)) : 0;
@@ -1988,7 +2205,7 @@ function runSensitivityLoop(baseState, config) {
             let lcosSumDiscountedCosts = bessCAPEX;
             let lcosSumDiscountedEnergy = 0;
 
-            const cashFlowsForIRR = [-equityAmount];
+            const cashFlowsForIRR = [-totalSponsorCommittedEquity];
 
             // ── Stabilimenti Self-Consumption Pre-Computation ──────────────────────────────
             // Pre-computed inside the main plants loop above
@@ -1996,7 +2213,7 @@ function runSensitivityLoop(baseState, config) {
             // ── P1 Fix: Pre-compute weighted PUN (€/MWh) per plant from imported GME data ──
             // Falls back to €95/MWh if no GME data is loaded for the zone
             activePlants.forEach(plant => {
-                const zonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                const zonePrices = effectiveZonalPun[String(plant.zone).toUpperCase()] || effectiveZonalPun["CNOR"];
                 let numP = 0, denP = 0;
                 for (let t = 0; t < 8760; t++) {
                     numP += plant.generation[t] * zonePrices[t];
@@ -2030,9 +2247,13 @@ function runSensitivityLoop(baseState, config) {
                 interest: [], interestPaid: [], interestActive: [], sociInterestAccrued: [], ebt: [],
                 currentTaxesSpv: [], iresTaxSpv: [], irapTaxSpv: [], deferredTaxes: [], civilTaxesSpv: [], netProfitSpv: [], cfads: [],
                 deductibleInterest: [], interestCF: [], rolCF: [], taxLossCF: [],
+                taxTaxableIres: [], taxDeprDelta: [], taxInterestDelta: [], taxLossApplied: [], taxTaxableFinal: [], taxableIrap: [],
+                taxFiscalDepr: [], taxFiscalDeprBase: [], taxFiscalRemaining: [], taxNetInterest: [], taxCivilIdc: [], taxDeferredRaw: [], taxDeferredFund: [],
                 dividendsPaid: [], holdcoFCFE: [], rolCapacity: [], bessAugmentationCost: [], mraRelease: [],
                 maintReserve: [], holdcoOpex: [], holdcoIresTaxPaid: [], holdcoIrapTaxPaid: [], holdcoNetProfit: [], holdcoEarnoutPaid: [], holdcoBuyoutPaid: [],
+                holdcoProductionValue: [], holdcoProductionCosts: [], holdcoEbitda: [], holdcoOperatingEbit: [], holdcoFinancialNet: [], holdcoEbt: [], holdcoTaxTotal: [],
                 holdcoInflowTotal: [], holdcoInterestReceived: [], holdcoLoanRepaymentReceived: [], holdcoDividendReceived: [], partnerDividendReceived: [], spvLockedDividends: [],
+                spvLegalReserveAccrual: [], spvRetainedEarnings: [], spvCapitalReserveReturned: [], holdcoCapitalReserveReceived: [], spvCashTrapCumulative: [],
                 cfadsCumulated: [], holdcoFCFECumulated: [], principalScheduled: [], principalVoluntary: [],
                 dsraFunding: [], dsraDraw: [], dsraRelease: [],
                 spvFCFE: [], spvCashTrap: [],
@@ -2061,17 +2282,13 @@ function runSensitivityLoop(baseState, config) {
             let mraBalance = 0;
             let cumulativeCfads = 0;
             let cumulativeHoldcoFCFE = 0;
+            let accumulatedLegalReserve = 0;
+            let retainedEarningsBalance = 0;
+            let accumulatedCapitalReserveReturned = 0;
+            let spvCashTrapCumulative = 0;
 
             // Depreciable base calculation includes IDC capitalized; CF7: custom CAPEX ammortizzabile
             const depreciablePlantBaseCivil = totalEpcCapex + bessCAPEX + totalConnectionCapex + totalLandDdsAttualizzatoCapex + totalDevelopmentCapex + idcAmount + totalCustomCapex;
-            let remainingCapexToDepreciateFiscal = depreciablePlantBaseCivil;
-
-
-            let remainingBessAugmentationFiscal = 0;
-            let remainingSolarCivil = totalEpcCapex + totalLandDdsAttualizzatoCapex;
-            let remainingBessCivil = bessCAPEX;
-            let remainingBessAugCivil = 0;
-            let remainingOtherCivil = totalConnectionCapex + totalDevelopmentCapex + totalCustomCapex;
 
             const exitOptionYear = (p.exitOption && p.exitOption !== 'none') ? parseInt(p.exitOption) : 0;
             const exitYear = 20;
@@ -2080,13 +2297,45 @@ function runSensitivityLoop(baseState, config) {
             // ═══ CF3: anno àncora = anno del COD più antico (null = legacy: anno 1 = gen-dic pieno) ═══
             let anchorYear = null;
             activePlants.forEach(pl => {
-                const cod = parseCodDate(pl.codDate);
+                const cod = parseCodDate(pl.codDate || pl.cod);
                 pl._codParsed = cod;
                 if (cod && (anchorYear === null || cod.y < anchorYear)) anchorYear = cod.y;
             });
 
-            for (let yr = 1; yr <= exitYear; yr++) {
-                const inflationMultiplier = Math.pow(1 + p.inflation, yr - 1);
+            // ═══ OIC 16 / Art. 102 TUIR: Basi e residui ammortamento per impianto e per categoria ═══
+            const totalDeprCapexExIdc = activePlants.reduce((sum, pl) => {
+                const pSolar = (pl.capacity * pl.capex) + (pl.landType === 'dds_attualizzato' ? (pl.landCost || 0) : 0);
+                const pBess = ((pl.bessMwh || 0) * 1000 * (pl.bessCapexKwh || 0));
+                const pOther = (pl.connectionCost || 0) + (pl.developmentCost || 0) + (pl.customCapexEur || 0);
+                return sum + pSolar + pBess + pOther;
+            }, 0);
+
+            activePlants.forEach(pl => {
+                const pSolar = (pl.capacity * pl.capex) + (pl.landType === 'dds_attualizzato' ? (pl.landCost || 0) : 0);
+                const pBess = ((pl.bessMwh || 0) * 1000 * (pl.bessCapexKwh || 0));
+                let pOther = (pl.connectionCost || 0) + (pl.developmentCost || 0) + (pl.customCapexEur || 0);
+                const pIdc = totalDeprCapexExIdc > 0 ? (idcAmount * ((pSolar + pBess + pOther) / totalDeprCapexExIdc)) : 0;
+                pOther += pIdc;
+
+                pl._baseSolarCivil = pSolar;
+                pl._baseBessCivil = pBess;
+                pl._baseOtherCivil = pOther;
+                pl._baseIdcCivil = pIdc;
+
+                pl._remainingSolarCivil = pSolar;
+                pl._remainingBessCivil = pBess;
+                pl._remainingOtherCivil = pOther;
+                pl._remainingBessAugCivil = 0;
+                pl._bessAugCost = 0;
+
+                pl._baseTax = pSolar + pBess + pOther;
+                pl._remainingTax = pSolar + pBess + pOther;
+                pl._remainingTaxBessAug = 0;
+            });
+
+            let y1DebtAvail = 1.0;
+            for (let yr = 0; yr <= exitYear; yr++) {
+                const inflationMultiplier = yr === 0 ? 1.0 : Math.pow(1 + p.inflation, yr - 1);
                 
                 // Calculate Bearish Scenario with Floor scale factor K_y
                 let K_y = 1.0;
@@ -2137,6 +2386,19 @@ function runSensitivityLoop(baseState, config) {
                 let yLcosCostsTotal = 0;
                 let yOpexServiceContract = 0;
                 let yHoldcoEarnoutPaid = 0;
+                let yOpexPlants = 0;
+                let yOpexInsurance = 0;
+                let yOpexTaxes = 0;
+                let yOpexSecurity = 0;
+                let yOpexAssetManagement = 0;
+                let yLandDdsAnnuoFee = 0;
+                let yDeprSolar = 0;
+                let yDeprBess = 0;
+                let yDeprOther = 0;
+                let yDepreciationCivil = 0;
+                let totalAnnualDepreciationFiscal = 0;
+                let totalAnnualDepreciationFiscalBase = 0;
+                let totalFiscalRemaining = 0;
 
                 activePlants.forEach((plant, pIdx) => {
                     const plantBessMw = plant.bessMw !== undefined ? plant.bessMw : 0;
@@ -2146,16 +2408,35 @@ function runSensitivityLoop(baseState, config) {
                     const plantBessCapexKwh = plant.bessCapexKwh !== undefined ? plant.bessCapexKwh : 300;
                     const plantBessType = plant.bessType || 'none';
 
-                    const solarDegradation = Math.max(0.50, 1 - 0.0035 * (yr - 1));
+                    const solarDegradation = yr === 0 ? 1.0 : Math.max(0.50, 1 - 0.0035 * (yr - 1));
                     // Rule thermal_degradation_vs_revenue_arbitrage: Cap excessive degradation to preserve battery safety
                     const effectiveBessDegradation = Math.min(0.035, plantBessDegradation);
-                    const bessDegradationMult = plantBessType === 'graphene' ? 1.0 : Math.max(0.50, 1 - effectiveBessDegradation * (yr - 1));
+                    const bessDegradationMult = (yr === 0 || plantBessType === 'graphene') ? 1.0 : Math.max(0.50, 1 - effectiveBessDegradation * (yr - 1));
 
-                    // CF3: frazione dell'anno di calendario con impianto in esercizio (COD)
-                    const codAvail = (plant._codParsed && anchorYear !== null) ? codYearAvailability(plant._codParsed, anchorYear + yr - 1) : 1;
+                    // CF3: Intervallo orario esatto per anno di calendario con impianto in esercizio (COD) — no pro-die
+                    const calYear = (yr === 0 || anchorYear === null) ? null : (anchorYear + yr - 1);
+                    const activeRange = (yr === 0) 
+                        ? { hStart: 8760, hEnd: 8760, isActive: false, isFullYear: false }
+                        : getPlantActiveHourRange(plant._codParsed, calYear);
+                    const { hStart, hEnd, isActive, isFullYear } = activeRange;
 
-                    const pSolarMwh = (plant.annualSolarProductionMWh || 0) * solarDegradation * codAvail;
-                    const pShiftedMwh = (plant.sim ? plant.sim.annualShifted : 0) * bessDegradationMult * codAvail;
+                    let pSolarMwh = 0;
+                    let pShiftedMwh = 0;
+                    if (isActive) {
+                        if (isFullYear) {
+                            pSolarMwh = (plant.annualSolarProductionMWh || 0) * solarDegradation;
+                            pShiftedMwh = (plant.sim ? plant.sim.annualShifted : 0) * bessDegradationMult;
+                        } else {
+                            let sumGen = 0;
+                            for (let t = hStart; t < hEnd; t++) sumGen += plant.generation[t];
+                            pSolarMwh = (sumGen / 1000) * solarDegradation;
+                            let sumShifted = 0;
+                            if (plant.sim && plant.sim.hourlyDischarge) {
+                                for (let t = hStart; t < hEnd; t++) sumShifted += plant.sim.hourlyDischarge[t];
+                            }
+                            pShiftedMwh = (sumShifted / 1000) * bessDegradationMult;
+                        }
+                    }
 
                     // Decoupled revenues with plant-specific custom decays
                     const degradeRidFactor = 1 - (plant.degradeRidPct !== undefined ? plant.degradeRidPct : 2.0) / 100;
@@ -2167,26 +2448,28 @@ function runSensitivityLoop(baseState, config) {
                     const lossWithdraw = resolveGridLosses(plant.gridVoltage, 'withdraw');
                     const lossMult = 1 + (lossInject / 100);
                     const gseImb = State.inputs.ridImbalanceCost || 0;
+                    const spread = plant.traderSpread || 0;
+                    const disp = plant.traderDisp || 0;
                     const fallbackPrice = (plant.marketType === 'fer_x') ? plant.ferxTariff : (plant._weightedPun * lossMult - gseImb);
                     const ridPriceY1 = (plant._solarGridFeedMwhY1 > 0) ? (plant._solarRidRevY1 / plant._solarGridFeedMwhY1) : fallbackPrice;
                     
-                    let currentRidDecay = Math.pow(degradeRidFactor, yr - 1);
-                    let currentTimeshiftingDecay = Math.pow(degradeTimeshiftingFactor, yr - 1);
-                    let currentArbitrageDecay = Math.pow(degradeArbitrageFactor, yr - 1);
-                    let ridPriceYr = ridPriceY1 * Math.pow(degradeRidFactor, yr - 1);
+                    let currentRidDecay = yr === 0 ? 1.0 : Math.pow(degradeRidFactor, yr - 1);
+                    let currentTimeshiftingDecay = yr === 0 ? 1.0 : Math.pow(degradeTimeshiftingFactor, yr - 1);
+                    let currentArbitrageDecay = yr === 0 ? 1.0 : Math.pow(degradeArbitrageFactor, yr - 1);
+                    let ridPriceYr = yr === 0 ? 0 : ridPriceY1 * Math.pow(degradeRidFactor, yr - 1);
 
                     if (p.priceScenarioType === 'bearish_floor') {
-                        currentRidDecay = K_y;
-                        currentTimeshiftingDecay = Math.pow(1 - (p.tsBearishDecayRate || 0), yr - 1);
-                        currentArbitrageDecay = Math.pow(1 - (p.arbBearishDecayRate || 0), yr - 1);
-                        ridPriceYr = ridPriceY1 * K_y;
+                        currentRidDecay = yr === 0 ? 1.0 : K_y;
+                        currentTimeshiftingDecay = yr === 0 ? 1.0 : Math.pow(1 - (p.tsBearishDecayRate || 0), yr - 1);
+                        currentArbitrageDecay = yr === 0 ? 1.0 : Math.pow(1 - (p.arbBearishDecayRate || 0), yr - 1);
+                        ridPriceYr = yr === 0 ? 0 : ridPriceY1 * K_y;
                     }
 
                     if (plant.marketType === 'fer_x') {
                         currentRidDecay = 1;
                         currentTimeshiftingDecay = 1;
                         currentArbitrageDecay = 1;
-                        ridPriceYr = ridPriceY1;
+                        ridPriceYr = yr === 0 ? 0 : ridPriceY1;
                     }
 
                     let solarRidRev = 0;
@@ -2198,8 +2481,8 @@ function runSensitivityLoop(baseState, config) {
                     let arbitrageRev = 0;
                     let pBessGridChargingCost = 0;
 
-                    const pPhysSolarGen = (plant._physSolarGenMwhY1 || 0) * solarDegradation * codAvail;
-                    const pPhysSolarToBess = (plant._physSolarToBessMwhY1 || 0) * bessDegradationMult * codAvail;
+                    let pPhysSolarGen = 0;
+                    let pPhysSolarToBess = 0;
                     let pPhysSolarPpa = 0;
                     let pPhysSolarRid = 0;
                     let pPhysBessSelfCons = 0;
@@ -2212,233 +2495,303 @@ function runSensitivityLoop(baseState, config) {
                     const stab = plant._stab;
                     const plantSim = plant.sim;
 
-                    if (stab && stab.ppaType === 'cer') {
-                        const cerShareType = stab.cerShareType || 'shared_energy';
-                        const zonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
-                        const spread = plant.traderSpread || 0;
-                        const disp = plant.traderDisp || 0;
+                    if (isActive) {
+                        if (stab && stab.ppaType === 'cer') {
+                            const cerShareType = stab.cerShareType || 'shared_energy';
+                            const zonePrices = effectiveZonalPun[String(plant.zone).toUpperCase()] || effectiveZonalPun["CNOR"];
 
-                        // Determine CER tariff size parameters based on plant capacity (kWp)
-                        let fissa = 0;
-                        let cap = 0;
-                        if (plant.capacity <= 20) {
-                            fissa = State.inputs.cerFissaSmall;
-                            cap = State.inputs.cerCapSmall;
-                        } else if (plant.capacity <= 200) {
-                            fissa = State.inputs.cerFissaMedium;
-                            cap = State.inputs.cerCapMedium;
-                        } else {
-                            fissa = State.inputs.cerFissaLarge;
-                            cap = State.inputs.cerCapLarge;
-                        }
-
-                        // Geographic correction
-                        let geoCorr = 0;
-                        const zoneUpper = String(plant.zone).toUpperCase();
-                        
-                        const cerTras = State.inputs.cerTras;
-                        const cPR = resolveGridLosses(plant.gridVoltage, 'cpr') / 100;
-                        const lossWithdraw = resolveGridLosses(plant.gridVoltage, 'withdraw');
-
-                        if (zoneUpper === 'NORD') {
-                            geoCorr = State.inputs.cerGeoNord;
-                        } else if (zoneUpper === 'CNOR') {
-                            geoCorr = State.inputs.cerGeoCentro;
-                        } else {
-                            geoCorr = State.inputs.cerGeoSud;
-                        }
-
-                        // PNRR reduction factor
-                        const pnrrPct = plant.pnrrContributionPct || 0;
-                        const decurtazioneF = 0.5 * (pnrrPct / 40);
-                        const factorPNRR = 1 - decurtazioneF;
-
-                        for (let t = 0; t < 8760; t++) {
-                            const solar = plant.generation[t] * solarDegradation;
-                            const pricePUN = zonePrices[t];
-                            const basePrice = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
-                                : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
-                                : ((pricePUN * lossMult - gseImb) / 1000);
-                            const priceRID = basePrice * currentRidDecay;
-                            const month = getMonthOfHour(t);
-                            const traderPrice = plant.traderContractType === 'pun_medio' ? plant._monthlyAveragePun[month] : pricePUN;
-                            const costGrid = (((traderPrice * (1 + lossWithdraw / 100) + spread + disp) / 1000) * currentArbitrageDecay);
-
-                            const chargeSolar = (plantSim.hourlyChargeSolar ? plantSim.hourlyChargeSolar[t] : 0) * bessDegradationMult;
-                            const gridCharge = (plantSim.hourlyChargeGrid[t] || 0) * bessDegradationMult;
-                            const bessDischarge = (plantSim.hourlyDischarge[t] || 0) * bessDegradationMult;
-                            const bessDischargeGrid = (plantSim.hourlyDischargeGrid[t] || 0) * bessDegradationMult;
-                            const gridFeedPv = Math.max(0, solar - chargeSolar);
-                            const actualRid = gridFeedPv + bessDischargeGrid;
-
-                            // 1. RID Revenues
-                            solarRidRev += gridFeedPv * priceRID;
-                            
-                            // BESS RID revenues
-                            const hourlyArb = (plantSim.hourlyRevenueArbitrageGrid[t] || 0) * bessDegradationMult * currentArbitrageDecay;
-                            const hourlyTs = (plantSim.hourlyRevenueTimeshifting[t] || 0) * bessDegradationMult * currentTimeshiftingDecay;
-                            arbitrageRev += hourlyArb;
-                            timeshiftingRev += hourlyTs;
-                            pBessGridChargingCost += gridCharge * costGrid;
-
-                            // 2. CER Shared Energy (GSE)
-                            const cerLoad = (stab.load && stab.load[t] !== undefined) ? stab.load[t] : 0;
-                            const eSharedGse = Math.min(actualRid, cerLoad);
-
-                            const hourlyArbPhys = (plantSim.hourlyDischargeArbitrage ? plantSim.hourlyDischargeArbitrage[t] : 0) * bessDegradationMult;
-                            const hourlyTsPhys = (plantSim.hourlyDischargeTimeshifting ? plantSim.hourlyDischargeTimeshifting[t] : 0) * bessDegradationMult;
-                            const actualRenewableRid = gridFeedPv + hourlyTsPhys;
-
-                            // Priority-based shared energy allocation: Prioritize Renewable (Solar + BESS Timeshifting) over Arbitrage
-                            const eSharedGseRenewable = Math.min(actualRenewableRid, cerLoad);
-                            const eSharedGseBessArb = Math.min(hourlyArbPhys, eSharedGse - eSharedGseRenewable);
-
-                            let eSharedGseSolar = 0;
-                            let eSharedGseBessTs = 0;
-                            if (actualRenewableRid > 0) {
-                                const fSolarRen = gridFeedPv / actualRenewableRid;
-                                eSharedGseSolar = eSharedGseRenewable * fSolarRen;
-                                eSharedGseBessTs = eSharedGseRenewable * (1 - fSolarRen);
-                            }
-
-                            // 3. SPV Private PPA Contract
-                            if (yr <= ppaDuration) {
-                                const privatePpaPrice_kWh = (stab.ppaPrice || 0) / 1000;
-                                let ePrivateSolar = 0;
-                                let ePrivateBessArb = 0;
-                                let ePrivateBessTs = 0;
-
-                                if (cerShareType === 'total_generation') {
-                                    ePrivateSolar = gridFeedPv;
-                                    ePrivateBessArb = 0; // Grid-charged Arbitrage is ineligible for CER PPA revenues
-                                    ePrivateBessTs = hourlyTsPhys;
-                                } else {
-                                    // Use the priority-based allocation
-                                    ePrivateSolar = eSharedGseSolar;
-                                    ePrivateBessArb = 0; // Grid-charged Arbitrage is ineligible for CER PPA revenues
-                                    ePrivateBessTs = eSharedGseBessTs;
-                                }
-                                const ePrivateBess = ePrivateBessTs + ePrivateBessArb;
-
-                                solarPpaRev += ePrivateSolar * privatePpaPrice_kWh;
-                                bessPpaRev += ePrivateBess * privatePpaPrice_kWh;
-                                bessPpaRevArb += ePrivateBessArb * privatePpaPrice_kWh;
-                                bessPpaRevTs += ePrivateBessTs * privatePpaPrice_kWh;
-
-                                pPhysSolarPpa += ePrivateSolar / 1000;
-                                pPhysBessSelfCons += ePrivateBess / 1000;
-                                pPhysBessSelfConsArb += ePrivateBessArb / 1000;
-                                pPhysBessSelfConsTs += ePrivateBessTs / 1000;
-                            }
-                            
-                            pPhysSolarRid += gridFeedPv / 1000;
-                        }
-                        let sumDischGrid = 0;
-                        if (plantSim && plantSim.hourlyDischargeGrid) {
-                            for (let i = 0; i < plantSim.hourlyDischargeGrid.length; i++) sumDischGrid += plantSim.hourlyDischargeGrid[i];
-                        }
-                        pPhysBessGridFeed = (sumDischGrid / 1000 * bessDegradationMult) - pPhysBessSelfCons;
-                    } else {
-                        // Standard PPA or RID calculation
-                        if (yr <= ppaDuration) {
-                            pPhysSolarPpa = (plant._physSolarPpaMwhY1 || 0) * solarDegradation;
-                        }
-                        pPhysSolarRid = Math.max(0, pPhysSolarGen - pPhysSolarPpa - pPhysSolarToBess);
-
-                        if (plant.marketType === 'brp') {
-                            // Per BRP recalculate hourly to account for dynamic monthly fees
-                            solarRidRev = 0;
-                            timeshiftingRev = 0;
-                            arbitrageRev = 0;
-                            solarPpaRev = (yr <= ppaDuration) ? (plant._solarPpaRevY1 || 0) * solarDegradation : 0;
-                            bessPpaRev = (yr <= ppaDuration) ? (plant._bessPpaRevY1 || 0) * bessDegradationMult : 0;
-                            pPhysBessSelfCons = (yr <= ppaDuration) ? (plant._physBessSelfConsMwhY1 || 0) * bessDegradationMult : 0;
-                            pPhysBessGridFeed = (plant._physBessGridFeedMwhY1 || 0) * bessDegradationMult;
-                            
-                            const zonePrices = State.zonalPun[String(plant.zone).toUpperCase()] || State.zonalPun["CNOR"];
-                            const stab = activeStabilimenti.find(s => s.plantId === plant.id);
-                            const loadProfile = (stab && stab.ppaType === 'on-site' && stab.load) ? stab.load : null;
-                            for (let t = 0; t < 8760; t++) {
-                                const fee = getBrpFeeForMonth(plant, yr, getMonthOfHour(t));
-                                const pricePUN = zonePrices[t];
-                                const priceRID = ((pricePUN + fee) * lossMult / 1000) * currentRidDecay;
-                                
-                                const solarGridFeedHourly = Math.max(0, plant.generation[t] - (loadProfile ? Math.min(plant.generation[t], loadProfile[t]) : 0) - (plantSim.hourlyChargeSolar ? plantSim.hourlyChargeSolar[t] : 0));
-                                solarRidRev += solarGridFeedHourly * solarDegradation * priceRID;
-                                
-                                if (yr > ppaDuration && (plantSim.hourlySelfCons && plantSim.hourlyChargeSolar)) {
-                                    // BESS PPA becomes BESS RID after PPA expires
-                                    const actualPpa = plantSim.hourlySelfCons[t];
-                                    const baseSolarPpa = loadProfile ? Math.min(plant.generation[t], loadProfile[t]) : 0;
-                                    timeshiftingRev += (actualPpa - baseSolarPpa) * bessDegradationMult * priceRID;
-                                    pPhysBessGridFeed += (actualPpa - baseSolarPpa) * bessDegradationMult / 1000;
-                                }
-                                
-                                timeshiftingRev += (plantSim.hourlyRevenueTimeshifting[t] || 0) * bessDegradationMult * currentTimeshiftingDecay / ((plant._timeshiftingRevY1 || 1) > 0 ? (plant._timeshiftingRevY1 / (plantSim.hourlyRevenueTimeshifting[t] || 1)) : 1) * 0; // Handled below by re-evaluating priceRID? No wait, timeshiftingRev is just the volume * priceRID
-                            }
-                            
-                            // Timeshifting and arbitrage revenues need accurate volumes to multiply by the new priceRID
-                            // For timeshifting grid feed:
-                            let tsGridFeedMwh = 0;
-                            let arbGridFeedMwh = 0;
-                            if (plantSim && plantSim.hourlyDischargeTimeshifting) {
-                                for(let t=0; t<8760; t++) tsGridFeedMwh += plantSim.hourlyDischargeTimeshifting[t];
-                            }
-                            if (plantSim && plantSim.hourlyDischargeArbitrage) {
-                                for(let t=0; t<8760; t++) arbGridFeedMwh += plantSim.hourlyDischargeArbitrage[t];
-                            }
-                            // In BRP we just apply average PUN + average fee for simplicity on BESS to avoid complex hourly loops on BESS discharge
-                            let avgFeeYr = 0;
-                            for(let m=0; m<12; m++) avgFeeYr += getBrpFeeForMonth(plant, yr, m);
-                            avgFeeYr /= 12;
-                            const avgPriceRidBess = ((plant._weightedPun + avgFeeYr) * lossMult / 1000) * currentRidDecay;
-                            
-                            timeshiftingRev = (tsGridFeedMwh / 1000) * bessDegradationMult * avgPriceRidBess;
-                            if (yr > ppaDuration) {
-                                const bessPpaMwhYr = (plant._bessSelfConsMwhY1 || 0) * bessDegradationMult;
-                                timeshiftingRev += bessPpaMwhYr * avgPriceRidBess;
-                            }
-                            arbitrageRev = (arbGridFeedMwh / 1000) * bessDegradationMult * avgPriceRidBess * currentArbitrageDecay / currentRidDecay;
-                            pBessGridChargingCost = (plant._arbitrageCostY1 || 0) * bessDegradationMult * currentArbitrageDecay;
-                            
-                        } else {
-                            if (yr <= ppaDuration) {
-                                solarRidRev = (plant._solarRidRevY1 || 0) * solarDegradation * currentRidDecay;
-                                solarPpaRev = (plant._solarPpaRevY1 || 0) * solarDegradation;
-                                bessPpaRev = (plant._bessPpaRevY1 || 0) * bessDegradationMult;
-                                timeshiftingRev = (plant._timeshiftingRevY1 || 0) * bessDegradationMult * currentTimeshiftingDecay;
-                                arbitrageRev = (plant._arbitrageRevY1 || 0) * bessDegradationMult * currentArbitrageDecay;
-                                pPhysBessSelfCons = (plant._physBessSelfConsMwhY1 || 0) * bessDegradationMult;
-                                pPhysBessGridFeed = (plant._physBessGridFeedMwhY1 || 0) * bessDegradationMult;
+                            // Determine CER tariff size parameters based on plant capacity (kWp)
+                            let fissa = 0;
+                            let cap = 0;
+                            if (plant.capacity <= 20) {
+                                fissa = State.inputs.cerFissaSmall;
+                                cap = State.inputs.cerCapSmall;
+                            } else if (plant.capacity <= 200) {
+                                fissa = State.inputs.cerFissaMedium;
+                                cap = State.inputs.cerCapMedium;
                             } else {
-                                solarPpaRev = 0;
-                                bessPpaRev = 0;
-                                solarRidRev = pPhysSolarRid * ridPriceYr;
-                                timeshiftingRev = (plant._timeshiftingRevY1 || 0) * bessDegradationMult * currentTimeshiftingDecay;
-                                arbitrageRev = (plant._arbitrageRevY1 || 0) * bessDegradationMult * currentArbitrageDecay;
-                                const bessPpaMwhYr = (plant._bessSelfConsMwhY1 || 0) * bessDegradationMult;
-                                timeshiftingRev += bessPpaMwhYr * ridPriceYr;
-                                pPhysBessSelfCons = 0;
-                                pPhysBessGridFeed = ((plant._physBessSelfConsMwhY1 || 0) + (plant._physBessGridFeedMwhY1 || 0)) * bessDegradationMult;
+                                fissa = State.inputs.cerFissaLarge;
+                                cap = State.inputs.cerCapLarge;
                             }
-                            pBessGridChargingCost = (plant._arbitrageCostY1 || 0) * bessDegradationMult * currentArbitrageDecay;
-                        }
-                    }
 
-                    if (!(stab && stab.ppaType === 'cer')) {
-                        pPhysBessSelfConsTs = pPhysBessSelfCons;
+                            // Geographic correction
+                            let geoCorr = 0;
+                            const zoneUpper = String(plant.zone).toUpperCase();
+                            
+                            const cerTras = State.inputs.cerTras;
+                            const cPR = resolveGridLosses(plant.gridVoltage, 'cpr') / 100;
+
+                            if (zoneUpper === 'NORD') {
+                                geoCorr = State.inputs.cerGeoNord;
+                            } else if (zoneUpper === 'CNOR') {
+                                geoCorr = State.inputs.cerGeoCentro;
+                            } else {
+                                geoCorr = State.inputs.cerGeoSud;
+                            }
+
+                            // PNRR reduction factor
+                            const pnrrPct = plant.pnrrContributionPct || 0;
+                            const decurtazioneF = 0.5 * (pnrrPct / 40);
+                            const factorPNRR = 1 - decurtazioneF;
+
+                            for (let t = hStart; t < hEnd; t++) {
+                                const solar = plant.generation[t] * solarDegradation;
+                                pPhysSolarGen += solar / 1000;
+                                const pricePUN = zonePrices[t];
+                                const basePrice = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
+                                    : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
+                                    : ((pricePUN * lossMult - gseImb) / 1000);
+                                const priceRID = basePrice * currentRidDecay;
+                                const month = getMonthOfHour(t);
+                                const traderPrice = plant.traderContractType === 'pun_medio' ? plant._monthlyAveragePun[month] : pricePUN;
+                                const costGrid = (((traderPrice * (1 + lossWithdraw / 100) + spread + disp) / 1000) * currentArbitrageDecay);
+
+                                const chargeSolar = (plantSim.hourlyChargeSolar ? plantSim.hourlyChargeSolar[t] : 0) * bessDegradationMult;
+                                pPhysSolarToBess += chargeSolar / 1000;
+                                const gridCharge = (plantSim.hourlyChargeGrid[t] || 0) * bessDegradationMult;
+                                const bessDischarge = (plantSim.hourlyDischarge[t] || 0) * bessDegradationMult;
+                                const bessDischargeGrid = (plantSim.hourlyDischargeGrid[t] || 0) * bessDegradationMult;
+                                const gridFeedPv = Math.max(0, solar - chargeSolar);
+                                const actualRid = gridFeedPv + bessDischargeGrid;
+
+                                // 1. RID Revenues
+                                solarRidRev += gridFeedPv * priceRID;
+                                
+                                // BESS RID revenues
+                                const hourlyArb = (plantSim.hourlyRevenueArbitrageGrid[t] || 0) * bessDegradationMult * currentArbitrageDecay;
+                                const hourlyTs = (plantSim.hourlyRevenueTimeshifting[t] || 0) * bessDegradationMult * currentTimeshiftingDecay;
+                                arbitrageRev += hourlyArb;
+                                timeshiftingRev += hourlyTs;
+                                pBessGridChargingCost += gridCharge * costGrid;
+
+                                // 2. CER Shared Energy (GSE)
+                                const cerLoad = (stab.load && stab.load[t] !== undefined) ? stab.load[t] : 0;
+                                const eSharedGse = Math.min(actualRid, cerLoad);
+
+                                const hourlyArbPhys = (plantSim.hourlyDischargeArbitrage ? plantSim.hourlyDischargeArbitrage[t] : 0) * bessDegradationMult;
+                                const hourlyTsPhys = (plantSim.hourlyDischargeTimeshifting ? plantSim.hourlyDischargeTimeshifting[t] : 0) * bessDegradationMult;
+                                const actualRenewableRid = gridFeedPv + hourlyTsPhys;
+
+                                // Priority-based shared energy allocation: Prioritize Renewable (Solar + BESS Timeshifting) over Arbitrage
+                                const eSharedGseRenewable = Math.min(actualRenewableRid, cerLoad);
+                                const eSharedGseBessArb = Math.min(hourlyArbPhys, eSharedGse - eSharedGseRenewable);
+
+                                let eSharedGseSolar = 0;
+                                let eSharedGseBessTs = 0;
+                                if (actualRenewableRid > 0) {
+                                    const fSolarRen = gridFeedPv / actualRenewableRid;
+                                    eSharedGseSolar = eSharedGseRenewable * fSolarRen;
+                                    eSharedGseBessTs = eSharedGseRenewable * (1 - fSolarRen);
+                                }
+
+                                // 3. SPV Private PPA Contract
+                                if (yr <= ppaDuration) {
+                                    const privatePpaPrice_kWh = (stab.ppaPrice || 0) / 1000;
+                                    let ePrivateSolar = 0;
+                                    let ePrivateBessArb = 0;
+                                    let ePrivateBessTs = 0;
+
+                                    if (cerShareType === 'total_generation') {
+                                        ePrivateSolar = gridFeedPv;
+                                        ePrivateBessArb = 0; // Grid-charged Arbitrage is ineligible for CER PPA revenues
+                                        ePrivateBessTs = hourlyTsPhys;
+                                    } else {
+                                        // Use the priority-based allocation
+                                        ePrivateSolar = eSharedGseSolar;
+                                        ePrivateBessArb = 0; // Grid-charged Arbitrage is ineligible for CER PPA revenues
+                                        ePrivateBessTs = eSharedGseBessTs;
+                                    }
+                                    const ePrivateBess = ePrivateBessTs + ePrivateBessArb;
+
+                                    solarPpaRev += ePrivateSolar * privatePpaPrice_kWh;
+                                    bessPpaRev += ePrivateBess * privatePpaPrice_kWh;
+                                    bessPpaRevArb += ePrivateBessArb * privatePpaPrice_kWh;
+                                    bessPpaRevTs += ePrivateBessTs * privatePpaPrice_kWh;
+
+                                    pPhysSolarPpa += ePrivateSolar / 1000;
+                                    pPhysBessSelfCons += ePrivateBess / 1000;
+                                    pPhysBessSelfConsArb += ePrivateBessArb / 1000;
+                                    pPhysBessSelfConsTs += ePrivateBessTs / 1000;
+                                }
+                                
+                                pPhysSolarRid += gridFeedPv / 1000;
+                            }
+                            let sumDischGrid = 0;
+                            if (plantSim && plantSim.hourlyDischargeGrid) {
+                                for (let i = hStart; i < hEnd; i++) sumDischGrid += plantSim.hourlyDischargeGrid[i];
+                            }
+                            pPhysBessGridFeed = (sumDischGrid / 1000 * bessDegradationMult) - pPhysBessSelfCons;
+                        } else {
+                            // Standard PPA or RID calculation
+                            if (isFullYear) {
+                                pPhysSolarGen = (plant._physSolarGenMwhY1 || 0) * solarDegradation;
+                                pPhysSolarToBess = (plant._physSolarToBessMwhY1 || 0) * bessDegradationMult;
+                                if (yr <= ppaDuration) {
+                                    pPhysSolarPpa = (plant._physSolarPpaMwhY1 || 0) * solarDegradation;
+                                }
+                                pPhysSolarRid = Math.max(0, pPhysSolarGen - pPhysSolarPpa - pPhysSolarToBess);
+
+                                if (plant.marketType === 'brp') {
+                                    // Per BRP recalculate hourly to account for dynamic monthly fees
+                                    solarRidRev = 0;
+                                    timeshiftingRev = 0;
+                                    arbitrageRev = 0;
+                                    solarPpaRev = (yr <= ppaDuration) ? (plant._solarPpaRevY1 || 0) * solarDegradation : 0;
+                                    bessPpaRev = (yr <= ppaDuration) ? (plant._bessPpaRevY1 || 0) * bessDegradationMult : 0;
+                                    pPhysBessSelfCons = (yr <= ppaDuration) ? (plant._physBessSelfConsMwhY1 || 0) * bessDegradationMult : 0;
+                                    pPhysBessGridFeed = (plant._physBessGridFeedMwhY1 || 0) * bessDegradationMult;
+                                    
+                                    const zonePrices = effectiveZonalPun[String(plant.zone).toUpperCase()] || effectiveZonalPun["CNOR"];
+                                    const loadProfile = (stab && stab.ppaType === 'on-site' && stab.load) ? stab.load : null;
+                                    for (let t = 0; t < 8760; t++) {
+                                        const fee = getBrpFeeForMonth(plant, yr, getMonthOfHour(t));
+                                        const pricePUN = zonePrices[t];
+                                        const priceRID = ((pricePUN + fee) * lossMult / 1000) * currentRidDecay;
+                                        
+                                        const solarGridFeedHourly = Math.max(0, plant.generation[t] - (loadProfile ? Math.min(plant.generation[t], loadProfile[t]) : 0) - (plantSim.hourlyChargeSolar ? plantSim.hourlyChargeSolar[t] : 0));
+                                        solarRidRev += solarGridFeedHourly * solarDegradation * priceRID;
+                                        
+                                        if (yr > ppaDuration && (plantSim.hourlySelfCons && plantSim.hourlyChargeSolar)) {
+                                            // BESS PPA becomes BESS RID after PPA expires
+                                            const actualPpa = plantSim.hourlySelfCons[t];
+                                            const baseSolarPpa = loadProfile ? Math.min(plant.generation[t], loadProfile[t]) : 0;
+                                            timeshiftingRev += (actualPpa - baseSolarPpa) * bessDegradationMult * priceRID;
+                                            pPhysBessGridFeed += (actualPpa - baseSolarPpa) * bessDegradationMult / 1000;
+                                        }
+                                    }
+                                    
+                                    let tsGridFeedMwh = 0;
+                                    let arbGridFeedMwh = 0;
+                                    if (plantSim && plantSim.hourlyDischargeTimeshifting) {
+                                        for(let t=0; t<8760; t++) tsGridFeedMwh += plantSim.hourlyDischargeTimeshifting[t];
+                                    }
+                                    if (plantSim && plantSim.hourlyDischargeArbitrage) {
+                                        for(let t=0; t<8760; t++) arbGridFeedMwh += plantSim.hourlyDischargeArbitrage[t];
+                                    }
+                                    let avgFeeYr = 0;
+                                    for(let m=0; m<12; m++) avgFeeYr += getBrpFeeForMonth(plant, yr, m);
+                                    avgFeeYr /= 12;
+                                    const avgPriceRidBess = ((plant._weightedPun + avgFeeYr) * lossMult / 1000) * currentRidDecay;
+                                    
+                                    timeshiftingRev = (tsGridFeedMwh / 1000) * bessDegradationMult * avgPriceRidBess;
+                                    if (yr > ppaDuration) {
+                                        const bessPpaMwhYr = (plant._bessSelfConsMwhY1 || 0) * bessDegradationMult;
+                                        timeshiftingRev += bessPpaMwhYr * avgPriceRidBess;
+                                    }
+                                    arbitrageRev = (arbGridFeedMwh / 1000) * bessDegradationMult * avgPriceRidBess * currentArbitrageDecay / currentRidDecay;
+                                    pBessGridChargingCost = (plant._arbitrageCostY1 || 0) * bessDegradationMult * currentArbitrageDecay;
+                                    
+                                } else {
+                                    if (yr <= ppaDuration) {
+                                        solarRidRev = (plant._solarRidRevY1 || 0) * solarDegradation * currentRidDecay;
+                                        solarPpaRev = (plant._solarPpaRevY1 || 0) * solarDegradation;
+                                        bessPpaRev = (plant._bessPpaRevY1 || 0) * bessDegradationMult;
+                                        timeshiftingRev = (plant._timeshiftingRevY1 || 0) * bessDegradationMult * currentTimeshiftingDecay;
+                                        arbitrageRev = (plant._arbitrageRevY1 || 0) * bessDegradationMult * currentArbitrageDecay;
+                                        pPhysBessSelfCons = (plant._physBessSelfConsMwhY1 || 0) * bessDegradationMult;
+                                        pPhysBessGridFeed = (plant._physBessGridFeedMwhY1 || 0) * bessDegradationMult;
+                                    } else {
+                                        solarPpaRev = 0;
+                                        bessPpaRev = 0;
+                                        solarRidRev = pPhysSolarRid * ridPriceYr;
+                                        timeshiftingRev = (plant._timeshiftingRevY1 || 0) * bessDegradationMult * currentTimeshiftingDecay;
+                                        arbitrageRev = (plant._arbitrageRevY1 || 0) * bessDegradationMult * currentArbitrageDecay;
+                                        const bessPpaMwhYr = (plant._bessSelfConsMwhY1 || 0) * bessDegradationMult;
+                                        timeshiftingRev += bessPpaMwhYr * ridPriceYr;
+                                        pPhysBessSelfCons = 0;
+                                        pPhysBessGridFeed = ((plant._physBessSelfConsMwhY1 || 0) + (plant._physBessGridFeedMwhY1 || 0)) * bessDegradationMult;
+                                    }
+                                    pBessGridChargingCost = (plant._arbitrageCostY1 || 0) * bessDegradationMult * currentArbitrageDecay;
+                                }
+                            } else {
+                                // Partial year (COD happens in this year): exact hourly integration from hStart to hEnd
+                                const zonePrices = effectiveZonalPun[String(plant.zone).toUpperCase()] || effectiveZonalPun["CNOR"];
+                                const loadProfile = (stab && stab.ppaType === 'on-site' && stab.load) ? stab.load : null;
+                                const isOffsite = (stab && stab.ppaType === 'off-site');
+                                const ppaPrice = (stab && stab.ppaPrice !== undefined) ? stab.ppaPrice : 0;
+                                const ppaPrice_kWh = ppaPrice / 1000;
+
+                                for (let t = hStart; t < hEnd; t++) {
+                                    const solar = plant.generation[t] * solarDegradation;
+                                    pPhysSolarGen += solar / 1000;
+                                    const pricePUN = zonePrices[t];
+                                    const month = getMonthOfHour(t);
+                                    const traderPrice = plant.traderContractType === 'pun_medio' ? plant._monthlyAveragePun[month] : pricePUN;
+                                    const costGrid = ((traderPrice * (1 + lossWithdraw / 100) + spread + disp) / 1000) * currentArbitrageDecay;
+                                    
+                                    const basePrice = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
+                                        : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, yr, month)) * lossMult / 1000)
+                                        : ((pricePUN * lossMult - gseImb) / 1000);
+                                    const priceRID = basePrice * currentRidDecay;
+
+                                    const chargeSolar = (plantSim.hourlyChargeSolar ? plantSim.hourlyChargeSolar[t] : 0) * bessDegradationMult;
+                                    pPhysSolarToBess += chargeSolar / 1000;
+                                    const gridCharge = (plantSim.hourlyChargeGrid[t] || 0) * bessDegradationMult;
+                                    const actualPpa = (plantSim.hourlySelfCons ? plantSim.hourlySelfCons[t] : 0) * bessDegradationMult;
+                                    const actualRid = (plantSim.hourlyGridFeed ? plantSim.hourlyGridFeed[t] : 0) * bessDegradationMult;
+
+                                    if (isOffsite) {
+                                        if (yr <= ppaDuration) {
+                                            solarPpaRev += (solar / 1000) * ppaPrice;
+                                            pPhysSolarPpa += solar / 1000;
+                                        } else {
+                                            solarRidRev += solar * priceRID;
+                                            pPhysSolarRid += solar / 1000;
+                                        }
+                                        bessRidRev += (actualRid - solar) * priceRID;
+                                    } else {
+                                        const baseSolarPpa = loadProfile ? Math.min(solar, loadProfile[t]) : 0;
+                                        const actualSolarGridFeed = Math.max(0, solar - baseSolarPpa - chargeSolar);
+
+                                        if (yr <= ppaDuration) {
+                                            solarPpaRev += baseSolarPpa * ppaPrice_kWh;
+                                            pPhysSolarPpa += baseSolarPpa / 1000;
+                                            const bessPpaHourly = Math.max(0, actualPpa - baseSolarPpa);
+                                            bessPpaRev += bessPpaHourly * ppaPrice_kWh;
+                                            pPhysBessSelfCons += bessPpaHourly / 1000;
+                                        } else {
+                                            solarRidRev += baseSolarPpa * priceRID;
+                                            pPhysSolarRid += baseSolarPpa / 1000;
+                                            const bessPpaHourly = Math.max(0, actualPpa - baseSolarPpa);
+                                            timeshiftingRev += bessPpaHourly * priceRID;
+                                        }
+
+                                        solarRidRev += actualSolarGridFeed * priceRID;
+                                        pPhysSolarRid += actualSolarGridFeed / 1000;
+                                    }
+
+                                    const hourlyTs = (plantSim.hourlyRevenueTimeshifting[t] || 0) * bessDegradationMult * currentTimeshiftingDecay;
+                                    const hourlyArb = (plantSim.hourlyRevenueArbitrageGrid[t] || 0) * bessDegradationMult * currentArbitrageDecay;
+                                    timeshiftingRev += hourlyTs;
+                                    arbitrageRev += hourlyArb;
+                                    pBessGridChargingCost += gridCharge * costGrid;
+                                }
+
+                                if (!isOffsite) {
+                                    let sumDischGrid = 0;
+                                    if (plantSim && plantSim.hourlyDischargeGrid) {
+                                        for (let i = hStart; i < hEnd; i++) sumDischGrid += plantSim.hourlyDischargeGrid[i];
+                                    }
+                                    pPhysBessGridFeed = Math.max(0, (sumDischGrid / 1000 * bessDegradationMult) - pPhysBessSelfCons);
+                                }
+                            }
+                        }
+
+                        if (!(stab && stab.ppaType === 'cer')) {
+                            pPhysBessSelfConsTs = pPhysBessSelfCons;
+                        }
+                        let sumDischArb = 0, sumDischTs = 0;
+                        if (plantSim && plantSim.hourlyDischargeArbitrage) {
+                            for (let i = hStart; i < hEnd; i++) sumDischArb += plantSim.hourlyDischargeArbitrage[i];
+                        }
+                        if (plantSim && plantSim.hourlyDischargeTimeshifting) {
+                            for (let i = hStart; i < hEnd; i++) sumDischTs += plantSim.hourlyDischargeTimeshifting[i];
+                        }
+                        const totalDischArb = (sumDischArb / 1000) * bessDegradationMult;
+                        const totalDischTs = (sumDischTs / 1000) * bessDegradationMult;
+                        pPhysBessGridFeedArb = Math.max(0, totalDischArb - pPhysBessSelfConsArb);
+                        pPhysBessGridFeedTs = Math.max(0, totalDischTs - pPhysBessSelfConsTs);
                     }
-                    let sumDischArb = 0, sumDischTs = 0;
-                    if (plantSim && plantSim.hourlyDischargeArbitrage) {
-                        for (let i = 0; i < plantSim.hourlyDischargeArbitrage.length; i++) sumDischArb += plantSim.hourlyDischargeArbitrage[i];
-                    }
-                    if (plantSim && plantSim.hourlyDischargeTimeshifting) {
-                        for (let i = 0; i < plantSim.hourlyDischargeTimeshifting.length; i++) sumDischTs += plantSim.hourlyDischargeTimeshifting[i];
-                    }
-                    const totalDischArb = (sumDischArb / 1000) * bessDegradationMult;
-                    const totalDischTs = (sumDischTs / 1000) * bessDegradationMult;
-                    pPhysBessGridFeedArb = Math.max(0, totalDischArb - pPhysBessSelfConsArb);
-                    pPhysBessGridFeedTs = Math.max(0, totalDischTs - pPhysBessSelfConsTs);
 
                     // Reconstruct helper variables for service contract and earn-out compatibility
                     const bessRidRev = timeshiftingRev + arbitrageRev;
@@ -2447,40 +2800,19 @@ function runSensitivityLoop(baseState, config) {
                     
                     const plantBessCAPEX = plantBessMwh * 1000 * plantBessCapexKwh;
                     let pBessOpex = 0;
-                    if (plantBessMwh > 0) {
+                    if (plantBessMwh > 0 && isActive) {
                         if (plant.opexOmBess !== undefined && plant.opexOmBess > 0) {
                             pBessOpex = plant.opexOmBess * inflationMultiplier;
                         } else {
                             pBessOpex = plantBessCAPEX * 0.015 * inflationMultiplier;
                         }
                     }
-                    const pMaintReserve = (plantBessMw > 0 && plantBessType !== 'graphene') ? (4000 * (plant.capacity / 1000) * inflationMultiplier) : 0;
-
-                    // CF3: COD — scala ricavi e quantità per la frazione di anno in esercizio
-                    // (a monte di service/earnout percentuali per coerenza dei contratti)
-                    if (codAvail !== 1) {
-                        solarRidRev *= codAvail;
-                        solarPpaRev *= codAvail;
-                        bessPpaRev *= codAvail;
-                        bessPpaRevArb *= codAvail;
-                        bessPpaRevTs *= codAvail;
-                        timeshiftingRev *= codAvail;
-                        arbitrageRev *= codAvail;
-                        pBessGridChargingCost *= codAvail;
-                        pPhysSolarPpa *= codAvail;
-                        pPhysSolarRid *= codAvail;
-                        pPhysBessSelfCons *= codAvail;
-                        pPhysBessSelfConsArb *= codAvail;
-                        pPhysBessSelfConsTs *= codAvail;
-                        pPhysBessGridFeed *= codAvail;
-                        pPhysBessGridFeedArb *= codAvail;
-                        pPhysBessGridFeedTs *= codAvail;
-                    }
+                    const pMaintReserve = (plantBessMw > 0 && plantBessType !== 'graphene' && isActive) ? (4000 * (plant.capacity / 1000) * inflationMultiplier) : 0;
 
                     // Calculate PPA Service Contract for this plant in year yr (if within duration)
                     let pOpexServiceContract = 0;
                     const serviceYears = plant.serviceYears !== undefined ? plant.serviceYears : 0;
-                    if (yr <= serviceYears) {
+                    if (yr > 0 && yr <= serviceYears) {
                         if (plant.serviceType === 'ppa_rev_pct') {
                             pOpexServiceContract = (plant.serviceVal / 100) * (solarPpaRev + bessPpaRev);
                         } else if (plant.serviceType === 'shared_ppa_mwh') {
@@ -2493,7 +2825,7 @@ function runSensitivityLoop(baseState, config) {
                     // Calculate HoldCo Earn-Out for this plant in year yr (if within duration)
                     let pHoldcoEarnoutPaid = 0;
                     const earnoutYears = plant.earnoutYears !== undefined ? plant.earnoutYears : 0;
-                    if (yr <= earnoutYears) {
+                    if (yr > 0 && yr <= earnoutYears) {
                         if (plant.earnoutType === 'fixed') {
                             pHoldcoEarnoutPaid = plant.earnoutVal * inflationMultiplier;
                         } else if (plant.earnoutType === 'rid_pct') {
@@ -2522,9 +2854,32 @@ function runSensitivityLoop(baseState, config) {
                     yMaintReserve += pMaintReserve;
 
                     // Accumulate physical metrics
-                    const pPhysBessDischarge = (plant._physBessDischargeMwhY1 || 0) * bessDegradationMult;
-                    const pPhysBessChargeGrid = (plant._physBessChargeGridMwhY1 || 0) * bessDegradationMult;
-                    const pPhysBessLosses = (plant._physBessLossesMwhY1 || 0) * bessDegradationMult;
+                    let pPhysBessDischarge = 0;
+                    let pPhysBessChargeGrid = 0;
+                    let pPhysBessLosses = 0;
+                    if (isActive) {
+                        if (isFullYear) {
+                            pPhysBessDischarge = (plant._physBessDischargeMwhY1 || 0) * bessDegradationMult;
+                            pPhysBessChargeGrid = (plant._physBessChargeGridMwhY1 || 0) * bessDegradationMult;
+                            pPhysBessLosses = (plant._physBessLossesMwhY1 || 0) * bessDegradationMult;
+                        } else {
+                            let sDisch = 0, sChGrid = 0, sLoss = 0;
+                            if (plantSim) {
+                                if (plantSim.hourlyDischarge) {
+                                    for (let i = hStart; i < hEnd; i++) sDisch += plantSim.hourlyDischarge[i];
+                                }
+                                if (plantSim.hourlyChargeGrid) {
+                                    for (let i = hStart; i < hEnd; i++) sChGrid += plantSim.hourlyChargeGrid[i];
+                                }
+                                if (plantSim.hourlyLossesRte) {
+                                    for (let i = hStart; i < hEnd; i++) sLoss += plantSim.hourlyLossesRte[i];
+                                }
+                            }
+                            pPhysBessDischarge = (sDisch / 1000) * bessDegradationMult;
+                            pPhysBessChargeGrid = (sChGrid / 1000) * bessDegradationMult;
+                            pPhysBessLosses = (sLoss / 1000) * bessDegradationMult;
+                        }
+                    }
 
                     yQtySolarGen += pPhysSolarGen;
                     yQtySolarPpa += pPhysSolarPpa;
@@ -2558,44 +2913,171 @@ function runSensitivityLoop(baseState, config) {
                     yLcosEnergyTotal += pShiftedMwh;
                     yLcosCostsTotal += pBessOpex;
                     
-                    const pOpexPlants = ((plant.opex || 0) + (plant.customOpexEur || 0)) * inflationMultiplier;
-                    const pOpexInsurance = (plant.opexInsurance || 0) * inflationMultiplier;
-                    const pOpexTaxes = (plant.opexTaxes || 0) * inflationMultiplier;
-                    const pOpexSecurity = (plant.opexSecurity || 0) * inflationMultiplier;
-                    const pOpexAssetManagement = (plant.opexAssetManagement || 0) * inflationMultiplier;
-                    const pLandDdsAnnuo = (plant.landType === 'dds_annuo' ? (plant.landCost || 0) : 0) * inflationMultiplier;
-                    const pOpexTotal = pOpexPlants + pBessOpex + pBessGridChargingCost + pLandDdsAnnuo + pOpexInsurance + pOpexTaxes + pOpexSecurity + pOpexAssetManagement + pOpexServiceContract;
+                    const opexCalYear = (yr === 0 || anchorYear === null) ? ((anchorYear || 2027) - 1) : (anchorYear + yr - 1);
+                    const plantOpexEvents = (State.opexEvents && State.opexEvents[plant.id]) || [];
+
+                    const eventSums = {
+                        opexPlants: 0,
+                        opexBess: 0,
+                        opexInsurance: 0,
+                        opexTaxes: 0,
+                        opexSecurity: 0,
+                        opexAssetManagement: 0,
+                        landDdsAnnuo: 0
+                    };
+                    const hasEventCat = {
+                        opexPlants: false,
+                        opexBess: false,
+                        opexInsurance: false,
+                        opexTaxes: false,
+                        opexSecurity: false,
+                        opexAssetManagement: false,
+                        landDdsAnnuo: false
+                    };
+
+                    plantOpexEvents.forEach(ev => {
+                        if (ev.enabled === false) return;
+                        const amt = parseFloat(ev.amount) || 0;
+                        if (!(amt > 0)) return;
+                        const cat = classifyOpexLabel(ev.label);
+                        hasEventCat[cat] = true;
+
+                        const m = parseInt(ev.month, 10);
+                        const rule = (ev.rule === 'gt_cod' || ev.rule === 'lt_cod') ? ev.rule : 'sempre';
+                        let active = true;
+                        if (rule === 'gt_cod' && plant._codParsed) {
+                            active = (opexCalYear > plant._codParsed.y) || (opexCalYear === plant._codParsed.y && m > plant._codParsed.m);
+                        } else if (rule === 'lt_cod' && plant._codParsed) {
+                            active = (opexCalYear < plant._codParsed.y) || (opexCalYear === plant._codParsed.y && m < plant._codParsed.m);
+                        } else if (rule === 'gt_cod' && !plant._codParsed) {
+                            active = yr > 1;
+                        } else if (rule === 'lt_cod' && !plant._codParsed) {
+                            active = yr === 0;
+                        }
+                        if (active) {
+                            eventSums[cat] += amt * (yr === 0 ? 1.0 : inflationMultiplier);
+                        }
+                    });
+
+                    let pOpexPlants = 0;
+                    if (hasEventCat.opexPlants) {
+                        pOpexPlants = eventSums.opexPlants;
+                    } else {
+                        pOpexPlants = yr === 0 ? 0 : (((plant.opex || 0) + (plant.customOpexEur || 0)) * inflationMultiplier);
+                    }
+
+                    let pOpexInsurance = 0;
+                    if (hasEventCat.opexInsurance) {
+                        pOpexInsurance = eventSums.opexInsurance;
+                    } else {
+                        pOpexInsurance = yr === 0 ? 0 : ((plant.opexInsurance || 0) * inflationMultiplier);
+                    }
+
+                    let pOpexSecurity = 0;
+                    if (hasEventCat.opexSecurity) {
+                        pOpexSecurity = eventSums.opexSecurity;
+                    } else {
+                        pOpexSecurity = yr === 0 ? 0 : ((plant.opexSecurity || 0) * inflationMultiplier);
+                    }
+
+                    let pOpexAssetManagement = 0;
+                    if (hasEventCat.opexAssetManagement) {
+                        pOpexAssetManagement = eventSums.opexAssetManagement;
+                    } else {
+                        pOpexAssetManagement = yr === 0 ? 0 : ((plant.opexAssetManagement || 0) * inflationMultiplier);
+                    }
+
+                    let pOpexTaxes = 0;
+                    if (hasEventCat.opexTaxes) {
+                        pOpexTaxes = eventSums.opexTaxes;
+                    } else {
+                        pOpexTaxes = yr === 0 ? 0 : ((plant.opexTaxes || 0) * inflationMultiplier);
+                    }
+
+                    let pLandDdsAnnuo = 0;
+                    if (hasEventCat.landDdsAnnuo) {
+                        pLandDdsAnnuo = eventSums.landDdsAnnuo;
+                    } else {
+                        pLandDdsAnnuo = (plant.landType === 'dds_annuo' ? (plant.landCost || 0) : 0) * (yr === 0 ? 1.0 : inflationMultiplier);
+                    }
+
+                    let pOpexBess = pBessOpex;
+                    if (hasEventCat.opexBess) {
+                        pOpexBess = eventSums.opexBess;
+                    }
+
+                    yOpexPlants += pOpexPlants;
+                    yOpexInsurance += pOpexInsurance;
+                    yOpexTaxes += pOpexTaxes;
+                    yOpexSecurity += pOpexSecurity;
+                    yOpexAssetManagement += pOpexAssetManagement;
+                    yLandDdsAnnuoFee += pLandDdsAnnuo;
+
+                    const pOpexTotal = pOpexPlants + pOpexBess + pBessGridChargingCost + pLandDdsAnnuo + pOpexInsurance + pOpexTaxes + pOpexSecurity + pOpexAssetManagement + pOpexServiceContract;
                     
                     let plantBessAugActual = 0;
                     if (yr === 10 && plantBessMw > 0 && plantBessType !== 'graphene') {
                         plantBessAugActual = (plantBessMwh * 1000 * plantBessCapexKwh) * 0.50;
-                        plant._remainingBessAug += plantBessAugActual;
+                        plant._bessAugCost = plantBessAugActual;
+                        plant._remainingBessAugCivil += plantBessAugActual;
+                        plant._remainingTaxBessAug += plantBessAugActual;
                     }
                     
-                    let pDeprCivilBase = 0;
-                    if (plant._remainingCivilBase > 0) {
-                        const plantEpcCapex = plant.capacity * plant.capex;
-                        const plantBessCAPEX = plantBessMwh * 1000 * plantBessCapexKwh;
-                        const plantConnectionCapex = plant.connectionCost || 0;
-                        const plantDevelopmentCapex = plant.developmentCost || 0;
-                        const plantLandDdsAttualizzato = (plant.landType === 'dds_attualizzato' ? (plant.landCost || 0) : 0);
-                        const plantBase = plantEpcCapex + plantBessCAPEX + plantConnectionCapex + plantDevelopmentCapex + plantLandDdsAttualizzato;
-                        pDeprCivilBase = Math.min(plantBase * p.fiscalDeprRate, plant._remainingCivilBase);
-                        plant._remainingCivilBase -= pDeprCivilBase;
-                    }
-                    
+                    let pDeprSolar = 0;
+                    let pDeprBessBase = 0;
                     let pDeprBessAug = 0;
-                    if (yr > 10 && plant._remainingBessAug > 0) {
-                        const plantBessAugCost = (plantBessMw > 0 && plantBessType !== 'graphene') ? (plantBessMwh * 1000 * plantBessCapexKwh) * 0.50 : 0;
-                        pDeprBessAug = Math.min(plantBessAugCost / 10, plant._remainingBessAug);
-                        plant._remainingBessAug -= pDeprBessAug;
+                    let pDeprOther = 0;
+                    let pDeprTax = 0;
+                    let pDeprTaxBessAug = 0;
+
+                    if (yr > 0) {
+                        const avail = codYearAvailability(plant._codParsed, opexCalYear);
+                        if (avail > 0) {
+                            pDeprSolar = Math.min(plant._baseSolarCivil * p.fiscalDeprRate * avail, plant._remainingSolarCivil);
+                            plant._remainingSolarCivil -= pDeprSolar;
+
+                            pDeprBessBase = Math.min(plant._baseBessCivil * p.fiscalDeprRate * avail, plant._remainingBessCivil);
+                            plant._remainingBessCivil -= pDeprBessBase;
+
+                            pDeprOther = Math.min(plant._baseOtherCivil * p.fiscalDeprRate * avail, plant._remainingOtherCivil);
+                            plant._remainingOtherCivil -= pDeprOther;
+
+                            // Fiscale ex Art. 102 c. 2 TUIR: primo esercizio di entrata in funzione al 50%
+                            const isFirstFunctionYear = (plant._codParsed && opexCalYear === plant._codParsed.y) || (!plant._codParsed && yr === 1);
+                            const taxRate = isFirstFunctionYear ? (p.fiscalDeprRate / 2) : p.fiscalDeprRate;
+                            pDeprTax = Math.min(plant._baseTax * taxRate, plant._remainingTax);
+                            plant._remainingTax -= pDeprTax;
+                        }
+
+                        if (yr > 10 && plant._remainingBessAugCivil > 0) {
+                            pDeprBessAug = Math.min(plant._bessAugCost / 10, plant._remainingBessAugCivil);
+                            plant._remainingBessAugCivil -= pDeprBessAug;
+                        }
+                        if (yr > 10 && plant._remainingTaxBessAug > 0) {
+                            pDeprTaxBessAug = Math.min(plant._bessAugCost * p.fiscalDeprRate, plant._remainingTaxBessAug);
+                            plant._remainingTaxBessAug -= pDeprTaxBessAug;
+                        }
                     }
-                    
+
+                    const pDeprBess = pDeprBessBase + pDeprBessAug;
+                    const pDeprCivilTotal = pDeprSolar + pDeprBess + pDeprOther;
+
+                    yDeprSolar += pDeprSolar;
+                    yDeprBess += pDeprBess;
+                    yDeprOther += pDeprOther;
+                    yDepreciationCivil += pDeprCivilTotal;
+                    totalAnnualDepreciationFiscal += (pDeprTax + pDeprTaxBessAug);
+                    totalAnnualDepreciationFiscalBase += pDeprTax;
+                    totalFiscalRemaining += plant._remainingTax;
+
                     opexBreakdown[pIdx].years.push({
                         opexTotal: pOpexTotal,
-                        deprCivil: pDeprCivilBase + pDeprBessAug,
+                        deprCivil: pDeprCivilTotal,
+                        deprCivilSolar: pDeprSolar,
+                        deprCivilBess: pDeprBess,
+                        deprCivilOther: pDeprOther,
                         opexPlants: pOpexPlants,
-                        opexBess: pBessOpex,
+                        opexBess: pOpexBess,
                         opexGridCharging: pBessGridChargingCost,
                         opexInsurance: pOpexInsurance,
                         opexTaxes: pOpexTaxes,
@@ -2609,16 +3091,8 @@ function runSensitivityLoop(baseState, config) {
                 });
 
                 // Ricavi servizi ancillari BESS (MSD / Capacity Market): €/MW/anno × potenza BESS, indicizzati
-                const yRevenueMsd = totalBessMw * (p.msdEurMwYr || 0) * inflationMultiplier;
+                const yRevenueMsd = yr === 0 ? 0 : (totalBessMw * (p.msdEurMwYr || 0) * inflationMultiplier);
                 const yRevenueTotal = yRevenueRid + yRevenuePpa + yRevenueTimeshifting + yRevenueArbitrage + yRevenueMsd;
-                
-                // Opex components
-                const yOpexPlants = totalOpexPlants * inflationMultiplier;
-                const yOpexInsurance = totalOpexInsurance * inflationMultiplier;
-                const yOpexTaxes = totalOpexTaxes * inflationMultiplier;
-                const yOpexSecurity = totalOpexSecurity * inflationMultiplier;
-                const yOpexAssetManagement = totalOpexAssetManagement * inflationMultiplier;
-                const yLandDdsAnnuoFee = totalLandDdsAnnuo * inflationMultiplier;
                 
                 // ── External financing opex (PE royalty_fee / AF advisory_fee) — costi SPV deducibili ──
                 let yPeRoyalty = 0;   // PE royalty_fee: % ricavi SPV (parasociale)
@@ -2651,34 +3125,8 @@ function runSensitivityLoop(baseState, config) {
                 }
                 mraBalance = mraBeginning + yMaintReserve - mraRelease;
 
-                // Civil Depreciation at fiscalDeprRate
-                let yDeprSolar = 0;
-                if (remainingSolarCivil > 0) {
-                    yDeprSolar = Math.min((totalEpcCapex + totalLandDdsAttualizzatoCapex) * p.fiscalDeprRate, remainingSolarCivil);
-                    remainingSolarCivil -= yDeprSolar;
-                }
-                
-                let yDeprBessBase = 0;
-                if (remainingBessCivil > 0) {
-                    yDeprBessBase = Math.min(bessCAPEX * p.fiscalDeprRate, remainingBessCivil);
-                    remainingBessCivil -= yDeprBessBase;
-                }
-                
-                let yDeprBessAug = 0;
-                if (yr > 10 && remainingBessAugCivil > 0) {
-                    yDeprBessAug = Math.min(bessAugmentationCost / 10, remainingBessAugCivil);
-                    remainingBessAugCivil -= yDeprBessAug;
-                }
-                
-                const yDeprBess = yDeprBessBase + yDeprBessAug;
-                
-                let yDeprOther = 0;
-                if (remainingOtherCivil > 0) {
-                    yDeprOther = Math.min((totalConnectionCapex + totalDevelopmentCapex + totalCustomCapex) * p.fiscalDeprRate, remainingOtherCivil);
-                    remainingOtherCivil -= yDeprOther;
-                }
-                
-                const yDepreciationCivil = yDeprSolar + yDeprBess + yDeprOther;
+                // Civil Depreciation (OIC 16) e Fiscal Depreciation (Art. 102 TUIR)
+                // sono già calcolati analiticamente per ciascun impianto nel loop activePlants sopra.
 
                 // ── Refinancing / Miniperm: al refiYear il debito residuo è rimborsato con un
                 // nuovo finanziamento (payoff balloon + nuova erogazione, netto cassa zero),
@@ -2688,33 +3136,91 @@ function runSensitivityLoop(baseState, config) {
                     const t2 = Math.max(1, parseInt(p.refiLoanTerm) || 10);
                     activeRate = r2;
                     activeMaturity = Math.min(20, yr - 1 + t2);
-                    activeAnnuity = r2 > 0
-                        ? remainingDebt * (r2 * Math.pow(1 + r2, t2)) / (Math.pow(1 + r2, t2) - 1)
-                        : remainingDebt / t2;
+                    const i_m2 = r2 / mDebt;
+                    const nPeriods2 = Math.max(1, Math.round(t2 * mDebt));
+                    activePeriodicAnnuity = (i_m2 > 0)
+                        ? remainingDebt * (i_m2 * Math.pow(1 + i_m2, nPeriods2)) / (Math.pow(1 + i_m2, nPeriods2) - 1)
+                        : remainingDebt / nPeriods2;
+                    activeAnnuity = activePeriodicAnnuity * mDebt;
                 }
 
-                // Debt Interest & Amortization (Dynamic Grace Period)
+                // Portfolio availability for debt in year yr
+                let portfolioDebtAvail = 1.0;
+                if (anchorYear !== null) {
+                    const calYear = anchorYear + yr - 1;
+                    let sumCapex = 0;
+                    let weightedAvailSum = 0;
+                    activePlants.forEach(plant => {
+                        const pCapex = (plant._baseSolarCivil || 0) + (plant._baseBessCivil || 0) + (plant._baseOtherCivil || 0) || (plant.capacity || 1);
+                        const pAvail = codYearAvailability(plant._codParsed, calYear);
+                        sumCapex += pCapex;
+                        weightedAvailSum += pCapex * pAvail;
+                    });
+                    portfolioDebtAvail = sumCapex > 0 ? (weightedAvailSum / sumCapex) : 1.0;
+                    if (yr === 1) y1DebtAvail = portfolioDebtAvail;
+                }
+
+                // Debt Interest & Amortization (Dynamic Grace Period, COD-Awareness & Periodic Repayment)
                 let yInterest = 0, yPrincipalScheduled = 0, yPrincipalVoluntary = 0, yDebtServiceScheduled = 0;
-                if (p.loanTerm > 0 && yr <= activeMaturity && remainingDebt > 0) {
-                    yInterest = remainingDebt * activeRate;
-                    if (yr <= graceFullYears) {
-                        // Anni interi di preammortamento: soli interessi, nessuna quota capitale
-                        yPrincipalScheduled = 0;
-                    } else if (yr === graceFullYears + 1 && graceFrac > 0) {
-                        // Anno misto: frazione di grazia (solo interessi) + frazione ammortante
-                        const graceInterest = remainingDebt * activeRate * graceFrac;
-                        const amortInterest = remainingDebt * activeRate * (1 - graceFrac);
-                        yInterest = graceInterest + amortInterest;
-                        const fractionAmortizing = 1 - graceFrac;
-                        yPrincipalScheduled = Math.min(remainingDebt, Math.max(0, (activeAnnuity * fractionAmortizing) - amortInterest));
+                if (yr > 0 && p.loanTerm > 0 && yr <= activeMaturity && remainingDebt > 0) {
+                    if (portfolioDebtAvail > 0) {
+                        const i_m = activeRate / mDebt;
+                        let curDebtYear = remainingDebt;
+                        let sumIntYear = 0;
+                        let sumPrinYear = 0;
+
+                        if (portfolioDebtAvail >= 0.999) {
+                            for (let per = 0; per < mDebt; per++) {
+                                const int_p = curDebtYear * i_m;
+                                let prin_p = 0;
+                                const graceInP = Math.min(remainingGraceYears, 1 / mDebt);
+                                remainingGraceYears = Math.max(0, remainingGraceYears - graceInP);
+                                const amortInP = Math.max(0, (1 / mDebt) - graceInP) * mDebt;
+                                if (amortInP > 0) {
+                                    const amortInt = curDebtYear * i_m * amortInP;
+                                    prin_p = Math.min(curDebtYear, Math.max(0, (activePeriodicAnnuity * amortInP) - amortInt));
+                                    curDebtYear = Math.max(0, curDebtYear - prin_p);
+                                }
+                                sumIntYear += int_p;
+                                sumPrinYear += prin_p;
+                            }
+                            yInterest = sumIntYear;
+                            yPrincipalScheduled = sumPrinYear;
+                        } else {
+                            // Anno 1 con COD infra-annuale (pro-rata temporis per i periodi post-COD)
+                            const fracPostCod = portfolioDebtAvail;
+                            for (let per = 0; per < mDebt; per++) {
+                                const pStart = per / mDebt;
+                                const pEnd = (per + 1) / mDebt;
+                                const codCutoff = 1 - fracPostCod;
+                                const activeFrac = Math.max(0, Math.min(pEnd, 1) - Math.max(pStart, codCutoff)) * mDebt;
+                                if (activeFrac > 0) {
+                                    const int_p = curDebtYear * i_m * activeFrac;
+                                    let prin_p = 0;
+                                    if (remainingGraceYears > 0.001) {
+                                        const graceUsed = Math.min(remainingGraceYears, (1 / mDebt) * activeFrac);
+                                        remainingGraceYears = Math.max(0, remainingGraceYears - graceUsed);
+                                    } else {
+                                        prin_p = Math.min(curDebtYear, Math.max(0, (activePeriodicAnnuity * activeFrac) - int_p));
+                                        curDebtYear = Math.max(0, curDebtYear - prin_p);
+                                    }
+                                    sumIntYear += int_p;
+                                    sumPrinYear += prin_p;
+                                }
+                            }
+                            yInterest = sumIntYear;
+                            yPrincipalScheduled = sumPrinYear;
+                        }
                     } else {
-                        yPrincipalScheduled = Math.min(remainingDebt, Math.max(0, activeAnnuity - yInterest));
+                        // Anno pre-COD intero (es. COD in anno 2): tutti gli interessi sono IDC capitalizzati in CAPEX
+                        yInterest = 0;
+                        yPrincipalScheduled = 0;
                     }
                     yDebtServiceScheduled = yInterest + yPrincipalScheduled;
                 }
 
                 let yBeginningShareholderLoan = remainingShareholderLoan;
-                let ySociInterestAccrued = (p.sociInterestRate > 0 && yr > p.sociInterestGrace)
+                let ySociInterestAccrued = (yr > 0 && p.sociInterestRate > 0 && yr > p.sociInterestGrace)
                     ? (remainingShareholderLoan * (p.sociInterestRate / 100))
                     : 0;
 
@@ -2724,7 +3230,7 @@ function runSensitivityLoop(baseState, config) {
                 let yPdPrincipalPaid = 0;
                 let yPdBulletPayoff = 0;
                 const pdIsExitYear = (exitOptionYear > 0 && yr === exitOptionYear) || yr === exitYear;
-                if (p.pdEnabled && pdAmount > 0) {
+                if (yr > 0 && p.pdEnabled && pdAmount > 0) {
                     if (p.pdMode === 'bullet_exit') {
                         // PIK composto: interessi capitalizzati sul saldo (grazia = anni senza accrual)
                         if (yr > (p.pdInterestGrace || 0)) {
@@ -2794,20 +3300,8 @@ function runSensitivityLoop(baseState, config) {
                     lcosSumDiscountedEnergy += (yLcosEnergyTotal / Math.pow(1 + p.wacc, yr));
                 }
 
-                // Fiscal Depreciation (Corrected year 10 augmentation capitalization and Year 1 50% rule)
-                let yTaxDepreciationPlant = 0;
-                if (remainingCapexToDepreciateFiscal > 0) {
-                    const deprRateActual = (yr === 1) ? (p.fiscalDeprRate / 2) : p.fiscalDeprRate;
-                    yTaxDepreciationPlant = Math.min(depreciablePlantBaseCivil * deprRateActual, remainingCapexToDepreciateFiscal);
-                    remainingCapexToDepreciateFiscal -= yTaxDepreciationPlant;
-                }
-                let totalAnnualDepreciationFiscal = yTaxDepreciationPlant;
-                let yTaxDepreciationBessAug = 0;
-                if (yr > 10 && remainingBessAugmentationFiscal > 0) {
-                    yTaxDepreciationBessAug = Math.min(bessAugmentationCost * p.fiscalDeprRate, remainingBessAugmentationFiscal);
-                    remainingBessAugmentationFiscal -= yTaxDepreciationBessAug;
-                    totalAnnualDepreciationFiscal += yTaxDepreciationBessAug;
-                }
+                // totalAnnualDepreciationFiscal (Art. 102 c. 2 TUIR) è già calcolato analiticamente
+                // per ciascun impianto nel loop activePlants sopra.
 
                 // --- INTEGRATED ART. 96 TUIR INTERMEDIATE TAX ENGINE ---
                 const ebitdaFiscale = yEbitda;
@@ -2828,8 +3322,10 @@ function runSensitivityLoop(baseState, config) {
                 const yIrapTax = taxableIrap * p.irapRate;
 
                 // IRES (Deductible interest applied)
-                let rawTaxableIres = ebitdaFiscale + yInterestActive - totalDeductibleInterest - totalAnnualDepreciationFiscal;
+                const rawTaxableIresBeforeLoss = ebitdaFiscale + yInterestActive - totalDeductibleInterest - totalAnnualDepreciationFiscal;
+                let rawTaxableIres = rawTaxableIresBeforeLoss;
                 let yIresTax = 0;
+                let appliedLossesTotal = 0;
                 if (rawTaxableIres > 0) {
                     // Art. 84 TUIR: First 3 years losses can offset 100% of taxable income
                     const appliedLossesFirst3Y = Math.min(rawTaxableIres, taxLossCarriedForwardFirst3Y);
@@ -2842,6 +3338,7 @@ function runSensitivityLoop(baseState, config) {
                     rawTaxableIres -= appliedLossesNormal;
                     taxLossCarriedForwardNormal -= appliedLossesNormal;
                     
+                    appliedLossesTotal = appliedLossesFirst3Y + appliedLossesNormal;
                     yIresTax = rawTaxableIres * p.iresRate;
                 } else {
                     if (yr <= 3) {
@@ -2854,6 +3351,7 @@ function runSensitivityLoop(baseState, config) {
 
                 const yCurrentTaxesSpv = yIrapTax + yIresTax;
                 let rawDeferredTaxes = (totalAnnualDepreciationFiscal - yDepreciationCivil) * (p.iresRate + p.irapRate);
+                const unconstrainedDeferredTaxes = rawDeferredTaxes;
                 if (rawDeferredTaxes < 0) {
                     // Reversal cannot exceed the accumulated fund
                     rawDeferredTaxes = -Math.min(Math.abs(rawDeferredTaxes), Math.max(0, deferredTaxFund));
@@ -2878,7 +3376,7 @@ function runSensitivityLoop(baseState, config) {
                 // ── DSCR Sculpting: quota capitale sagomata sul CFADS per DSCR target ──
                 // principal_y = CFADS_y / targetDSCR - interessi_y (post grace, cappato al residuo).
                 // Le imposte sono già state calcolate (dipendono solo dagli interessi, non dal capitale).
-                if (p.sculptingEnabled && (p.targetDscr || 0) > 0 && p.loanTerm > 0 && yr <= activeMaturity && remainingDebt > 0 && yr > graceFullYears) {
+                if (p.sculptingEnabled && (p.targetDscr || 0) > 0 && p.loanTerm > 0 && yr <= activeMaturity && remainingDebt > 0 && remainingGraceYears <= 0) {
                     const sculptedPrincipal = Math.max(0, (yCfads / p.targetDscr) - yInterest);
                     yPrincipalScheduled = Math.min(remainingDebt, sculptedPrincipal);
                     // Il mutuo deve comunque chiudersi a scadenza: eventuale residuo scultato
@@ -2953,38 +3451,74 @@ function runSensitivityLoop(baseState, config) {
                 // col rimborso del finanziamento soci facendo derivare la quota PE anno dopo anno)
                 const peOwnershipPct = (peAmount > 0 && (peAmount + equityAmount + initialShareholderLoan) > 0) ? (peAmount / (peAmount + equityAmount + initialShareholderLoan)) : 0;
 
-                // Shareholder distribution (Finanziamento Soci) — subito dopo senior (PD rimosso dal waterfall SPV)
+                // Calcolo pure equity per limite capienza riserva legale (Art. 2430 c.c.) e riserva capitale (Art. 2482 c.c.)
+                const pureEquityForReserve = (typeof p.holdcoCapital === 'number' ? p.holdcoCapital : 10000) + Math.max(0, totalProjectPureEquity - pdAmount);
+
+                // 1. Riserva Legale SPV (5% ex Art. 2430 c.c., fino al 20% del capitale proprio)
+                let yLegalReserveAccrual = 0;
+                if (yNetProfitSpv > 0) {
+                    const maxLegalReserve = 0.20 * pureEquityForReserve;
+                    yLegalReserveAccrual = Math.min(0.05 * yNetProfitSpv, Math.max(0, maxLegalReserve - accumulatedLegalReserve));
+                }
+                accumulatedLegalReserve += yLegalReserveAccrual;
+
+                // 2. Capacità Distributiva Utili SPV Cumulata (Capienza Utili ex Art. 2433 c.c.)
+                const capUtili = Math.max(0, retainedEarningsBalance + yNetProfitSpv - yLegalReserveAccrual);
+
+                // 3. Shareholder distribution (Finanziamento Soci) — subito dopo senior (PD rimosso dal waterfall SPV)
                 const yTotalInterestPaid = Math.max(0, Math.min(ySociInterestAccrued, cashAvailable));
                 let yTotalLoanRepayment = 0;
-                if (yr > p.sociPrincipalGrace) {
-                    yTotalLoanRepayment = Math.max(0, Math.min(remainingShareholderLoan, cashAvailable - yTotalInterestPaid));
+                if (yr > (p.sociPrincipalGrace || 0)) {
+                    if (p.sociLoanTerm > 0) {
+                        const remainingYears = Math.max(1, (p.sociPrincipalGrace || 0) + p.sociLoanTerm - yr + 1);
+                        const targetRepayment = remainingShareholderLoan / remainingYears;
+                        yTotalLoanRepayment = Math.max(0, Math.min(targetRepayment, cashAvailable - yTotalInterestPaid));
+                    } else {
+                        // Cash sweep al 100%
+                        yTotalLoanRepayment = Math.max(0, Math.min(remainingShareholderLoan, cashAvailable - yTotalInterestPaid));
+                    }
                 }
                 cashAvailable -= (yTotalInterestPaid + yTotalLoanRepayment);
                 remainingShareholderLoan = Math.max(0, remainingShareholderLoan + (ySociInterestAccrued - yTotalInterestPaid) - yTotalLoanRepayment);
 
-                // Dividendi comuni (residuo disponibile)
-                const yTotalDividends = Math.max(0, cashAvailable);
-                let yDividendsDistributed = yTotalDividends;
-                let yCashTrap = 0;
+                // 4. Dividendi Comuni e Restituzione Riserve di Capitale (secondo p.distributionPolicy e p.dividendLock)
+                const cashPostLoan = Math.max(0, cashAvailable);
+                const isDividendLocked = p.dividendLock && remainingDebt > 0.001;
 
-                let accumulatedSpvCashAtStart = spvLockedDividends;
+                let yDividendsDistributed = 0;
+                let yCapitalReserveReturned = 0;
 
-                // --- DIVIDEND LOCK (CASH SWEEP) LOGIC ---
-                if (p.dividendLock) {
-                    const isExitYear = (exitOptionYear > 0 && yr === exitOptionYear) || yr === exitYear;
-                    if (remainingDebt > 0.001 && !isExitYear) {
-                        // Trattieni tutti i dividendi nella SPV
-                        spvLockedDividends += yTotalDividends;
-                        yCashTrap = yTotalDividends;
-                        yDividendsDistributed = 0;
-                    } else {
-                        // Sblocca i dividendi accumulati + dividendo corrente
-                        yDividendsDistributed = yTotalDividends + spvLockedDividends;
-                        spvLockedDividends = 0;
-                    }
+                if (isDividendLocked) {
+                    // Cassa bloccata per dividend lock (cash sweep a garanzia debito)
+                    yDividendsDistributed = 0;
+                    yCapitalReserveReturned = 0;
                 } else {
-                    yCashTrap = 0;
+                    const policy = p.distributionPolicy || 'cash_flow_driven';
+                    if (policy === 'cash_flow_driven') {
+                        yDividendsDistributed = cashPostLoan;
+                        yCapitalReserveReturned = 0;
+                    } else if (policy === 'civil_statutory_strict' || policy === 'civil_strict') {
+                        yDividendsDistributed = Math.min(cashPostLoan, capUtili);
+                        yCapitalReserveReturned = 0;
+                    } else if (policy === 'civil_with_capital_reserve_return') {
+                        yDividendsDistributed = Math.min(cashPostLoan, capUtili);
+                        const cashPostDiv = Math.max(0, cashPostLoan - yDividendsDistributed);
+                        const availableCapitalReserve = Math.max(0, pureEquityForReserve - accumulatedCapitalReserveReturned);
+                        yCapitalReserveReturned = Math.min(cashPostDiv, availableCapitalReserve);
+                        accumulatedCapitalReserveReturned += yCapitalReserveReturned;
+                    } else {
+                        yDividendsDistributed = cashPostLoan;
+                        yCapitalReserveReturned = 0;
+                    }
                 }
+
+                // Aggiornamento capienza utili a nuovo per l'anno successivo
+                retainedEarningsBalance = Math.max(0, capUtili - yDividendsDistributed);
+
+                // 5. Cash Trap Annuo e Cumulato
+                const yCashTrap = Math.max(0, cashPostLoan - yDividendsDistributed - yCapitalReserveReturned);
+                const accumulatedSpvCashAtStart = spvCashTrapCumulative;
+                spvCashTrapCumulative += yCashTrap;
 
                 // ── Distribuzioni Private Equity (sulla quota dividendi Sponsor/totali) ──
                 let yPeDividendPaid = 0;   // quota PE sui dividendi SPV (outflow SPV → PE partner)
@@ -3014,16 +3548,22 @@ function runSensitivityLoop(baseState, config) {
                 }
 
                 // HoldCo Level Inflows (Sponsor ownership = 100% dei flussi intra-gruppo, al netto quote PE)
-                const yHoldcoOpex = 15000 * inflationMultiplier;
+                const yHoldcoOpex = (yr === 0 ? 15000 : 15000 * inflationMultiplier);
                 // Aggiungiamo yOpexAssetManagement come ricavo per la Holdco
                 // HoldCo IRES: se gli interessi PD sono deducibili (flag pdTaxDeductible),
                 // riducono la base imponibile Holding (prima era un no-op: bug corretto)
-                const yPdInterestDeductibleHoldco = (p.pdEnabled && p.pdTaxDeductible !== false) ? yPdInterestPaid : 0;
+                const yPdInterestDeductibleHoldco = (yr > 0 && p.pdEnabled && p.pdTaxDeductible !== false) ? yPdInterestPaid : 0;
                 const taxableHoldcoRevenues = yTotalInterestPaid + (0.05 * yPeDividendToSponsor) + yOpexAssetManagement - yPdInterestDeductibleHoldco;
                 const yHoldcoIresTaxPaid = Math.max(0, taxableHoldcoRevenues - yHoldcoOpex) * p.iresRate;
                 // HoldCo IRAP: base = valore della produzione (fees Asset Mgt intra-gruppo) - costi operativi Holding.
                 // Interessi attivi/passivi e dividendi sono esclusi dalla base IRAP (D.Lgs. 446/97).
                 const yHoldcoIrapTaxPaid = Math.max(0, yOpexAssetManagement - yHoldcoOpex) * p.irapRate;
+
+                // HoldCo Conto Economico intermedio (A, B, EBITDA, EBIT)
+                const yHoldcoProductionValue = yOpexAssetManagement;
+                const yHoldcoProductionCosts = yHoldcoOpex + yHoldcoEarnoutPaid;
+                const yHoldcoEbitda = yHoldcoProductionValue - yHoldcoProductionCosts;
+                const yHoldcoOperatingEbit = yHoldcoEbitda;
 
                 // ── EXIT: payoff PD bullet, quota PE, costi AF (success fee / warrant / convertible) ──
                 let exitNetProceeds = 0;
@@ -3112,9 +3652,11 @@ function runSensitivityLoop(baseState, config) {
                     // Per bullet_exit il servizio annuo è 0 (PIK); il payoff è a exit (yPdBulletPayoffHoldco).
                     yPdInterestPaidHoldco = yPdInterestPaid; // cassa pagata dalla Holding per interessi PD annuali
                     // FCFE Sponsor = flussi intra-gruppo (quota Sponsor) + exit net proceeds - servizio PD Holding - payoff PD Holding
-                    yHoldcoFCFE = yTotalInterestPaid + yTotalLoanRepayment + yPeDividendToSponsor - yHoldcoOpex - yHoldcoIresTaxPaid - yHoldcoIrapTaxPaid - yHoldcoEarnoutPaid + exitNetProceeds + yOpexAssetManagement - yPdInterestPaidHoldco - yPdBulletPayoffHoldco - yPdPrincipalPaid;
+                    yHoldcoFCFE = yTotalInterestPaid + yTotalLoanRepayment + yPeDividendToSponsor + yCapitalReserveReturned - yHoldcoOpex - yHoldcoIresTaxPaid - yHoldcoIrapTaxPaid - yHoldcoEarnoutPaid + exitNetProceeds + yOpexAssetManagement - yPdInterestPaidHoldco - yPdBulletPayoffHoldco - yPdPrincipalPaid;
                     totalHoldcoFCFE += yHoldcoFCFE;
-                    cashFlowsForIRR.push(yHoldcoFCFE);
+                    if (yr > 0) {
+                        cashFlowsForIRR.push(yHoldcoFCFE);
+                    }
                     
                     // FCFF (Project Unlevered)
                     // EBITDA - CAPEX (nell'anno 0) - Tasse Operative - Variazione NWC
@@ -3123,6 +3665,12 @@ function runSensitivityLoop(baseState, config) {
                     yProjectFCFF = yEbitda - yBessAugmentationActual - taxesForFcff + exitEv; 
                     // exitEv is added in the exit year to reflect the unlevered terminal value
                 }
+
+                // HoldCo Conto Economico intermedio (C, EBT, Totale Imposte, Utile Netto)
+                const yHoldcoFinancialNet = yPeDividendToSponsor + yTotalInterestPaid - yPdInterestPaidHoldco;
+                const yHoldcoEbt = yHoldcoOperatingEbit + yHoldcoFinancialNet;
+                const yHoldcoTaxTotal = yHoldcoIresTaxPaid + yHoldcoIrapTaxPaid;
+                const yHoldcoNetProfit = yHoldcoEbt - yHoldcoTaxTotal;
 
 
 
@@ -3133,7 +3681,7 @@ function runSensitivityLoop(baseState, config) {
                 matrix.projectFCFF.push(yProjectFCFF);
                 matrix.years.push(yr);
                 matrix.spvFCFE.push(ySpvFCF);
-                matrix.spvCashTrap.push(Math.max(0, ySpvFCF - yTotalInterestPaid - yTotalLoanRepayment - yTotalDividends) + yCashTrap);
+                matrix.spvCashTrap.push(yCashTrap);
                 // External financing instruments rows
                 matrix.pdInterestAccrued.push(yPdInterestAccrued);
                 matrix.pdInterestPaid.push(yPdInterestPaidHoldco); // ora servizio a livello Holding
@@ -3237,6 +3785,19 @@ function runSensitivityLoop(baseState, config) {
                 matrix.interestCF.push(interestExpensesCarriedForward);
                 matrix.rolCF.push(rolCarriedForward);
                 matrix.taxLossCF.push(taxLossCarriedForward);
+                matrix.taxTaxableIres.push(rawTaxableIresBeforeLoss);
+                matrix.taxDeprDelta.push(yDepreciationCivil - totalAnnualDepreciationFiscal);
+                matrix.taxInterestDelta.push((yInterest + ySociInterestAccrued + yAfDeductible) - totalDeductibleInterest);
+                matrix.taxLossApplied.push(appliedLossesTotal);
+                matrix.taxTaxableFinal.push(Math.max(0, rawTaxableIres));
+                matrix.taxableIrap.push(taxableIrap);
+                matrix.taxFiscalDepr.push(totalAnnualDepreciationFiscal);
+                matrix.taxFiscalDeprBase.push(totalAnnualDepreciationFiscalBase);
+                matrix.taxFiscalRemaining.push(totalFiscalRemaining);
+                matrix.taxNetInterest.push(netInterestExpenses);
+                matrix.taxCivilIdc.push(yCivilDepreciationIdc);
+                matrix.taxDeferredRaw.push(unconstrainedDeferredTaxes);
+                matrix.taxDeferredFund.push(deferredTaxFund);
                 matrix.dividendsPaid.push(yDividendsDistributed);
                 matrix.holdcoFCFE.push(yHoldcoFCFE);
                 // exitValuationGroup = somma nominale delle figlie (trasparente, può essere negativa in caso di default PD)
@@ -3254,14 +3815,25 @@ function runSensitivityLoop(baseState, config) {
                 matrix.holdcoOpex.push(yHoldcoOpex);
                 matrix.holdcoIresTaxPaid.push(yHoldcoIresTaxPaid);
                 matrix.holdcoIrapTaxPaid.push(yHoldcoIrapTaxPaid);
-                matrix.holdcoNetProfit.push(yTotalInterestPaid + yPeDividendToSponsor + yOpexAssetManagement - yHoldcoOpex - yHoldcoIresTaxPaid - yHoldcoIrapTaxPaid - yHoldcoEarnoutPaid);
+                matrix.holdcoProductionValue.push(yHoldcoProductionValue);
+                matrix.holdcoProductionCosts.push(yHoldcoProductionCosts);
+                matrix.holdcoEbitda.push(yHoldcoEbitda);
+                matrix.holdcoOperatingEbit.push(yHoldcoOperatingEbit);
+                matrix.holdcoFinancialNet.push(yHoldcoFinancialNet);
+                matrix.holdcoEbt.push(yHoldcoEbt);
+                matrix.holdcoTaxTotal.push(yHoldcoTaxTotal);
+                matrix.holdcoNetProfit.push(yHoldcoNetProfit);
                 matrix.holdcoEarnoutPaid.push(yHoldcoEarnoutPaid);
-                matrix.holdcoBuyoutPaid.push(0);
-                matrix.holdcoInflowTotal.push(yTotalInterestPaid + yTotalLoanRepayment + yPeDividendToSponsor + yOpexAssetManagement);
+                matrix.holdcoInflowTotal.push(yTotalInterestPaid + yTotalLoanRepayment + yPeDividendToSponsor + yCapitalReserveReturned + yOpexAssetManagement);
                 matrix.holdcoInterestReceived.push(yTotalInterestPaid);
                 matrix.holdcoLoanRepaymentReceived.push(yTotalLoanRepayment);
                 matrix.holdcoDividendReceived.push(yPeDividendToSponsor);
                 matrix.spvLockedDividends.push(accumulatedSpvCashAtStart);
+                matrix.spvCashTrapCumulative.push(spvCashTrapCumulative);
+                matrix.spvLegalReserveAccrual.push(yLegalReserveAccrual);
+                matrix.spvRetainedEarnings.push(retainedEarningsBalance);
+                matrix.spvCapitalReserveReturned.push(yCapitalReserveReturned);
+                matrix.holdcoCapitalReserveReceived.push(yCapitalReserveReturned);
                 matrix.partnerDividendReceived.push(0);
                 matrix.cfadsCumulated.push(cumulativeCfads);
                 matrix.holdcoFCFECumulated.push(cumulativeHoldcoFCFE);
@@ -3273,7 +3845,7 @@ function runSensitivityLoop(baseState, config) {
 
                 // Debt matrices
                 debtSchedule.years.push(yr);
-                debtSchedule.beginningBalance.push(yr === 1 ? debtAmount : debtSchedule.endingBalance[yr-2]);
+                debtSchedule.beginningBalance.push(yr === 0 ? 0 : debtSchedule.endingBalance[yr - 1]);
                 debtSchedule.interestAccrued.push(yInterest);
                 debtSchedule.principalScheduled.push(yPrincipalScheduled);
                 debtSchedule.principalVoluntary.push(yPrincipalVoluntary);
@@ -3281,14 +3853,14 @@ function runSensitivityLoop(baseState, config) {
                 debtSchedule.totalDebtService.push(yDebtServiceActual);
                 debtSchedule.dscr.push(dscr);
                 
-                debtSchedule.beginningBalanceSoci.push(yBeginningShareholderLoan);
+                debtSchedule.beginningBalanceSoci.push(yr === 0 ? 0 : debtSchedule.endingBalanceSoci[yr - 1]);
                 debtSchedule.interestAccruedSoci.push(ySociInterestAccrued);
                 debtSchedule.interestPaidSoci.push(yTotalInterestPaid);
                 debtSchedule.principalPaidSoci.push(yTotalLoanRepayment);
                 debtSchedule.endingBalanceSoci.push(remainingShareholderLoan);
                 debtSchedule.dsraBalance.push(dsraBalance);
                 // Private Debt schedule (sezione 3)
-                debtSchedule.beginningBalancePd.push(yr === 1 ? pdAmount : debtSchedule.endingBalancePd[yr-2]);
+                debtSchedule.beginningBalancePd.push(yr === 0 ? 0 : debtSchedule.endingBalancePd[yr - 1]);
                 debtSchedule.interestAccruedPd.push(yPdInterestAccrued);
                 debtSchedule.interestPaidPd.push(yPdInterestPaidHoldco); // servizio a livello Holding
                 debtSchedule.principalPaidPd.push(yPdPrincipalPaid); // solo quota capitale AMMORTAMENTO (Holding)
@@ -3297,36 +3869,61 @@ function runSensitivityLoop(baseState, config) {
             }
 
             // NPV discounting FCFE with the Cost of Equity (Ke)
-            let holdcoNpv = -equityAmount;
+            let holdcoNpv = -totalSponsorCommittedEquity;
             const npvYearsLimit = exitOptionYear > 0 ? exitOptionYear : exitYear;
             for (let yr = 1; yr <= npvYearsLimit; yr++) {
-                holdcoNpv += matrix.holdcoFCFE[yr - 1] / Math.pow(1 + p.keVal, yr);
+                holdcoNpv += matrix.holdcoFCFE[yr] / Math.pow(1 + p.keVal, yr);
             }
 
             const calculatedIrr = calculateIRR(cashFlowsForIRR);
             
             // Build Unlevered Project FCFF cashflows
-            const cashFlowsForProjectIRR = [-(totalProjectCost + idcAmount)];
+            const cashFlowsForProjectIRR = [-totalProjectCost];
             // Orizzonte Project IRR: vita progetto (20 anni), NON durata del mutuo
-            for (let i = 0; i < (exitOptionYear > 0 ? exitOptionYear : 20); i++) {
-                cashFlowsForProjectIRR.push(matrix.projectFCFF[i]);
+            for (let yr = 1; yr <= (exitOptionYear > 0 ? exitOptionYear : 20); yr++) {
+                cashFlowsForProjectIRR.push(matrix.projectFCFF[yr]);
             }
             const calculatedProjectIrr = calculateIRR(cashFlowsForProjectIRR);
+
+            // Build SPV Levered Equity cash flows
+            const cashFlowsForSpvEquityIRR = [-totalSpvEquityTicket];
+            const maxYearsForSpvIrr = exitOptionYear > 0 ? exitOptionYear : 20;
+            for (let yr = 1; yr <= maxYearsForSpvIrr; yr++) {
+                let ySpvFlow = (matrix.spvFCFE[yr] || 0) + (matrix.dsraRelease ? (matrix.dsraRelease[yr] || 0) : 0);
+                if (exitOptionYear > 0 && yr === exitOptionYear) {
+                    const exitEq = Math.max(0, (matrix.exitEnterpriseValue[yr] || 0) - (matrix.exitDebtPayoff[yr] || 0));
+                    ySpvFlow += exitEq;
+                }
+                cashFlowsForSpvEquityIRR.push(ySpvFlow);
+            }
+            const calculatedSpvEquityIrr = calculateIRR(cashFlowsForSpvEquityIRR);
 
             const calculatedLcoe = lcoeSumDiscountedEnergy > 0 ? (lcoeSumDiscountedCosts / lcoeSumDiscountedEnergy) : 0;
             const calculatedLcos = lcosSumDiscountedEnergy > 0 ? (lcosSumDiscountedCosts / lcosSumDiscountedEnergy) : 0;
 
-            const holdcoMoic = equityAmount > 0 ? (totalHoldcoFCFE / equityAmount) : 0;
+            const holdcoMoic = totalSponsorCommittedEquity > 0 ? (totalHoldcoFCFE / totalSponsorCommittedEquity) : 0;
 
             let paybackPeriod = `> ${npvYearsLimit} Anni`;
-            let cumulativeCash = -equityAmount;
+            let cumulativeCash = -totalSponsorCommittedEquity;
             for (let t = 1; t <= npvYearsLimit; t++) {
                 let prev = cumulativeCash;
-                cumulativeCash += matrix.holdcoFCFE[t-1];
+                cumulativeCash += matrix.holdcoFCFE[t];
                 if (prev < 0 && cumulativeCash >= 0) {
-                    const fcfeT = matrix.holdcoFCFE[t-1];
+                    const fcfeT = matrix.holdcoFCFE[t];
                     // Guard: divisione per zero se l'FCFE dell'anno di crossing è nullo
                     paybackPeriod = (fcfeT > 0 ? ((t-1) + Math.abs(prev)/fcfeT) : t).toFixed(1) + " Anni";
+                    break;
+                }
+            }
+
+            let paybackPeriodUnlevered = `> ${npvYearsLimit} Anni`;
+            let cumulativeCashUnlevered = -totalProjectCost;
+            for (let t = 1; t <= npvYearsLimit; t++) {
+                let prev = cumulativeCashUnlevered;
+                cumulativeCashUnlevered += matrix.projectFCFF[t];
+                if (prev < 0 && cumulativeCashUnlevered >= 0) {
+                    const fcffT = matrix.projectFCFF[t];
+                    paybackPeriodUnlevered = (fcffT > 0 ? ((t - 1) + Math.abs(prev) / fcffT) : t).toFixed(1) + " Anni";
                     break;
                 }
             }
@@ -3402,15 +3999,15 @@ function runSensitivityLoop(baseState, config) {
                 for (let y = 1; y <= nYears; y++) {
                     const yi = y - 1;
                     for (let m = 0; m < 12; m++) {
-                        const revPpa = (mtx.revenuePpa[yi] || 0) * shares.ppa[m];
-                        const revRid = (mtx.revenueRid[yi] || 0) * shares.rid[m];
-                        const revArb = (mtx.revenueArbitrage[yi] || 0) * shares.arb[m];
-                        const revTs = (mtx.revenueTimeshifting[yi] || 0) * shares.ts[m];
-                        const revTot = (mtx.revenueTotal[yi] || 0) * shareTot[m];
-                        const opex = (mtx.opexTotal[yi] || 0) / 12;
-                        const taxes = (mtx.currentTaxesSpv[yi] || 0) / 12;
-                        const interest = (ds.interestAccrued[yi] || 0) / 12;
-                        const principal = ((ds.principalScheduled[yi] || 0) + (ds.principalVoluntary[yi] || 0)) / 12;
+                        const revPpa = (mtx.revenuePpa[y] || 0) * shares.ppa[m];
+                        const revRid = (mtx.revenueRid[y] || 0) * shares.rid[m];
+                        const revArb = (mtx.revenueArbitrage[y] || 0) * shares.arb[m];
+                        const revTs = (mtx.revenueTimeshifting[y] || 0) * shares.ts[m];
+                        const revTot = (mtx.revenueTotal[y] || 0) * shareTot[m];
+                        const opex = (mtx.opexTotal[y] || 0) / 12;
+                        const taxes = (mtx.currentTaxesSpv[y] || 0) / 12;
+                        const interest = (ds.interestAccrued[y] || 0) / 12;
+                        const principal = ((ds.principalScheduled[y] || 0) + (ds.principalVoluntary[y] || 0)) / 12;
                         const debtSvc = interest + principal;
                         const net = revTot - opex - taxes - debtSvc;
                         out.months.push(yi * 12 + m + 1);
@@ -3461,7 +4058,7 @@ function runSensitivityLoop(baseState, config) {
                     opex: [], taxes: [], interest: [], principal: [], debtService: [],
                     capexOutflow: [],
                     fundingInflow: [],
-                    vatCollected: [], vatPaidToSuppliers: [], vatRemitted: [], vatCreditEnd: [], vatCashFlow: [],
+                    vatCollected: [], vatPaidToSuppliers: [], vatRemitted: [], vatRefundReceived: [], vatCompensated: [], vatCreditEnd: [], vatCashFlow: [],
                     vatMaxCredit: 0, vatNetCumulative: 0, vatEnabled: false,
                     netCashflow: [], cashOpening: [], cashClosing: [],
                     fundedCashOpening: [], fundedCashClosing: [],
@@ -3480,7 +4077,13 @@ function runSensitivityLoop(baseState, config) {
                 const vatEnabled = inputs.vatEnabled !== undefined ? !!inputs.vatEnabled : true;
                 const vatRate = (inputs.vatRate !== undefined ? inputs.vatRate : 22) / 100;
                 const vatTaxableRevenuePct = (inputs.vatTaxableRevenuePct !== undefined ? inputs.vatTaxableRevenuePct : 100) / 100;
-                const vatSettleEvery = (inputs.vatSettlement === 'trimestrale') ? 3 : 1;
+                const vatSettlement = inputs.vatSettlement || 'mensile';
+                const vatSettleEvery = (vatSettlement === 'trimestrale') ? 3 : 1;
+                const vatTrMode = inputs.vatTrMode || (inputs.vatRefundEnabled === false ? 'riporto' : (inputs.vatRefundEnabled ? 'rimborso' : 'riporto'));
+                const vatRefundLag = (inputs.vatRefundLagMonths !== undefined && inputs.vatRefundLagMonths !== null && !isNaN(parseInt(inputs.vatRefundLagMonths, 10)))
+                    ? Math.max(0, parseInt(inputs.vatRefundLagMonths, 10))
+                    : 0;
+                const scheduledRefunds = new Float64Array(totalMonths);
                 const _vatRevPct = (v, def) => ((v !== undefined && v !== null && isFinite(v)) ? v : def) / 100;
                 const hasStreamVat = ['vatRevPpa', 'vatRevRid', 'vatRevBrp', 'vatRevCer', 'vatRevFerx']
                     .some(k => inputs[k] !== undefined && inputs[k] !== null);
@@ -3541,7 +4144,7 @@ function runSensitivityLoop(baseState, config) {
                     const yi = y - 1;
                     const calYear = anchorYearIn + y - 1;
                     STREAMS.forEach(sName => {
-                        const annual = (annualByStream[sName] && annualByStream[sName][yi]) || 0;
+                        const annual = (annualByStream[sName] && annualByStream[sName][y]) || 0;
                         if (annual === 0) return;
                         let wSum = 0;
                         const weights = plantShapes.map(ps => {
@@ -3581,7 +4184,7 @@ function runSensitivityLoop(baseState, config) {
                 const taxPayMonth = Math.min(12, Math.max(1, parseInt(inputs.taxPaymentMonth, 10) || 6));
                 const taxesOut = new Float64Array(totalMonths);
                 for (let y = 1; y <= YEARS; y++) {
-                    const tax = (mtx.currentTaxesSpv && mtx.currentTaxesSpv[y - 1]) || 0;
+                    const tax = (mtx.currentTaxesSpv && mtx.currentTaxesSpv[y]) || 0;
                     if (tax === 0) continue;
                     const payIdx = 12 + y * 12 + (taxPayMonth - 1); // mese scelto dell'anno y+1
                     if (payIdx < totalMonths) taxesOut[payIdx] += tax;
@@ -3707,8 +4310,12 @@ function runSensitivityLoop(baseState, config) {
                 const opexEvMonthlyY = Array.from({ length: YEARS }, () => new Float64Array(12));
                 const opexVatEvMonthlyY = Array.from({ length: YEARS }, () => new Float64Array(12));
                 const opexEvTotalY = new Float64Array(YEARS);
+                const opexEvMonthlyY0 = new Float64Array(12);
+                const opexVatEvMonthlyY0 = new Float64Array(12);
+                let opexEvTotalY0 = 0;
                 let opexEvTotal = 0;
                 let opexVatEvTotal = 0;
+                const calYear0 = anchorYearIn - 1;
                 plantsList.forEach(pl => {
                     const cod = pl._codParsed || null;
                     const evs = (opexEvents && opexEvents[pl.id]) || [];
@@ -3720,6 +4327,18 @@ function runSensitivityLoop(baseState, config) {
                         const rate = vatOpexRateByLabel[ev.label] !== undefined ? vatOpexRateByLabel[ev.label] : _vatPct(inputs.vatOpexAssetMgmt, 22);
                         opexEvTotal += amt;
                         opexVatEvTotal += amt * rate;
+
+                        // Anno 0 (pre-COD)
+                        let activeY0 = false;
+                        if (rule === 'sempre') activeY0 = true;
+                        else if (rule === 'lt_cod' && cod) activeY0 = (calYear0 < cod.y) || (calYear0 === cod.y && m < cod.m);
+                        else if (rule === 'gt_cod' && cod) activeY0 = (calYear0 > cod.y) || (calYear0 === cod.y && m > cod.m);
+                        if (activeY0) {
+                            opexEvMonthlyY0[m - 1] += amt;
+                            opexVatEvMonthlyY0[m - 1] += amt * rate;
+                            opexEvTotalY0 += amt;
+                        }
+
                         for (let yi = 0; yi < YEARS; yi++) {
                             const calYear = anchorYearIn + yi;
                             let active = true;
@@ -3732,8 +4351,10 @@ function runSensitivityLoop(baseState, config) {
                         }
                     });
                 });
-                out.opexBudgetY1 = (mtx.opexTotal && mtx.opexTotal[0]) || 0;
+                out.opexBudgetY0 = (mtx.opexTotal && mtx.opexTotal[0]) || 0;
+                out.opexBudgetY1 = (mtx.opexTotal && mtx.opexTotal[1]) || 0;
                 out.opexAllocated = opexEvTotal;                        // dichiarato (tutti gli eventi)
+                out.opexAllocatedY0 = opexEvTotalY0;
                 out.opexAllocatedY1 = opexEvTotalY[0] || 0;             // effettivo in Anno 1 (regole temporali)
                 out.opexResidual = Math.max(0, out.opexBudgetY1 - (opexEvTotalY[0] || 0)); // indicatore di copertura (non genera cassa)
                 out.opexVatAllocated = opexVatEvTotal;
@@ -3746,9 +4367,11 @@ function runSensitivityLoop(baseState, config) {
                 const otherM = new Float64Array(YEARS);
                 for (let y = 1; y <= YEARS; y++) {
                     const yi = y - 1;
-                    otherM[yi] = (((mtx.holdcoEarnoutPaid && mtx.holdcoEarnoutPaid[yi]) || 0) + ((mtx.holdcoOpex && mtx.holdcoOpex[yi]) || 0) +
-                        ((mtx.holdcoIresTaxPaid && mtx.holdcoIresTaxPaid[yi]) || 0) + ((mtx.holdcoIrapTaxPaid && mtx.holdcoIrapTaxPaid[yi]) || 0)) / 12;
+                    otherM[yi] = (((mtx.holdcoEarnoutPaid && mtx.holdcoEarnoutPaid[y]) || 0) + ((mtx.holdcoOpex && mtx.holdcoOpex[y]) || 0) +
+                        ((mtx.holdcoIresTaxPaid && mtx.holdcoIresTaxPaid[y]) || 0) + ((mtx.holdcoIrapTaxPaid && mtx.holdcoIrapTaxPaid[y]) || 0)) / 12;
                 }
+                const otherM_Y0 = (((mtx.holdcoEarnoutPaid && mtx.holdcoEarnoutPaid[0]) || 0) + ((mtx.holdcoOpex && mtx.holdcoOpex[0]) || 0) +
+                    ((mtx.holdcoIresTaxPaid && mtx.holdcoIresTaxPaid[0]) || 0) + ((mtx.holdcoIrapTaxPaid && mtx.holdcoIrapTaxPaid[0]) || 0)) / 12;
 
                 let cash = 0;
                 let holdcoCash = 0;
@@ -3773,11 +4396,11 @@ function runSensitivityLoop(baseState, config) {
                 fundingInflow[sociIdx] += (funding && funding.sociLoan) || 0;
                 fundingInflow[debtIdx] += (funding && funding.debtAmount) || 0;
 
-                // CF11: servizio debito SENIOR DATATO — decorre dalla data di erogazione
-                // (primo mese con pro-rata giorni, convenzione act/360), preammortamento
-                // (seniorGracePeriodMonths) solo interessi, poi ammortamento francese
-                // mensile (rata costante) fino a scadenza (loanTerm). Cash sweep/DSRA
-                // (componente volontaria) resta annuale /12 perché path-dependent.
+                // CF11: servizio debito SENIOR DATATO — decorre dal COD (logica Project Finance)
+                // con preammortamento (seniorGracePeriodMonths) solo interessi, poi ammortamento
+                // francese con frequenza impostata in FINANZA (mensile, trimestrale, semestrale, annuale).
+                // Nei mesi pre-COD l'impianto è in costruzione: gli interessi sono IDC capitalizzati in CAPEX
+                // e non gravano sulla cassa operativa della gestione.
                 const interestDated = new Float64Array(totalMonths);
                 const principalDated = new Float64Array(totalMonths);
                 {
@@ -3785,33 +4408,89 @@ function runSensitivityLoop(baseState, config) {
                     const rate = inputs.interestRate !== undefined ? inputs.interestRate : 0.045;
                     const termYears = parseInt(inputs.loanTerm, 10) || 0;
                     const graceM = Math.max(0, parseInt(inputs.seniorGracePeriodMonths, 10) || 0);
-                    const dIdx = debtIdx; // stessa data dell'afflusso CF8
+                    const dIdx = debtIdx; // data afflusso CF8
                     const dParsed = parseCodDate(inputs.fundingDebtDate);
-                    if (P0 > 0 && termYears > 0 && dIdx >= 0 && dIdx < totalMonths) {
-                        const im = rate / 12;
-                        const firstIdx = dIdx + 1; // prima rata nel mese successivo all'erogazione
-                        const startIdx = Math.min(totalMonths, firstIdx + graceM);
-                        const nMonths = Math.max(1, termYears * 12 - graceM);
-                        const annuity = im > 0 ? P0 * im / (1 - Math.pow(1 + im, -nMonths)) : P0 / nMonths;
-                        let outstanding = P0;
-                        for (let i = firstIdx; i < totalMonths && outstanding > 1e-9; i++) {
-                            const yy = anchorYearIn - 1 + Math.floor(i / 12);
-                            const mm = (i % 12) + 1;
-                            const dim = codDaysInMonth(yy, mm);
-                            // Primo pagamento: interessi dal giorno di erogazione a fine mese
-                            let days = dim;
-                            if (i === firstIdx && dParsed) {
-                                days = Math.max(1, codDaysInMonth(dParsed.y, dParsed.m) - dParsed.d + 1) + dim;
+
+                    let minCodIdx = totalMonths;
+                    let minCodDate = null;
+                    plantsList.forEach(pl => {
+                        if (pl.enabled !== false && pl._codParsed) {
+                            const idx = (pl._codParsed.y - firstYear) * 12 + (pl._codParsed.m - 1);
+                            if (idx < minCodIdx) {
+                                minCodIdx = idx;
+                                minCodDate = pl._codParsed;
                             }
-                            const intM = outstanding * rate * days / 360;
-                            let prinM = 0;
-                            if (i >= startIdx) {
-                                prinM = (i === startIdx + nMonths - 1) ? outstanding : Math.max(0, annuity - intM);
-                                prinM = Math.min(prinM, outstanding);
-                                outstanding -= prinM;
+                        }
+                    });
+
+                    const hasExplicitDebtDate = Boolean(inputs.fundingDebtDate && String(inputs.fundingDebtDate).trim());
+                    const svcStartIdx = hasExplicitDebtDate ? (dIdx + 1) : (minCodDate !== null ? minCodIdx : (dIdx + 1));
+                    const svcRefParsed = hasExplicitDebtDate ? dParsed : (minCodDate !== null ? minCodDate : dParsed);
+
+                    let mDebtDated = 12; // default legacy mensile se non specificato
+                    if (inputs.debtRepaymentFrequency === 'mensile') mDebtDated = 12;
+                    else if (inputs.debtRepaymentFrequency === 'trimestrale') mDebtDated = 4;
+                    else if (inputs.debtRepaymentFrequency === 'semestrale') mDebtDated = 2;
+                    else if (inputs.debtRepaymentFrequency === 'annuale') mDebtDated = 1;
+
+                    if (P0 > 0 && termYears > 0 && svcStartIdx >= 0 && svcStartIdx < totalMonths) {
+                        if (mDebtDated === 12) {
+                            const im = rate / 12;
+                            const firstIdx = svcStartIdx;
+                            const startIdx = Math.min(totalMonths, firstIdx + graceM);
+                            const nMonths = Math.max(1, termYears * 12 - graceM);
+                            const annuity = im > 0 ? P0 * im / (1 - Math.pow(1 + im, -nMonths)) : P0 / nMonths;
+                            let outstanding = P0;
+                            for (let i = firstIdx; i < totalMonths && outstanding > 1e-9; i++) {
+                                const yy = anchorYearIn - 1 + Math.floor(i / 12);
+                                const mm = (i % 12) + 1;
+                                const dim = codDaysInMonth(yy, mm);
+                                let days = dim;
+                                if (i === firstIdx && svcRefParsed) {
+                                    if (hasExplicitDebtDate) {
+                                        days = Math.max(1, codDaysInMonth(svcRefParsed.y, svcRefParsed.m) - svcRefParsed.d + 1) + dim;
+                                    } else if (svcRefParsed.d > 1) {
+                                        days = Math.max(1, codDaysInMonth(svcRefParsed.y, svcRefParsed.m) - svcRefParsed.d + 1);
+                                    }
+                                }
+                                const totalDaysYear = (codDaysInMonth(yy, 2) === 29 ? 366 : 365);
+                                const dayDivisor = hasExplicitDebtDate ? 360 : totalDaysYear;
+                                const intM = outstanding * rate * days / dayDivisor;
+                                let prinM = 0;
+                                if (i >= startIdx) {
+                                    prinM = (i === startIdx + nMonths - 1) ? outstanding : Math.max(0, annuity - intM);
+                                    prinM = Math.min(prinM, outstanding);
+                                    outstanding -= prinM;
+                                }
+                                interestDated[i] = intM;
+                                principalDated[i] = prinM;
                             }
-                            interestDated[i] = intM;
-                            principalDated[i] = prinM;
+                        } else {
+                            const stepM = Math.max(1, Math.round(12 / mDebtDated));
+                            const nPeriodsTotal = termYears * mDebtDated;
+                            let remainingGraceP = graceM / stepM;
+                            const nAmortPeriods = Math.max(0.1, nPeriodsTotal - (graceM / stepM));
+                            const im = rate / mDebtDated;
+                            const annuity = im > 0 ? P0 * im / (1 - Math.pow(1 + im, -nAmortPeriods)) : P0 / nAmortPeriods;
+                            let outstanding = P0;
+                            for (let k = 1; k <= nPeriodsTotal && outstanding > 1e-9; k++) {
+                                const payIdx = svcStartIdx + k * stepM - 1;
+                                if (payIdx >= totalMonths) break;
+
+                                const intP = outstanding * im;
+                                let prinP = 0;
+                                const graceInP = Math.min(remainingGraceP, 1.0);
+                                remainingGraceP = Math.max(0, remainingGraceP - graceInP);
+                                const amortInP = Math.max(0, 1.0 - graceInP);
+                                if (amortInP > 0) {
+                                    const amortInt = outstanding * im * amortInP;
+                                    prinP = (k === nPeriodsTotal) ? outstanding : Math.max(0, (annuity * amortInP) - amortInt);
+                                    prinP = Math.min(prinP, outstanding);
+                                    outstanding -= prinP;
+                                }
+                                interestDated[payIdx] = intP;
+                                principalDated[payIdx] = prinP;
+                            }
                         }
                     }
                 }
@@ -3890,6 +4569,7 @@ function runSensitivityLoop(baseState, config) {
                 // con credito IVA portato a nuovo. Effetto sul cash flow = incassata −
                 // pagata ai fornitori − versata all'erario. Costanti IVA dichiarate sopra.
                 let vatCredit = 0;
+                let pendingRefund = 0;
                 out.vatEnabled = vatEnabled;
 
                 for (let i = 0; i < totalMonths; i++) {
@@ -3901,12 +4581,11 @@ function runSensitivityLoop(baseState, config) {
                     // (con regole temporali). Nessuna spalmatura fittizia: il cash flow
                     // riflette esclusivamente le uscite reali dichiarate dall'utente.
                     const opex = isYear0 ? 0 : opexEvMonthlyY[yi][m];
-                    const taxes = taxesOut[i];
                     // CF11: debito senior datato (erogazione + preammortamento + pro-rata giorni)
                     const interest = interestDated[i];
-                    const principal = principalDated[i] + (isYear0 ? 0 : (ds.principalVoluntary[yi] || 0) / 12);
+                    const principal = principalDated[i] + (isYear0 ? 0 : (ds.principalVoluntary[yi + 1] || 0) / 12);
                     const debtSvc = interest + principal;
-                    // CF10: IVA di cassa del mese
+                    // CF10/CF11: IVA di cassa del mese
                     let vatOut = 0, vatIn = 0, vatRemit = 0;
                     if (vatEnabled) {
                         vatOut = vatOutPre[i];
@@ -3918,10 +4597,47 @@ function runSensitivityLoop(baseState, config) {
                         const isSettle = ((i % vatSettleEvery) === (vatSettleEvery - 1)) || (i === totalMonths - 1);
                         if (isSettle && vatCredit < 0) { vatRemit = -vatCredit; vatCredit = 0; }
                     }
-                    const vatCashFlow = vatEnabled ? (vatOut - vatIn - vatRemit) : 0;
+
+                    // Compensazione F24 con imposte correnti (IRES/IRAP in taxesOut[i]):
+                    let comp = 0;
+                    if (vatEnabled && (vatTrMode === 'compensazione' || vatTrMode === 'ibrido') && taxesOut[i] > 0) {
+                        const availableCredit = Math.max(0, vatCredit - pendingRefund);
+                        if (availableCredit > 0) {
+                            comp = Math.min(availableCredit, taxesOut[i]);
+                            taxesOut[i] -= comp;
+                            vatCredit -= comp;
+                        }
+                    }
+                    const taxes = taxesOut[i];
+
+                    // Istanza trimestrale Modello IVA TR (fine trimestri solari: m = 2 (mar), 5 (giu), 8 (set), 11 (dic))
+                    if (vatEnabled && (vatTrMode === 'rimborso' || vatTrMode === 'ibrido')) {
+                        const isQuarterEnd = (m === 2 || m === 5 || m === 8 || m === 11);
+                        const availableCredit = Math.max(0, vatCredit - pendingRefund);
+                        if (isQuarterEnd && availableCredit >= 2582.28) {
+                            const req = availableCredit;
+                            pendingRefund += req;
+                            const payIdx = i + vatRefundLag;
+                            if (payIdx < totalMonths) {
+                                scheduledRefunds[payIdx] += req;
+                            } else {
+                                out.vatRefundAfterHorizon = (out.vatRefundAfterHorizon || 0) + req;
+                            }
+                        }
+                    }
+
+                    const refundRec = vatEnabled ? scheduledRefunds[i] : 0;
+                    if (refundRec > 0) {
+                        pendingRefund = Math.max(0, pendingRefund - refundRec);
+                        vatCredit = Math.max(0, vatCredit - refundRec);
+                    }
+
+                    const vatCashFlow = vatEnabled ? (vatOut - vatIn - vatRemit + refundRec) : 0;
                     out.vatCollected.push(vatOut);
                     out.vatPaidToSuppliers.push(vatIn);
                     out.vatRemitted.push(vatRemit);
+                    out.vatRefundReceived.push(refundRec);
+                    out.vatCompensated.push(comp);
                     out.vatCreditEnd.push(vatCredit);
                     out.vatCashFlow.push(vatCashFlow);
                     const net = collected[i] - opex - taxes - debtSvc - capexOut[i] + vatCashFlow;
@@ -3996,6 +4712,13 @@ function runSensitivityLoop(baseState, config) {
                 // CF10: aggregati IVA
                 out.vatMaxCredit = out.vatCreditEnd.length ? Math.max.apply(null, out.vatCreditEnd) : 0;
                 out.vatNetCumulative = out.vatCashFlow.reduce((a, b) => a + b, 0);
+                out.vatCompensatedTotal = out.vatCompensated.reduce((a, b) => a + b, 0);
+                out.vatRefundTotal = out.vatRefundReceived.reduce((a, b) => a + b, 0);
+                out.taxesPaidTotal = out.taxes.reduce((a, b) => a + b, 0);
+                out.taxesAccruedTotal = 0;
+                for (let y = 1; y <= YEARS; y++) {
+                    out.taxesAccruedTotal += (mtx.currentTaxesSpv && mtx.currentTaxesSpv[y]) || 0;
+                }
 
                 // CF8: minimo della cassa finanziata + XIRR equity datato
                 let fMin = Infinity, fMinMonth = 0;
@@ -4007,10 +4730,11 @@ function runSensitivityLoop(baseState, config) {
                 const baseY = eqParsed ? eqParsed.y : anchorYearIn;
                 const baseM = eqParsed ? eqParsed.m : 1;
                 const toYears = (y, m) => (y - baseY) + ((m - 1) - (baseM - 1)) / 12;
-                const xflows = [{ t: 0, amount: -((funding && funding.equityAmount) || 0) }];
+                const equityCommitted = ((funding && funding.equityAmount) || 0) + ((funding && funding.sociLoan) || 0);
+                const xflows = [{ t: 0, amount: -equityCommitted }];
                 const nYr = (mtx.holdcoFCFE || []).length;
-                for (let yr = 1; yr <= nYr; yr++) {
-                    const v = mtx.holdcoFCFE[yr - 1] || 0;
+                for (let yr = 1; yr < nYr; yr++) {
+                    const v = mtx.holdcoFCFE[yr] || 0;
                     if (Math.abs(v) > 1e-9) xflows.push({ t: toYears(anchorYearIn + yr - 1, 12), amount: v });
                 }
                 out.datedXirr = calculateXIRR(xflows);
@@ -4020,8 +4744,10 @@ function runSensitivityLoop(baseState, config) {
             const finalResults = {
                 medioneKpiText: medioneKpiText,
                 totalProjectCost, debtAmount, equityAmount,
+                initialShareholderLoan,
+                y1OperatingAvail: y1DebtAvail,
                 totalCustomCapex, totalCustomOpex,
-                calculatedIrr, calculatedProjectIrr, holdcoNpv, holdcoMoic, paybackPeriod, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
+                calculatedIrr, calculatedProjectIrr, calculatedSpvEquityIrr, holdcoNpv, holdcoMoic, paybackPeriod, paybackPeriodUnlevered, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
                 matrix, debtSchedule, combinedSolarProfile, generalMedionePrices, bessSimulation,
                 monthlyCashflow: anchorYear !== null
                     ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear, State.capexPayments || null, State.opexEvents || null, {
@@ -4089,21 +4815,26 @@ function runSensitivityLoop(baseState, config) {
         }
 
         function generateLoadCurve(annualMwh, worksSat, worksSun, worksHol, shiftType, plantId) {
+            const plant = State && State.plants ? State.plants.find(p => p.id === plantId) : null;
             if (shiftType === 'public_lighting') {
-                const plant = State.plants.find(p => p.id === plantId);
                 const lat = plant ? plant.pvgisLatitude : null;
                 const lng = plant ? plant.pvgisLongitude : null;
                 return calculateTwilightCurve(annualMwh, lat, lng);
             }
 
+            const cod = plant && plant.codDate ? parseCodDate(plant.codDate) : null;
+            const calYear = cod ? cod.y : (State && State.inputs && State.inputs.anchorYear ? Number(State.inputs.anchorYear) : 2025);
+            const startDow = new Date(Date.UTC(calYear, 0, 1)).getUTCDay();
+            const holidays = getItalianHolidays(calYear);
+
             if (shiftType === 'domestic') {
-                return generateDomesticCurve(annualMwh, worksSat, worksSun, worksHol);
+                return generateDomesticCurve(annualMwh, worksSat, worksSun, worksHol, calYear);
             }
 
             const rawLoad = new Float64Array(8760);
             for (let dayIdx = 0; dayIdx < 365; dayIdx++) {
-                const dow = (3 + dayIdx) % 7; // 0=Sun,6=Sat
-                const isHoliday = IT_HOLIDAYS_2025.has(dayIdx);
+                const dow = (startDow + dayIdx) % 7; // 0=Sun,6=Sat
+                const isHoliday = holidays.has(dayIdx);
                 const isSunday  = dow === 0;
                 const isSaturday= dow === 6;
                 let isWorkDay = true;
@@ -4153,11 +4884,13 @@ function runSensitivityLoop(baseState, config) {
             return load;
         }
 
-        function generateDomesticCurve(annualMwh, worksSat, worksSun, worksHol) {
+        function generateDomesticCurve(annualMwh, worksSat, worksSun, worksHol, calYear = 2025) {
+            const startDow = new Date(Date.UTC(calYear, 0, 1)).getUTCDay();
+            const holidays = getItalianHolidays(calYear);
             const rawLoad = new Float64Array(8760);
             for (let dayIdx = 0; dayIdx < 365; dayIdx++) {
-                const dow = (3 + dayIdx) % 7; // 0=Sun,6=Sat
-                const isHoliday = IT_HOLIDAYS_2025.has(dayIdx);
+                const dow = (startDow + dayIdx) % 7; // 0=Sun,6=Sat
+                const isHoliday = holidays.has(dayIdx);
                 const isSunday  = dow === 0;
                 const isSaturday= dow === 6;
                 let isWorkDay = true;

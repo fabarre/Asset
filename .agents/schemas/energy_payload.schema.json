@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EnergyPayload",
+  "description": "Contratto dati tipizzato per il trasferimento dei vettori fisici da energy_expert a finance_modeler",
+  "type": "object",
+  "properties": {
+    "simulation_year": { "type": "integer", "default": 2025 },
+    "bess_chemistry": { "type": "string", "enum": ["LFP", "NMC"] },
+    "nominal_capacity_kwh": { "type": "number", "minimum": 0 },
+    "annual_soh_final": { "type": "number", "minimum": 0, "maximum": 1 },
+    "mutual_exclusion_verified": { "type": "boolean" },
+    "max_cell_temperature_celsius": { "type": "number" },
+    "hourly_production_kwh": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 },
+      "minItems": 8760,
+      "maxItems": 8760
+    },
+    "hourly_load_kwh": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 },
+      "minItems": 8760,
+      "maxItems": 8760
+    },
+    "hourly_grid_feed_kwh": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 },
+      "minItems": 8760,
+      "maxItems": 8760
+    },
+    "hourly_grid_import_kwh": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 },
+      "minItems": 8760,
+      "maxItems": 8760
+    }
+  },
+  "required": [
+    "simulation_year",
+    "bess_chemistry",
+    "annual_soh_final",
+    "mutual_exclusion_verified",
+    "hourly_production_kwh",
+    "hourly_load_kwh",
+    "hourly_grid_feed_kwh"
+  ],
+  "additionalProperties": false
+}

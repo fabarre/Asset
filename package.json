@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "node tests/test_worker.mjs",
+    "test": "node tests/test_worker.mjs && node tests/test_excel_export.mjs && node tests/test_pdf_export.mjs && node tests/test_excel_formulas_reactivity.mjs",
     "test:e2e": "node tests/e2e_validate.js",
     "test:xss": "node tests/xss_validate.js",
     "sb": "node tools/sb.mjs"
@@ -10,6 +10,7 @@
     "exceljs": "^4.4.0"
   },
   "devDependencies": {
+    "hyperformula": "^3.4.0",
     "playwright-core": "^1.61.0"
   }
 }

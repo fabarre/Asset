@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FinancialPayload",
+  "description": "Contratto dati tipizzato per il trasferimento delle grandezze finanziarie e del debito da finance_modeler a fiscal_expert e supervisore",
+  "type": "object",
+  "properties": {
+    "capex_total": { "type": "number", "minimum": 0 },
+    "ltv": { "type": "number", "minimum": 0, "maximum": 1 },
+    "debt_senior_initial": { "type": "number", "minimum": 0 },
+    "equity_initial": { "type": "number", "minimum": 0 },
+    "preamortization_months": { "type": "integer", "minimum": 0, "maximum": 36 },
+    "interest_rate": { "type": "number", "minimum": 0 },
+    "project_irr_unlevered": { "type": "number" },
+    "equity_irr_levered": { "type": "number" },
+    "min_dscr": { "type": "number", "minimum": 0 },
+    "cash_sweep_active": { "type": "boolean" },
+    "monthly_debt_service": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "month": { "type": "integer", "minimum": 1 },
+          "principal": { "type": "number", "minimum": 0 },
+          "interest": { "type": "number", "minimum": 0 },
+          "balance": { "type": "number", "minimum": 0 }
+        },
+        "required": ["month", "principal", "interest", "balance"]
+      }
+    }
+  },
+  "required": [
+    "capex_total",
+    "ltv",
+    "debt_senior_initial",
+    "equity_initial",
+    "project_irr_unlevered",
+    "equity_irr_levered",
+    "min_dscr"
+  ],
+  "additionalProperties": false
+}

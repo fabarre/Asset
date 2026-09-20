@@ -1,0 +1,57 @@
+[
+  {
+    "id": "CASE-2026-09-01-VAT-DECEMBER",
+    "timestamp": "2026-09-19T17:05:00Z",
+    "domain": "tax_cashflow",
+    "title": "Credito IVA azzerato prima dell'incasso monetario (Timing Modello TR)",
+    "symptom": "Nel Cash Flow, la colonna Credito IVA diventava zero a Dicembre 2026 (era 94.414 a Novembre), ma la Cassa con Funding a Dicembre non aumentava del corrispondente importo.",
+    "root_cause": "Nel worker, vatCredit veniva azzerato al momento della richiesta dell'istanza TR (i) anziché al momento dell'effettivo accredito monetario (i + lag). Se lag > 0 (default 3 mesi), per 3 mesi il credito spariva sia dallo stato patrimoniale sia dalla cassa.",
+    "invariant_violated": "Conservazione Patrimoniale Credito IVA: Delta Credito IVA = IVA Pagata - IVA Incassata - IVA Versata - IVA Rimborsata - IVA Compensata F24",
+    "fix_description": "Introdotto pendingRefund: vatCredit si riduce SOLO quando refundRec > 0 o comp > 0. Consentito lag = 0 (liquidazione contestuale immediata nello stesso mese).",
+    "test_reference": "tests/test_worker.mjs (Test 40) & tests/financial_invariants_suite.mjs"
+  },
+  {
+    "id": "CASE-2026-09-02-EXCEL-CIRCULAR-REF",
+    "timestamp": "2026-09-19T06:30:00Z",
+    "domain": "excel_formula_tree",
+    "title": "Errore circolare nel foglio AMMORTAMENTO su interessi e debito residuo",
+    "symptom": "L'estrazione Excel presentava un errore circolare nel foglio AMMORTAMENTO all'apertura in Microsoft Excel.",
+    "root_cause": "La formula della quota interessi di periodo referenziava la cella del debito residuo finale, il quale a sua volta dipendeva dalla quota capitale calcolata come rata costante (annuity) meno la quota interessi.",
+    "invariant_violated": "Acyclic Directed Graph delle formule native Excel",
+    "fix_description": "Riformulazione lineare: la quota interessi referenzia esclusivamente il Debito Iniziale (Beginning Balance) o il saldo del periodo precedente.",
+    "test_reference": "tests/test_excel_export.mjs (Step 5)"
+  },
+  {
+    "id": "CASE-2026-09-03-DEBT-SERVICE-COD-VS-DATE",
+    "timestamp": "2026-09-19T14:12:00Z",
+    "domain": "debt_modeling",
+    "title": "Disallineamento decorrenza servizio debito tra P&L e Cash Flow",
+    "symptom": "In P&L la quota interessi Anno 1 era 124.883 €, mentre il Cash Flow registrava uscite complessive per debito senior differenti (262.867 €).",
+    "root_cause": "In assenza di data debito esplicita, il Cash Flow deve sincronizzarsi sul COD del portafoglio (minCodIdx) esattamente come il P&L. Se la data debito e esplicita, il servizio decorre da dIdx + 1 con calcolo pro-rata Act/360.",
+    "invariant_violated": "Quadratura Interessi Post-COD: Interessi P&L Anno 1 == Somma Interessi Cash Flow post-COD",
+    "fix_description": "Allineata la logica di decorrenza in buildMonthlyCashflowDated: se fundingDebtDate e vuoto, svcStartIdx = minCodIdx; se valorizzato, svcStartIdx = dIdx + 1 con act/360 pro-rata esplicito.",
+    "test_reference": "tests/test_worker.mjs (Test 35 & 39)"
+  },
+  {
+    "id": "CASE-2026-09-04-PRINCIPAL-GRACE-YEAR1",
+    "timestamp": "2026-09-19T10:39:00Z",
+    "domain": "debt_modeling",
+    "title": "Quota capitale mutuo bancario programmata valorizzata a 0 in Anno 1",
+    "symptom": "Dubbio dell'utente sulla correttezza della Quota Capitale pari a 0 sia nella Web App sia in Excel per l'Anno 1.",
+    "root_cause": "Corretto comportamento finanziario: con 12 mesi di preammortamento impostati in FINANZA, durante tutto l'Anno 1 vengono corrisposti esclusivamente gli interessi passivi sul debito erogato; la quota capitale si attiva solo al termine della grazia.",
+    "invariant_violated": "Definizione Contrattuale del Preammortamento Bancario",
+    "fix_description": "Mantenuta quota capitale a 0 durante la grazia, garantendo che rata mensile = soli interessi e quota capitale = 0 in P&L, Cash Flow e AMMORTAMENTO Excel.",
+    "test_reference": "tests/test_worker.mjs (Test 39)"
+  },
+  {
+    "id": "CASE-2026-09-05-F24-COMPENSATION-VARIABLE-ORDER",
+    "timestamp": "2026-09-19T17:10:00Z",
+    "domain": "tax_cashflow",
+    "title": "Variabile taxes dichiarata prima del blocco di compensazione F24",
+    "symptom": "Nel calcolo del cash flow mensile, le imposte venivano sottratte per l'intero importo lordo anche se compensate con credito IVA, e il totale imposte pagate risultava doppio.",
+    "root_cause": "Nel worker, 'const taxes = taxesOut[i];' era posizionato prima di 'taxesOut[i] -= comp;'. La variabile taxes manteneva il valore antecedente alla compensazione.",
+    "invariant_violated": "Quadratura Imposte: Imposte P&L (orizzonte) == Imposte Compensate F24 + Imposte Versate Cassa + Imposte After Horizon",
+    "fix_description": "Spostata la dichiarazione di taxes DOPO il blocco di compensazione F24. Aggiunti badge e note esplicative sia a video sia in Excel.",
+    "test_reference": "tests/test_worker.mjs (Test 40)"
+  }
+]

@@ -126,3 +126,12 @@ npx supabase db dump --db-url "postgresql://postgres.[ID_PROGETTO]:[PASSWORD_URL
      *Nota:* Assicurarsi di usare l'host del Connection Pooler (es. aws-0-eu-central-1.pooler.supabase.com:6543) per aggirare i problemi di risoluzione IPv6 di Docker su macchine locali Windows. Codificare eventuali caratteri speciali (es. @ -> %40) nella password.
   2. **Iniezione Schema:** L'utente deve eseguire il file master_init_schema.sql generato all'interno del SQL Editor del nuovo progetto Supabase (Target DB).
   3. **Travaso Dati:** Eseguire lo script locale node clone_supabase.js (assicurandosi che i file supabase_config.js e supabase_config copy.js puntino rispettivamente al Master e al Target). Lo script si occupa di leggere a blocchi di 1000 righe e fare l'upsert rispettando la gerarchia delle Foreign Key.
+
+# Autonomous Git Sync Rule (GitHub Always Up-to-Date)
+- **ID:** autonomous_git_sync_rule
+- **Regola (Sincronizzazione Intelligente Continua con GitHub):** Ogni qual volta l'orchestratore o i suoi agenti specialisti completano, verificano e testano modifiche ai file di progetto sul server, l'orchestratore DEVE procedere automaticamente ed autonomamente al commit e push su GitHub (`origin/main`).
+- **Azione:**
+  1. Verificare lo stato con `git status` ed escludere file temporanei o artefatti binari di test (tramite `.gitignore`);
+  2. Eseguire uno stage accurato dei file modificati e creati (`git add`);
+  3. Comporre un messaggio di commit intelligente, semantico e descrittivo (es. `fix:`, `feat:`, `refactor:`, `test:`, `docs:`) che riassuma puntualmente gli interventi eseguiti e i test superati;
+  4. Eseguire `git push origin main` per garantire che il repository remoto su GitHub sia SEMPRE perfettamente allineato e aggiornato con l'ultima versione funzionante del server.

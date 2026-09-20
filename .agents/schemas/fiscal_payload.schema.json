@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FiscalPayload",
+  "description": "Contratto dati tipizzato per il trasferimento delle grandezze fiscali e IVA da fiscal_expert al supervisore e code_engineer",
+  "type": "object",
+  "properties": {
+    "vat_mode": { "type": "string", "enum": ["tr_immediate", "tr_deferred", "f24_compensation", "carryforward"] },
+    "vat_lag_months": { "type": "integer", "minimum": 0 },
+    "vat_conservation_verified": { "type": "boolean" },
+    "monthly_vat_records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "month": { "type": "integer", "minimum": 1 },
+          "vat_paid": { "type": "number", "minimum": 0 },
+          "vat_collected": { "type": "number", "minimum": 0 },
+          "vat_refund": { "type": "number", "minimum": 0 },
+          "vat_compensated": { "type": "number", "minimum": 0 },
+          "vat_credit_end": { "type": "number", "minimum": 0 }
+        },
+        "required": ["month", "vat_paid", "vat_collected", "vat_refund", "vat_compensated", "vat_credit_end"]
+      }
+    },
+    "annual_ires": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 }
+    },
+    "annual_irap": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 }
+    }
+  },
+  "required": [
+    "vat_mode",
+    "vat_lag_months",
+    "vat_conservation_verified",
+    "monthly_vat_records",
+    "annual_ires",
+    "annual_irap"
+  ],
+  "additionalProperties": false
+}

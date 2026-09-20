@@ -25,7 +25,7 @@
     <!-- Supabase JS Client (versione pinnata + SRI) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous"></script>
     <script src="./supabase_config.js"></script>
-    <script src="./src/excelExport.js?v=3"></script>
+    <script src="./src/excelExport.js?v=140"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
         body {
@@ -95,6 +95,30 @@
             z-index: 10;
             background-color: #0b0f19;
             box-shadow: 4px 0 8px rgba(0, 0, 0, 0.5);
+            user-select: none;
+            -webkit-user-select: none;
+            will-change: transform;
+            transform: translateZ(0);
+            backface-visibility: hidden;
+        }
+        .sync-scroll {
+            overscroll-behavior-x: contain;
+            -webkit-overflow-scrolling: touch;
+            will-change: scroll-position;
+            transform: translateZ(0);
+        }
+        .sync-scroll table {
+            -webkit-user-drag: none;
+            user-drag: none;
+        }
+        .sync-scroll thead,
+        .sync-scroll th {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .sync-scroll td:not(.frozen-column) {
+            user-select: text;
+            -webkit-user-select: text;
         }
 
         /* ── Full-screen loading overlay ─────────────────────────────── */
@@ -216,33 +240,228 @@
 
     <!-- Auth Overlay (login Supabase) -->
     <div id="auth-overlay" style="display: none; position: fixed; inset: 0; z-index: 10000; align-items: center; justify-content: center; background: rgba(5, 8, 17, 0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
-        <div class="bg-[#0b0f19] border border-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
-            <div class="text-center mb-6">
-                <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 mb-3">
-                    <i class="fa-solid fa-lock text-emerald-400 text-lg"></i>
+        <div class="bg-[#0b0f19] border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md mx-4">
+            <!-- Header -->
+            <div class="text-center mb-5">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 mb-3 shadow-lg shadow-emerald-950/20">
+                    <i class="fa-solid fa-shield-halved text-emerald-400 text-lg"></i>
                 </div>
-                <h2 class="text-white font-black text-lg tracking-tight">Accesso Richiesto</h2>
-                <p class="text-slate-500 text-[11px] mt-1">Deal Simulator: Multi-Plant & BESS Enterprise</p>
+                <h2 id="auth-modal-title" class="text-white font-black text-lg tracking-tight">Accesso Deal Simulator</h2>
+                <p class="text-slate-500 text-[11px] mt-0.5">Multi-Plant & BESS Enterprise Platform</p>
             </div>
-            <div class="space-y-3">
+
+            <!-- Tab Switcher (Accedi | Registrati | Recupero) -->
+            <div id="auth-tabs" class="flex border-b border-slate-800 mb-5">
+                <button type="button" id="tab-auth-login-btn" onclick="showAuthView('login')" class="flex-1 pb-2.5 text-xs font-bold text-emerald-400 border-b-2 border-emerald-500 transition-colors flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-right-to-bracket text-xs"></i> <span>Accedi</span>
+                </button>
+                <button type="button" id="tab-auth-signup-btn" onclick="showAuthView('signup')" class="flex-1 pb-2.5 text-xs font-bold text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-user-plus text-xs"></i> <span>Registrati</span>
+                </button>
+                <button type="button" id="tab-auth-forgot-btn" onclick="showAuthView('forgot')" class="flex-1 pb-2.5 text-xs font-bold text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-key text-xs"></i> <span>Recupero</span>
+                </button>
+            </div>
+
+            <!-- VIEW 1: LOGIN -->
+            <div id="auth-view-login" class="space-y-3.5">
                 <div>
                     <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Email</label>
-                    <input type="email" id="auth-email" placeholder="nome@azienda.it" autocomplete="username" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                    <div class="relative">
+                        <input type="email" id="auth-email" placeholder="nome@azienda.it" autocomplete="username" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-8 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors">
+                        <span class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-slate-500 text-xs">
+                            <i class="fa-regular fa-envelope"></i>
+                        </span>
+                    </div>
                 </div>
                 <div>
-                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Password</label>
-                    <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-[10px] text-slate-400 font-semibold">Password</label>
+                        <button type="button" onclick="showAuthView('forgot')" class="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold transition-colors">
+                            Password dimenticata?
+                        </button>
+                    </div>
+                    <div class="relative">
+                        <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-10 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors">
+                        <button type="button" onclick="togglePasswordVisibility('auth-password', 'eye-auth-password')" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-emerald-400 text-xs transition-colors focus:outline-none" title="Mostra/Nascondi password" aria-label="Mostra/Nascondi password">
+                            <i id="eye-auth-password" class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                    <div id="auth-caps-warning-login" class="hidden text-amber-400 text-[10px] font-semibold flex items-center gap-1 mt-1">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>Blocco maiuscole (Caps Lock) attivo</span>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between text-[11px] pt-0.5">
+                    <label class="flex items-center space-x-2 cursor-pointer select-none text-slate-400 hover:text-slate-300">
+                        <input type="checkbox" id="auth-remember-me" checked class="rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 h-3.5 w-3.5">
+                        <span class="text-[11px]">Ricordami su questo browser</span>
+                    </label>
                 </div>
                 <div id="auth-error" class="hidden text-rose-400 text-[11px] font-semibold text-center bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2"></div>
-                <button onclick="loginUser()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors">
-                    <i class="fa-solid fa-right-to-bracket mr-1.5"></i> Accedi
-                </button>
-                <button onclick="signupUser()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[11px] transition-colors">
-                    <i class="fa-solid fa-user-plus mr-1.5"></i> Registra nuovo utente
+                <button id="btn-auth-login" onclick="loginUser()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors shadow-lg shadow-emerald-950/30 flex items-center justify-center">
+                    <i class="fa-solid fa-right-to-bracket mr-1.5"></i> <span>Accedi</span>
                 </button>
                 <div id="auth-anonymous-wrap" class="text-center pt-2 border-t border-slate-800/60">
                     <button id="btn-continue-anonymous" onclick="continueAnonymous()" class="text-slate-500 hover:text-slate-300 text-[10px] font-semibold transition-colors" title="Disponibile solo in ambiente di sviluppo o se esplicitamente consentito (ALLOW_ANONYMOUS)">
                         Continua senza autenticazione (modalità sviluppo)
+                    </button>
+                </div>
+            </div>
+
+            <!-- VIEW 2: SIGNUP -->
+            <div id="auth-view-signup" class="hidden space-y-3">
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Email Aziendale</label>
+                    <div class="relative">
+                        <input type="email" id="auth-signup-email" placeholder="nome@azienda.it" autocomplete="username" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-8 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors">
+                        <span class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-slate-500 text-xs">
+                            <i class="fa-regular fa-envelope"></i>
+                        </span>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Crea Password</label>
+                    <div class="relative">
+                        <input type="password" id="auth-signup-password" placeholder="Minimo 6 caratteri" autocomplete="new-password" oninput="onSignupPasswordInput()" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-10 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors">
+                        <button type="button" onclick="togglePasswordVisibility('auth-signup-password', 'eye-auth-signup-password')" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-emerald-400 text-xs transition-colors focus:outline-none" title="Mostra/Nascondi password" aria-label="Mostra/Nascondi password">
+                            <i id="eye-auth-signup-password" class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                    <div id="auth-caps-warning-signup" class="hidden text-amber-400 text-[10px] font-semibold flex items-center gap-1 mt-1">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>Blocco maiuscole (Caps Lock) attivo</span>
+                    </div>
+                    <!-- Password strength bar -->
+                    <div class="mt-1.5 space-y-1">
+                        <div class="w-full bg-slate-900 rounded-full h-1 overflow-hidden border border-slate-800">
+                            <div id="auth-signup-strength-bar" class="h-full bg-slate-700 transition-all duration-300" style="width: 0%;"></div>
+                        </div>
+                        <div class="flex justify-between items-center text-[9px] text-slate-500">
+                            <span>Robustezza: <span id="auth-signup-strength-text" class="text-slate-400 font-semibold">Minimo 6 caratteri</span></span>
+                            <span>Consigliati numeri & simboli</span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Conferma Password</label>
+                    <div class="relative">
+                        <input type="password" id="auth-signup-confirm-password" placeholder="Ripeti la password" autocomplete="new-password" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-10 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors">
+                        <button type="button" onclick="togglePasswordVisibility('auth-signup-confirm-password', 'eye-auth-signup-confirm')" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-emerald-400 text-xs transition-colors focus:outline-none" title="Mostra/Nascondi password" aria-label="Mostra/Nascondi password">
+                            <i id="eye-auth-signup-confirm" class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="auth-signup-error" class="hidden text-rose-400 text-[11px] font-semibold text-center bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2"></div>
+                <button id="btn-auth-signup" onclick="signupUser()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors shadow-lg shadow-emerald-950/30 flex items-center justify-center">
+                    <i class="fa-solid fa-user-plus mr-1.5"></i> <span>Registra nuovo utente</span>
+                </button>
+                <p class="text-[10px] text-slate-500 text-center leading-relaxed">
+                    Dopo la registrazione, verifica la tua casella di posta per confermare l'indirizzo email se richiesto dal progetto.
+                </p>
+            </div>
+
+            <!-- VIEW 3: FORGOT PASSWORD -->
+            <div id="auth-view-forgot" class="hidden space-y-3.5">
+                <div class="bg-slate-900/60 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-400 leading-relaxed">
+                    <i class="fa-solid fa-circle-info text-sky-400 mr-1"></i>
+                    Inserisci l'indirizzo email associato al tuo account. Ti invieremo un link per impostare una nuova password.
+                </div>
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Email</label>
+                    <div class="relative">
+                        <input type="email" id="auth-forgot-email" placeholder="nome@azienda.it" autocomplete="email" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-8 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors">
+                        <span class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-slate-500 text-xs">
+                            <i class="fa-regular fa-envelope"></i>
+                        </span>
+                    </div>
+                </div>
+                <div id="auth-forgot-msg" class="hidden text-[11px] font-semibold text-center rounded-lg px-3 py-2"></div>
+                <button id="btn-auth-forgot" onclick="forgotPasswordUser()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors shadow-lg shadow-emerald-950/30 flex items-center justify-center">
+                    <i class="fa-solid fa-paper-plane mr-1.5"></i> <span>Invia Link di Ripristino</span>
+                </button>
+                <div class="text-center pt-2 border-t border-slate-800/60">
+                    <button type="button" onclick="showAuthView('login')" class="text-slate-400 hover:text-slate-200 text-[11px] font-semibold transition-colors inline-flex items-center">
+                        <i class="fa-solid fa-arrow-left mr-1.5"></i> Torna alla schermata di accesso
+                    </button>
+                </div>
+            </div>
+
+            <!-- VIEW 4: RESET PASSWORD (FROM RECOVERY TOKEN) -->
+            <div id="auth-view-reset" class="hidden space-y-3.5">
+                <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 text-[11px] text-emerald-300 leading-relaxed">
+                    <i class="fa-solid fa-shield-check text-emerald-400 mr-1"></i>
+                    Sessione di ripristino verificata. Scegli e conferma la tua nuova password di accesso.
+                </div>
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Nuova Password</label>
+                    <div class="relative">
+                        <input type="password" id="auth-reset-password" placeholder="Almeno 6 caratteri" autocomplete="new-password" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-10 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors">
+                        <button type="button" onclick="togglePasswordVisibility('auth-reset-password', 'eye-auth-reset-password')" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-emerald-400 text-xs transition-colors focus:outline-none" title="Mostra/Nascondi password" aria-label="Mostra/Nascondi password">
+                            <i id="eye-auth-reset-password" class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Conferma Nuova Password</label>
+                    <div class="relative">
+                        <input type="password" id="auth-reset-confirm" placeholder="Ripeti la password" autocomplete="new-password" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-10 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-colors">
+                        <button type="button" onclick="togglePasswordVisibility('auth-reset-confirm', 'eye-auth-reset-confirm')" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-emerald-400 text-xs transition-colors focus:outline-none" title="Mostra/Nascondi password" aria-label="Mostra/Nascondi password">
+                            <i id="eye-auth-reset-confirm" class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="auth-reset-msg" class="hidden text-[11px] font-semibold text-center rounded-lg px-3 py-2"></div>
+                <button id="btn-auth-reset" onclick="updatePasswordUser()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors shadow-lg shadow-emerald-950/30 flex items-center justify-center">
+                    <i class="fa-solid fa-check mr-1.5"></i> <span>Salva Nuova Password</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Cambia Password Utente (per utenti autenticati) -->
+    <div id="modal-change-password" style="display: none; position: fixed; inset: 0; z-index: 10001; align-items: center; justify-content: center; background: rgba(5, 8, 17, 0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);" onclick="if(event.target===this) closeChangePasswordModal()">
+        <div class="bg-[#0b0f19] border border-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                <div class="flex items-center space-x-2">
+                    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs">
+                        <i class="fa-solid fa-key"></i>
+                    </div>
+                    <h3 class="font-bold text-white text-xs tracking-wide uppercase">Modifica Password</h3>
+                </div>
+                <button onclick="closeChangePasswordModal()" class="text-slate-500 hover:text-slate-300 text-xs transition-colors"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p class="text-[11px] text-slate-400 mb-4 leading-relaxed">
+                Aggiorna le credenziali di accesso per l'account <span id="change-pwd-user-email" class="text-emerald-400 font-semibold"></span>.
+            </p>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Nuova Password</label>
+                    <div class="relative">
+                        <input type="password" id="modal-new-password" placeholder="Almeno 6 caratteri" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-10 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                        <button type="button" onclick="togglePasswordVisibility('modal-new-password', 'eye-modal-new-pwd')" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-emerald-400 text-xs transition-colors focus:outline-none" title="Mostra/Nascondi password" aria-label="Mostra/Nascondi password">
+                            <i id="eye-modal-new-pwd" class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                    <div id="modal-caps-warning" class="hidden text-amber-400 text-[10px] font-semibold flex items-center gap-1 mt-1">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>Blocco maiuscole (Caps Lock) attivo</span>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1 font-semibold">Conferma Nuova Password</label>
+                    <div class="relative">
+                        <input type="password" id="modal-confirm-password" placeholder="Ripeti la password" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-3 pr-10 py-2 text-white text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                        <button type="button" onclick="togglePasswordVisibility('modal-confirm-password', 'eye-modal-confirm-pwd')" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-emerald-400 text-xs transition-colors focus:outline-none" title="Mostra/Nascondi password" aria-label="Mostra/Nascondi password">
+                            <i id="eye-modal-confirm-pwd" class="fa-regular fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="modal-change-pwd-error" class="hidden text-rose-400 text-[11px] font-semibold text-center bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2"></div>
+                <div class="flex items-center space-x-2 pt-2">
+                    <button onclick="closeChangePasswordModal()" class="w-1/3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-xs transition-colors">Annulla</button>
+                    <button id="btn-save-change-pwd" onclick="submitChangePassword()" class="w-2/3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors flex items-center justify-center">
+                        <i class="fa-solid fa-check mr-1.5"></i> <span>Aggiorna</span>
                     </button>
                 </div>
             </div>
@@ -278,7 +497,26 @@
                     <h1 class="text-lg font-bold text-white tracking-tight leading-none truncate">Deal Simulator: Multi-Plant & BESS Enterprise</h1>
                 </div>
             </div>
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-3">
+                <!-- User Profile & Session Pill (Global Navbar) -->
+                <div id="nav-user-pill" class="hidden items-center space-x-1.5 pl-2 border-l border-slate-800">
+                    <div class="flex items-center space-x-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
+                        <i class="fa-regular fa-circle-user text-emerald-400 text-xs"></i>
+                        <span id="nav-user-email" class="text-slate-300 font-semibold text-[11px] max-w-[140px] truncate" title=""></span>
+                        <span id="nav-role-badge" class="text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 border bg-emerald-500/10 text-emerald-400 border-emerald-500/30"></span>
+                    </div>
+                    <button id="btn-nav-change-pwd" onclick="openChangePasswordModal()" class="px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-600/40 transition-colors text-xs" title="Modifica password account">
+                        <i class="fa-solid fa-key"></i>
+                    </button>
+                    <button id="btn-nav-logout" onclick="logoutUser()" class="px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 hover:border-rose-600/40 transition-colors text-xs" title="Disconnetti (Logout)">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+                <!-- Gestione Utenti (admin) -->
+                <button id="btn-tab-users" onclick="switchTab('tab-users')" class="hidden items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-600/40 transition-colors text-xs" title="Gestione utenti (solo amministratori)">
+                    <i class="fa-solid fa-users-gear text-xs"></i>
+                    <span class="font-semibold text-[11px]">Utenti</span>
+                </button>
                 <!-- Audit log -->
                 <button onclick="openAuditLog()" class="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-600/40 transition-colors text-xs" title="Registro attività (audit log)">
                     <i class="fa-solid fa-clock-rotate-left"></i>
@@ -326,11 +564,7 @@
                 </button>
                 <button onclick="switchTab('tab-rid')" id="btn-tab-rid" class="border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2">
                     <i class="fa-solid fa-scale-balanced text-sm"></i>
-                    <span>RID</span>
-                </button>
-                <button onclick="switchTab('tab-cer')" id="btn-tab-cer" class="border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2">
-                    <i class="fa-solid fa-users-rectangle text-sm"></i>
-                    <span>CER</span>
+                    <span>RID/CER</span>
                 </button>
                 <button onclick="switchTab('tab-hourly')" id="btn-tab-hourly" class="border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2">
                     <i class="fa-solid fa-clock text-sm"></i>
@@ -351,10 +585,6 @@
                 <button onclick="switchTab('tab-dataquality')" id="btn-tab-dataquality" class="border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2">
                     <i class="fa-solid fa-clipboard-check text-sm"></i>
                     <span>QUALITÀ DATI</span>
-                </button>
-                <button onclick="switchTab('tab-users')" id="btn-tab-users" class="hidden border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800 px-1 py-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2">
-                    <i class="fa-solid fa-users-gear text-sm"></i>
-                    <span>UTENTI</span>
                 </button>
             </nav>
         </div>
@@ -391,17 +621,17 @@
                     <span class="text-[9px] text-slate-500 block mt-0.5" id="sub-kpi-debt-pct">0% di Leva</span>
                 </div>
                 <div class="bg-gradient-to-br from-emerald-950/20 to-slate-900/80 border border-emerald-500/20 p-4 rounded-xl">
-                    <span class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider block">Project IRR (Unlevered)</span>
+                    <span class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider block">Project IRR (Unlevered SPV)</span>
                     <div class="text-xl font-black text-emerald-400 mt-1" id="kpi-project-irr">0.00 %</div>
                     <span class="text-[9px] text-slate-400 block mt-0.5">TIR di Progetto (FCFF)</span>
                 </div>
                 <div class="bg-gradient-to-br from-emerald-950/20 to-slate-900/80 border border-emerald-500/20 p-4 rounded-xl">
-                    <span class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider block">IRR Equity (HoldCo)</span>
+                    <span class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider block">Equity IRR (Levered SPV)</span>
                     <div class="text-xl font-black text-emerald-400 mt-1" id="kpi-irr">0.00 %</div>
-                    <span class="text-[9px] text-slate-400 block mt-0.5">Al netto delle tasse di Holding</span>
+                    <span class="text-[9px] text-slate-400 block mt-0.5" id="sub-kpi-irr">TIR Azionisti SPV (FCFE)</span>
                 </div>
                 <div class="bg-[#0b0f19] border border-slate-850 p-4 rounded-xl">
-                    <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">NPV @ Ke (HoldCo)</span>
+                    <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">NPV @ Ke</span>
                     <div class="text-lg font-extrabold text-amber-400 mt-1" id="kpi-npv">€0</div>
                     <span class="text-[9px] text-slate-500 block mt-0.5">Discounted @ Cost of Equity</span>
                 </div>
@@ -411,19 +641,28 @@
                     <span class="text-[9px] text-slate-500 block mt-0.5" id="sub-kpi-dscr">Minimo registrato: -</span>
                 </div>
                 <div class="bg-[#0b0f19] border border-slate-850 p-4 rounded-xl">
-                    <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">LCOE Medio</span>
-                    <div class="text-lg font-extrabold text-sky-400 mt-1" id="kpi-lcoe">€ 0.00 /MWh</div>
-                    <span class="text-[9px] text-slate-500 block mt-0.5" id="sub-kpi-lcoe">Costo Livellato Energia</span>
+                    <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">LCOE & LCOS Medi</span>
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <div>
+                            <span class="text-[9px] text-slate-400 block font-medium">LCOE (Solare)</span>
+                            <div class="text-sm sm:text-base font-extrabold text-sky-400 truncate" id="kpi-lcoe">€ 0.00 /MWh</div>
+                        </div>
+                        <div>
+                            <span class="text-[9px] text-slate-400 block font-medium">LCOS (Storage)</span>
+                            <div class="text-sm sm:text-base font-extrabold text-indigo-400 truncate" id="kpi-lcos">€ 0.00 /MWh</div>
+                        </div>
+                    </div>
+                    <span class="text-[9px] text-slate-500 block mt-0.5" id="sub-kpi-lcoe">Costo Livellato FV vs BESS</span>
                 </div>
-                <div class="bg-[#0b0f19] border border-slate-850 p-4 rounded-xl">
-                    <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">LCOS Medio</span>
-                    <div class="text-lg font-extrabold text-indigo-400 mt-1" id="kpi-lcos">€ 0.00 /MWh</div>
-                    <span class="text-[9px] text-slate-500 block mt-0.5" id="sub-kpi-lcos">Costo Livellato Storage</span>
+                <div class="bg-gradient-to-br from-emerald-950/20 to-slate-900/80 border border-emerald-500/20 p-4 rounded-xl">
+                    <span class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider block">Project Payback (Unlevered SPV)</span>
+                    <div class="text-xl font-black text-emerald-400 mt-1" id="kpi-payback-unlevered">-</div>
+                    <span class="text-[9px] text-slate-400 block mt-0.5">Recupero Capex Progetto (FCFF)</span>
                 </div>
-                <div class="bg-[#0b0f19] border border-slate-850 p-4 rounded-xl">
-                    <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Payback Equity</span>
-                    <div class="text-lg font-extrabold text-pink-400 mt-1" id="kpi-payback">-</div>
-                    <span class="text-[9px] text-slate-500 block mt-0.5" id="sub-kpi-payback">Levered Payback Period</span>
+                <div class="bg-gradient-to-br from-pink-950/20 to-slate-900/80 border border-pink-500/20 p-4 rounded-xl">
+                    <span class="text-[10px] font-semibold text-pink-400 uppercase tracking-wider block">Equity Payback (Levered SPV)</span>
+                    <div class="text-xl font-black text-pink-400 mt-1" id="kpi-payback">-</div>
+                    <span class="text-[9px] text-slate-400 block mt-0.5">Recupero Equity Soci SPV (FCFE)</span>
                 </div>
             </div>
 
@@ -539,6 +778,15 @@
                             </div>
                         </div>
                         <div class="h-[240px] relative mb-4"><canvas id="chart-monthly-cash"></canvas></div>
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider"><i class="fa-solid fa-table-columns text-emerald-400 mr-1.5"></i>Filtro Colonne (72 Mesi)</span>
+                            <div id="mc-col-filter" class="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[10px]">
+                                <button type="button" onclick="setMonthlyColumnFilter('all')" data-mc-filter="all" class="mc-filter-btn px-2.5 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all">Tutte (21)</button>
+                                <button type="button" onclick="setMonthlyColumnFilter('operational')" data-mc-filter="operational" class="mc-filter-btn px-2.5 py-0.5 rounded text-slate-400 hover:text-slate-200 transition-all">Operativo</button>
+                                <button type="button" onclick="setMonthlyColumnFilter('vat')" data-mc-filter="vat" class="mc-filter-btn px-2.5 py-0.5 rounded text-slate-400 hover:text-slate-200 transition-all">Ciclo IVA</button>
+                                <button type="button" onclick="setMonthlyColumnFilter('holding')" data-mc-filter="holding" class="mc-filter-btn px-2.5 py-0.5 rounded text-slate-400 hover:text-slate-200 transition-all">Holding</button>
+                            </div>
+                        </div>
                         <div class="overflow-auto max-h-[320px] rounded-xl border border-slate-850">
                             <table class="w-full text-[10px]">
                                 <thead id="mc-thead" class="sticky top-0 bg-[#0b0f19] z-10">
@@ -555,6 +803,8 @@
                                 <tbody id="monthly-cf-body"></tbody>
                             </table>
                         </div>
+                        <!-- CF Popover: Dettaglio CAPEX per impianto on hover -->
+                        <div id="mc-capex-popover" class="fixed hidden z-[9999] pointer-events-none bg-[#0b0f19]/95 backdrop-blur-md border border-orange-500/40 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] p-3 text-white text-[11px] min-w-[280px] max-w-[420px] transition-opacity duration-150"></div>
                     </div>
                 </div>
 
@@ -648,6 +898,7 @@
                                     <option value="relazione_tecnica">Relazione Tecnica & Descrittiva (Impianti e Consumi)</option>
                                     <option value="conto_economico">Conto Economico SPV (20 Anni)</option>
                                     <option value="rendiconto_finanziario">Rendiconto Finanziario SPV (CFADS & Waterfall)</option>
+                                    <option value="bilancio_holding">Bilancio & Rendiconto Holding (HoldCo Level)</option>
                                     <option value="piano_ammortamento">Piano Ammortamento Debito (Senior + Soci + PD)</option>
                                     <option value="struttura_finanziaria">Struttura Finanziaria & Fonti/Impieghi</option>
                                     <option value="exit_valutazione">Report Exit & Valutazione</option>
@@ -837,12 +1088,16 @@
 
             <!-- Deal Value Breakdown Table -->
             <div class="bg-[#0b0f19] border border-slate-850 p-5 rounded-2xl shadow-xl space-y-4 mt-8">
-                <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <div class="flex flex-wrap items-center justify-between border-b border-slate-800/80 pb-3 gap-2">
                     <div class="flex items-center space-x-2">
                         <i class="fa-solid fa-euro-sign text-emerald-400"></i>
                         <h4 class="font-bold text-white text-xs tracking-wide uppercase">Ripartizione del Valore Deal (Enterprise Value)</h4>
                     </div>
-                    <span class="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Ripartizione Costi per Impianto (€)</span>
+                    <div class="flex items-center space-x-3 text-[9px] text-slate-400">
+                        <span class="flex items-center" title="Importo 100% coperto dagli esborsi"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1"></span>100% Allocato</span>
+                        <span class="flex items-center" title="Residuo di spesa da saldare al COD"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block mr-1"></span>&lt;100% Da allocare (COD)</span>
+                        <span class="flex items-center" title="Esborsi superiori al budget (Over budget)"><span class="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block mr-1"></span>&gt;100% Sovra-allocato</span>
+                    </div>
                 </div>
                 <div class="overflow-x-auto premium-scrollbar rounded-xl border border-slate-800 bg-[#020617]">
                     <table class="w-full text-left text-xs whitespace-nowrap" style="border-collapse: separate; border-spacing: 0;">
@@ -977,13 +1232,22 @@
                                 <input type="range" id="slide-interest" min="1.0" max="7.0" value="4.5" step="0.1" class="w-full">
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-[11px] text-slate-400 mb-1">Basi di Calcolo Debito</label>
                                 <select id="select-debt-basis" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2.5 py-1.5 rounded text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                     <option value="hard_costs" selected>Sola Costruzione (Hard Costs)</option>
                                     <option value="ev_ex_spv">Valore Deal senza Acquisizione SPV (EV Ex SPV)</option>
                                     <option value="enterprise_value">Intero Enterprise Value (EV)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1" title="Frequenza di pagamento delle rate del debito senior">Frequenza Rimborso</label>
+                                <select id="select-debt-repayment-frequency" class="w-full bg-slate-950 border border-slate-700/80 text-cyan-300 font-semibold px-2.5 py-1.5 rounded text-xs outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
+                                    <option value="semestrale" selected>Semestrale (2 rate/anno)</option>
+                                    <option value="trimestrale">Trimestrale (4 rate/anno)</option>
+                                    <option value="mensile">Mensile (12 rate/anno)</option>
+                                    <option value="annuale">Annuale (1 rata/anno)</option>
                                 </select>
                             </div>
                             <div>
@@ -996,24 +1260,30 @@
                         </div>
 
                         <!-- Parametri IDC e Preammortamento -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-3 border-t border-slate-800">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 pt-3 border-t border-slate-800">
                             <div>
-                                <div class="flex justify-between text-[11px] mb-1">
-                                    <span class="text-slate-400">Preammortamento</span>
+                                <div class="flex justify-between items-center text-[10px] mb-1">
+                                    <span class="text-slate-400" title="Periodo di preammortamento del debito senior">Preammortamento</span>
                                     <span class="font-bold text-amber-400" id="val-senior-grace-period">6 Mesi</span>
                                 </div>
                                 <input type="range" id="slide-senior-grace-period" min="0" max="24" value="6" step="1" class="w-full">
                             </div>
                             <div>
-                                <div class="flex justify-between text-[11px] mb-1">
-                                    <span class="text-slate-400">Durata Costruzione</span>
-                                    <span class="font-bold text-orange-400" id="val-construction-months">6 Mesi</span>
+                                <div class="flex justify-between items-center text-[10px] mb-1">
+                                    <span class="text-slate-400 flex items-center" title="Durata del cantiere calcolata automaticamente dalla Data Debito alla Data COD degli impianti">
+                                        Costruzione <i class="fa-solid fa-wand-magic-sparkles text-orange-400/80 text-[8.5px] ml-1"></i>
+                                    </span>
+                                    <span class="font-bold text-orange-400 font-mono text-[10.5px]" id="val-construction-months">6 Mesi</span>
                                 </div>
-                                <input type="range" id="slide-construction-months" min="0" max="12" value="6" step="1" class="w-full">
+                                <input type="hidden" id="slide-construction-months" value="6">
+                                <div class="px-2 py-1.5 rounded bg-slate-900/90 border border-slate-800 text-[9.5px] flex items-center justify-between gap-1 min-h-[34px]" title="Intervallo calcolato tra Data Erogazione Debito e Max COD impianti">
+                                    <span class="text-slate-400 text-[9px] shrink-0">Periodo:</span>
+                                    <span id="txt-calc-construction" class="font-mono text-slate-300 font-semibold truncate text-[9px] text-right">—</span>
+                                </div>
                             </div>
                             <div>
-                                <div class="flex justify-between text-[11px] mb-1">
-                                    <span class="text-slate-400">Tiraggio IDC Medio</span>
+                                <div class="flex justify-between items-center text-[10px] mb-1">
+                                    <span class="text-slate-400" title="Percentuale media di tiraggio debito durante la costruzione per il calcolo IDC">Tiraggio IDC</span>
                                     <span class="font-bold text-blue-400" id="val-idc-drawdown">50 %</span>
                                 </div>
                                 <input type="range" id="slide-idc-drawdown" min="0" max="100" value="50" step="1" class="w-full">
@@ -1021,18 +1291,26 @@
                         </div>
 
                         <!-- CF8: Date di messa a disposizione dei capitali -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-3 border-t border-slate-800">
-                            <div>
-                                <label class="block text-[11px] text-slate-400 mb-1" title="Data in cui l'equity sponsor/Holding è disponibile">Equity Sponsor / Holding</label>
-                                <input type="date" id="input-funding-equity-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-emerald-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                        <div class="mt-4 pt-3 border-t border-slate-800">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-money-bill-transfer text-emerald-400 mr-1.5"></i>Date Erogazione Capitali (Funding)</span>
+                                <button type="button" id="btn-align-funding-capex" onclick="alignFundingToFirstCapex()" class="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 rounded text-[10px] font-bold flex items-center gap-1 transition-all" title="Imposta la data del funding Equity/Soci alla data del primo esborso CAPEX per eliminare lo shortfall iniziale">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> Allinea al 1° CAPEX
+                                </button>
                             </div>
-                            <div>
-                                <label class="block text-[11px] text-slate-400 mb-1" title="Data in cui il finanziamento soci SPV è disponibile">Finanziamento Soci SPV</label>
-                                <input type="date" id="input-funding-soci-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-amber-300 font-bold text-xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-[11px] text-slate-400 mb-1" title="Data di erogazione del debito senior bancario">Debito Senior (Banca)</label>
-                                <input type="date" id="input-funding-debt-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-cyan-300 font-bold text-xs focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1" title="Data in cui l'equity sponsor/Holding è disponibile">Equity Sponsor / Holding</label>
+                                    <input type="date" id="input-funding-equity-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-emerald-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1" title="Data in cui il finanziamento soci SPV è disponibile">Finanziamento Soci SPV</label>
+                                    <input type="date" id="input-funding-soci-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-amber-300 font-bold text-xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1" title="Data di erogazione del debito senior bancario">Debito Senior (Banca)</label>
+                                    <input type="date" id="input-funding-debt-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-cyan-300 font-bold text-xs focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none">
+                                </div>
                             </div>
                         </div>
 
@@ -1085,6 +1363,36 @@
                                 #input-dividend-lock:checked ~ .block { background-color: #059669; border-color: #10b981; }
                                 #input-dividend-lock:checked ~ .dot { transform: translateX(100%); background-color: #fff; }
                             </style>
+                        </div>
+
+                        <!-- Politica di Distribuzione Cassa SPV (Art. 2433 c.c.) -->
+                        <div class="mt-4 pt-3 border-t border-slate-800">
+                            <label class="block text-[11px] text-slate-400 mb-1 font-semibold flex items-center justify-between">
+                                <span>Politica Distribuzione Cassa & Dividendi SPV</span>
+                                <span class="text-[9px] font-normal text-emerald-400">Art. 2433 c.c.</span>
+                            </label>
+                            <select id="select-distribution-policy" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-emerald-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                <option value="cash_flow_driven">Project Finance Standard (Cash Flow FCFE)</option>
+                                <option value="civil_statutory_strict">Civilistico Stretto (Art. 2433 c.c. - Cap Utili & Riserva Legale)</option>
+                                <option value="civil_with_capital_reserve_return">Civilistico con Restituzione Capitale (Art. 2482 c.c. / Art. 47 c. 5 TUIR)</option>
+                            </select>
+                            <p class="text-[10px] text-slate-500 mt-1.5 leading-relaxed">In modalità civilistica i dividendi sono vincolati all'utile netto (al netto del 5% riserva legale ex art. 2430 c.c.); l'eccedenza di cassa FCFE rimane in SPV (Cash Trap) oppure viene rimborsata come riserva di capitale neutra ex art. 47 c. 5 TUIR.</p>
+                        </div>
+
+                        <!-- Modalità Impiego Cassa Vincolata SPV (Cash Trap) -->
+                        <div class="mt-4 pt-3 border-t border-slate-800">
+                            <label class="block text-[11px] text-slate-400 mb-1 font-semibold flex items-center justify-between">
+                                <span>Impiego Cassa Vincolata SPV (Cash Trap)</span>
+                                <span class="text-[9px] font-normal text-amber-400">Scenari di Impiego</span>
+                            </label>
+                            <select id="select-cash-trap-deployment" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-amber-300 font-bold text-xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none">
+                                <option value="bank_locked">Blocco Conservativo a Garanzia Debito (Nessun Impiego Anticipato)</option>
+                                <option value="distribute_on_profits">Distribuzione su Utili Capienti (Attinge a Cash Trap se Utile > FCFE)</option>
+                                <option value="debt_free_release">Sblocco a Estinzione Debito Senior (Maxi-Dividendo a Debito Zero)</option>
+                                <option value="soci_loan_accelerated">Rimborso Accelerato Finanziamento Soci (Priorità Estinzione Prestito Soci)</option>
+                                <option value="senior_debt_prepayment">Prepagamento Debito Senior (Cash Sweep Deleveraging Anticipato)</option>
+                            </select>
+                            <p class="text-[10px] text-slate-500 mt-1.5 leading-relaxed">Definisce la strategia di utilizzo della cassa accumulata in SPV: riserva di liquidità vincolata a covenants bancari, distribuzione extra quando gli utili civilistici superano il cash flow corrente, sblocco a debito zero, o deleveraging anticipato.</p>
                         </div>
                     </div>
                 </div>
@@ -1183,18 +1491,19 @@
                 <!-- Finanziamento Soci (Shareholder Loan) -->
                 <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4 flex flex-col justify-between">
                     <div>
-                        <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
-                            <i class="fa-solid fa-handshake text-teal-400 text-sm"></i>
-                            <h3 class="font-bold text-white text-xs tracking-wide uppercase">Finanziamento Soci (Shareholder Loan)</h3>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <div class="flex justify-between text-[11px] mb-1">
-                                    <span class="text-slate-400">Quota Finanziamento Soci</span>
-                                    <span class="font-bold text-teal-300" id="val-soci-equity-pct">80% dell'Equity</span>
-                                </div>
-                                <input type="range" id="slide-soci-equity-pct" min="0" max="100" value="80" step="5" class="w-full">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-4">
+                            <div class="flex items-center space-x-2">
+                                <i class="fa-solid fa-handshake text-teal-400 text-sm"></i>
+                                <h3 class="font-bold text-white text-xs tracking-wide uppercase">Finanziamento Soci (Shareholder Loan)</h3>
                             </div>
+                            <div class="flex items-center space-x-1.5">
+                                <button type="button" onclick="setAllSociSliders(100)" class="px-2 py-0.5 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 rounded text-[10px] font-bold transition-colors" title="Imposta tutti gli slider CAPEX al 100% di Finanziamento Soci">Tutti 100%</button>
+                                <button type="button" onclick="setAllSociSliders(0)" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded text-[10px] font-bold transition-colors" title="Imposta tutti gli slider CAPEX a 0% (Tutto Capitale Proprio)">Tutti 0%</button>
+                            </div>
+                        </div>
+
+                        <!-- Parametri Tasso e Grazie -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 p-3 bg-slate-950/40 border border-slate-800/80 rounded-xl">
                             <div>
                                 <div class="flex justify-between text-[11px] mb-1">
                                     <span class="text-slate-400">Tasso Interessi Soci</span>
@@ -1202,15 +1511,87 @@
                                 </div>
                                 <input type="range" id="slide-soci-interest-rate" min="0.0" max="15.0" value="5.5" step="0.1" class="w-full">
                             </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-[11px] text-slate-400 mb-1">Periodo Grazia Interessi (Anni)</label>
-                                <input type="number" id="input-soci-interest-grace" value="5" min="0" max="20" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-teal-300 font-bold text-xs focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none" placeholder="5">
+                                <label class="block text-[11px] text-slate-400 mb-1">Grazia Interessi (Anni)</label>
+                                <input type="number" id="input-soci-interest-grace" value="5" min="0" max="20" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1 text-teal-300 font-bold text-xs focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none" placeholder="5">
                             </div>
                             <div>
-                                <label class="block text-[11px] text-slate-400 mb-1">Periodo Grazia Capitale (Anni)</label>
-                                <input type="number" id="input-soci-principal-grace" value="5" min="0" max="20" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-teal-300 font-bold text-xs focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none" placeholder="5">
+                                <label class="block text-[11px] text-slate-400 mb-1">Grazia Capitale (Anni)</label>
+                                <input type="number" id="input-soci-principal-grace" value="5" min="0" max="20" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1 text-teal-300 font-bold text-xs focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none" placeholder="5">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">Durata Rimborso (Anni)</label>
+                                <input type="number" id="input-soci-loan-term" value="10" min="0" max="25" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1 text-teal-300 font-bold text-xs focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none" placeholder="10 (0 = Sweep)" title="Durata del piano di ammortamento del capitale post-grazia. Impostare 0 per rimborso rapido a capienza cassa (Cash Sweep).">
+                            </div>
+                        </div>
+
+                        <!-- Ripartizione Quota Finanziamento Soci per Categoria CAPEX -->
+                        <div class="space-y-2.5">
+                            <div class="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                                <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Quota Finanziamento Soci per Voce di Spesa CAPEX</span>
+                                <span class="text-[11px] font-bold text-teal-300" id="val-soci-equity-pct">100% dell'Equity</span>
+                            </div>
+                            <!-- Hidden input for backwards compatibility and aggregate -->
+                            <input type="hidden" id="slide-soci-equity-pct" value="100">
+
+                            <!-- Griglia Slider per Categoria CAPEX -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                                <!-- 1. EPC FV -->
+                                <div class="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
+                                    <div class="flex justify-between mb-1">
+                                        <span class="text-slate-300 font-medium">EPC Fotovoltaico</span>
+                                        <span class="font-bold text-teal-300" id="val-soci-pct-epc">100%</span>
+                                    </div>
+                                    <input type="range" id="slide-soci-pct-epc" min="0" max="100" value="100" step="5" class="w-full">
+                                </div>
+                                <!-- 2. Storage BESS -->
+                                <div class="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
+                                    <div class="flex justify-between mb-1">
+                                        <span class="text-slate-300 font-medium">Storage BESS</span>
+                                        <span class="font-bold text-teal-300" id="val-soci-pct-bess">100%</span>
+                                    </div>
+                                    <input type="range" id="slide-soci-pct-bess" min="0" max="100" value="100" step="5" class="w-full">
+                                </div>
+                                <!-- 3. Connessione Rete -->
+                                <div class="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
+                                    <div class="flex justify-between mb-1">
+                                        <span class="text-slate-300 font-medium">Connessione Rete</span>
+                                        <span class="font-bold text-teal-300" id="val-soci-pct-connection">100%</span>
+                                    </div>
+                                    <input type="range" id="slide-soci-pct-connection" min="0" max="100" value="100" step="5" class="w-full">
+                                </div>
+                                <!-- 4. Terreno / Canoni DDS -->
+                                <div class="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
+                                    <div class="flex justify-between mb-1">
+                                        <span class="text-slate-300 font-medium">Terreno / Canoni DDS</span>
+                                        <span class="font-bold text-teal-300" id="val-soci-pct-land">100%</span>
+                                    </div>
+                                    <input type="range" id="slide-soci-pct-land" min="0" max="100" value="100" step="5" class="w-full">
+                                </div>
+                                <!-- 5. Compensazioni Impianti -->
+                                <div class="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
+                                    <div class="flex justify-between mb-1">
+                                        <span class="text-slate-300 font-medium">Compensazioni Impianti</span>
+                                        <span class="font-bold text-teal-300" id="val-soci-pct-development">100%</span>
+                                    </div>
+                                    <input type="range" id="slide-soci-pct-development" min="0" max="100" value="100" step="5" class="w-full">
+                                </div>
+                                <!-- 6. Acquisizione Quote SPV -->
+                                <div class="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
+                                    <div class="flex justify-between mb-1">
+                                        <span class="text-slate-300 font-medium">Acquisizione Quote SPV</span>
+                                        <span class="font-bold text-teal-300" id="val-soci-pct-spv">100%</span>
+                                    </div>
+                                    <input type="range" id="slide-soci-pct-spv" min="0" max="100" value="100" step="5" class="w-full">
+                                </div>
+                                <!-- 7. Custom / Altro CAPEX -->
+                                <div class="bg-slate-950/50 p-2 rounded-lg border border-slate-800/60 md:col-span-2">
+                                    <div class="flex justify-between mb-1">
+                                        <span class="text-slate-300 font-medium">Voci Personalizzate / Altro CAPEX</span>
+                                        <span class="font-bold text-teal-300" id="val-soci-pct-custom">100%</span>
+                                    </div>
+                                    <input type="range" id="slide-soci-pct-custom" min="0" max="100" value="100" step="5" class="w-full">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1458,15 +1839,19 @@
                 <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
                     <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
                         <i class="fa-solid fa-chart-line text-emerald-400 text-sm"></i>
-                        <h3 class="font-bold text-white text-xs tracking-wide uppercase">Scenario Prezzi & Floor PUN Zonale (Anni 2-20)</h3>
+                        <h3 class="font-bold text-white text-xs tracking-wide uppercase">Scenario Prezzi & Riduzione PUN Zonale (Anni 2-20)</h3>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
                         <div>
                             <label class="block text-[11px] text-slate-400 mb-1">Scenario Prezzi</label>
                             <select id="select-price-scenario-type" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2.5 py-1.5 rounded text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 <option value="base" selected>Scenario Base (Standard)</option>
                                 <option value="bearish_floor">Scenario Ribassista con Floor</option>
                             </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-amber-300 font-semibold mb-1" title="Riduzione percentuale del PUN Zonale Ponderato applicata all'intera web app (impianti e calcoli a partire dall'Anno 1)">Riduzione PUN Zonale (%)</label>
+                            <input type="number" id="input-pun-discount-pct" value="0" min="0" max="100" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-amber-400 font-bold text-xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none" placeholder="0">
                         </div>
                         <div>
                             <label class="block text-[11px] text-slate-400 mb-1">Floor PUN Zonale Ponderato (€/MWh)</label>
@@ -1497,7 +1882,7 @@
                     </div>
                     <p class="text-[10px] text-slate-400 leading-relaxed bg-slate-950/60 p-3 rounded-lg border border-slate-800/80 mt-2">
                         <i class="fa-solid fa-info-circle text-emerald-400 mr-1"></i>
-                        Nello <strong>Scenario Ribassista con Floor</strong>, i prezzi PUN orari degli anni 2-20 decrescono annualmente in base al tasso specificato. Se il PUN medio ponderato sull'energia immessa netta (al netto di BESS e autoconsumo) scende sotto il floor impostato, viene applicato un fattore di scala compensativo per garantire che la media ponderata annuale rimanga esattamente al valore del floor. I ricavi da RID, arbitraggio e time shifting del BESS si adegueranno proporzionalmente.
+                        La <strong>Riduzione PUN Zonale (%)</strong> riduce il valore di mercato PUN orario e ponderato applicato a tutta l'applicazione (tabella Impianti, ricavi RID, BRP, time shifting, arbitraggio e proiezioni pluriennali) a partire dall'Anno 1. Nello <strong>Scenario Ribassista con Floor</strong>, i prezzi PUN orari degli anni 2-20 decrescono annualmente in base al tasso specificato. Se il PUN medio ponderato sull'energia immessa netta (al netto di BESS e autoconsumo) scende sotto il floor impostato, viene applicato un fattore di scala compensativo per garantire che la media ponderata annuale rimanga esattamente al valore del floor. I ricavi da RID, arbitraggio e time shifting del BESS si adegueranno proporzionalmente.
                     </p>
                 </div>
             </div>
@@ -1556,7 +1941,7 @@
                         <!-- CF10/CF11: IVA di cassa — meccanismo, aliquota sui ricavi per regime, aliquote per voce di spesa -->
                         <div class="mb-3">
                             <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="IVA di cassa (solo timing di cassa, non tocca P&L né IRR): a DEBITO sui ricavi incassati con aliquota per regime di mercato; a CREDITO su CAPEX e OPEX pagati con le aliquote per voce di spesa qui sotto; liquidazione periodica con credito IVA portato a nuovo.">IVA di cassa nel Cash Flow <i class="fa-solid fa-circle-info"></i></div>
-                            <div class="grid grid-cols-2 gap-2 items-end">
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
                                 <div class="flex items-center gap-2 pb-1.5" title="Abilita/disabilita la modellazione dell'IVA nel cash flow">
                                     <input type="checkbox" id="input-vat-enabled" checked class="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-950">
                                     <span class="text-[10px] text-slate-300">Abilita IVA</span>
@@ -1568,26 +1953,40 @@
                                         <option value="trimestrale">Trimestrale</option>
                                     </select>
                                 </div>
+                                <div>
+                                    <label class="block text-[9px] text-slate-400 mb-0.5" title="Gestione Credito IVA Trimestrale (Modello TR ex Art. 38-bis DPR 633/72): Ibrido (Compensazione F24 imposte + Rimborso eccedenza), Solo Rimborso, Solo Compensazione F24 o Riporto a nuovo">Gestione Mod. TR</label>
+                                    <select id="input-vat-tr-mode" class="w-full bg-slate-950 border border-slate-700/80 text-white px-2 py-1 rounded text-[11px] outline-none focus:border-emerald-500">
+                                        <option value="ibrido" selected>Ibrido: Comp. + Rimb.</option>
+                                        <option value="rimborso">Solo Rimborso Erario</option>
+                                        <option value="compensazione">Solo Compensazione F24</option>
+                                        <option value="riporto">Nessuna Istanza (Riporto)</option>
+                                    </select>
+                                    <input type="checkbox" id="input-vat-refund-enabled" checked class="hidden">
+                                </div>
+                                <div title="Mesi di attesa per l'erogazione del rimborso da parte dell'Erario dopo la fine del trimestre (default 3 mesi)">
+                                    <label class="block text-[9px] text-slate-400 mb-0.5" title="Mesi di attesa per l'erogazione del rimborso da parte dell'Erario dopo la fine del trimestre (0 = accredito immediato nel mese di liquidazione)">Attesa Rimb. (mesi)</label>
+                                    <input type="number" id="input-vat-refund-lag" value="0" min="0" max="12" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500">
+                                </div>
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-800/50">
                                 <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Aliquota IVA a DEBITO applicata ai ricavi incassati, per regime di mercato. Reverse charge (RID GSE, PPA on-site, operazioni BRP): l'IVA è assolta dalla controparte, la SPV non incassa IVA → 0%. Corrispettivi CER soggetti a IVA 22%.">IVA sui ricavi per regime (%) <i class="fa-solid fa-circle-info"></i></div>
                                 <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
                                     <div title="Ritiro Dedicato GSE: regime di reverse charge → IVA 0% a debito per la SPV"><label class="block text-[8px] text-slate-400 mb-0.5">RID GSE</label><input type="number" id="vat-rev-rid" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="PPA on-site (cessione al cliente): regime di reverse charge → IVA 0% a debito per la SPV"><label class="block text-[8px] text-slate-400 mb-0.5">PPA on-site</label><input type="number" id="vat-rev-ppa" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="PPA on-site (cessione al cliente finale): aliquota 10% con rivalsa per usi industriali (o 0% se cessione a rivenditore in reverse charge)"><label class="block text-[8px] text-slate-400 mb-0.5">PPA on-site</label><input type="number" id="vat-rev-ppa" value="10" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="Ricavi di mercato via BRP (arbitraggio, time-shifting): reverse charge → IVA 0% a debito per la SPV"><label class="block text-[8px] text-slate-400 mb-0.5">BRP (Arb/TS)</label><input type="number" id="vat-rev-brp" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="Corrispettivi incassati in regime CER (incentivo GSE + PPA CER): soggetti a IVA 22%"><label class="block text-[8px] text-slate-400 mb-0.5">CER</label><input type="number" id="vat-rev-cer" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="Impianti FER X: tariffa sul mercato; default reverse charge 0% (modificabile)"><label class="block text-[8px] text-slate-400 mb-0.5">FER X</label><input type="number" id="vat-rev-ferx" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                 </div>
-                                <p class="text-[9px] text-slate-500 mt-1.5 leading-snug">Reverse charge = l'IVA è assolta dalla controparte (GSE/cliente/BRP): la SPV non incassa IVA a debito (0%). Solo i corrispettivi CER generano IVA a debito (22% di default).</p>
+                                <p class="text-[9px] text-slate-500 mt-1.5 leading-snug">Reverse charge = l'IVA è assolta dalla controparte (GSE/BRP/rivenditori): la SPV non incassa IVA a debito (0%). Il PPA on-site a cliente industriale applica IVA ordinaria (10% di default), i corrispettivi CER applicano il 22%.</p>
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-800/50">
-                                <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Aliquota IVA a CREDITO per ciascuna voce di spesa (default italiani: EPC/BESS 22%, Terreno e IMU esenti 0%, Assicurazione esente 0%). Le voci personalizzate hanno aliquota propria nella scheda impianto.">Aliquote IVA per voce di spesa — credito su CAPEX/OPEX (%) <i class="fa-solid fa-circle-info"></i></div>
+                                <div class="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1.5" title="Aliquota IVA a CREDITO per ciascuna voce di spesa (default italiani: EPC FV 10% agevolata, BESS 22%, SPV/Terreno/IMU esenti 0%, Assicurazione esente 0%). Le voci personalizzate hanno aliquota propria nella scheda impianto.">Aliquote IVA per voce di spesa — credito su CAPEX/OPEX (%) <i class="fa-solid fa-circle-info"></i></div>
                                 <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
-                                    <div title="EPC Fotovoltaico"><label class="block text-[8px] text-slate-400 mb-0.5">EPC FV</label><input type="number" id="vat-capex-epc-fv" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="EPC Fotovoltaico (aliquota agevolata 10% ex Tab. A parte III n. 127-quinquies DPR 633/72)"><label class="block text-[8px] text-slate-400 mb-0.5">EPC FV</label><input type="number" id="vat-capex-epc-fv" value="10" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="EPC Accumulo (BESS)"><label class="block text-[8px] text-slate-400 mb-0.5">EPC BESS</label><input type="number" id="vat-capex-epc-bess" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="Connessione alla rete"><label class="block text-[8px] text-slate-400 mb-0.5">Connessione</label><input type="number" id="vat-capex-connection" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="Costi di sviluppo"><label class="block text-[8px] text-slate-400 mb-0.5">Sviluppo</label><input type="number" id="vat-capex-development" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
-                                    <div title="Acquisizione SPV"><label class="block text-[8px] text-slate-400 mb-0.5">SPV</label><input type="number" id="vat-capex-spv" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Costi di compensazioni"><label class="block text-[8px] text-slate-400 mb-0.5">Compensazioni</label><input type="number" id="vat-capex-development" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                    <div title="Acquisizione quote SPV (esente IVA ex Art. 10 c. 1 n. 4 DPR 633/72)"><label class="block text-[8px] text-slate-400 mb-0.5">SPV</label><input type="number" id="vat-capex-spv" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="Terreno (tipicamente esente IVA)"><label class="block text-[8px] text-slate-400 mb-0.5">Terreno</label><input type="number" id="vat-capex-land" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="O&M Fotovoltaico"><label class="block text-[8px] text-slate-400 mb-0.5">O&M FV</label><input type="number" id="vat-opex-om-fv" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="O&M Accumulo (BESS)"><label class="block text-[8px] text-slate-400 mb-0.5">O&M BESS</label><input type="number" id="vat-opex-om-bess" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
@@ -1595,6 +1994,31 @@
                                     <div title="IMU / Tasse locali (fuori campo IVA)"><label class="block text-[8px] text-slate-400 mb-0.5">IMU/Tasse</label><input type="number" id="vat-opex-imu" value="0" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="Vigilanza e sicurezza"><label class="block text-[8px] text-slate-400 mb-0.5">Sicurezza</label><input type="number" id="vat-opex-security" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
                                     <div title="Gestione amministrativa e Asset Management"><label class="block text-[8px] text-slate-400 mb-0.5">Asset Mgmt</label><input type="number" id="vat-opex-asset-mgmt" value="22" min="0" max="25" step="0.5" class="w-full bg-slate-950 border border-slate-700/80 rounded px-1.5 py-1 text-white font-bold text-[10px] outline-none focus:border-emerald-500"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- CF12: Card Sintesi Fiscale & Accise -->
+                        <div id="card-tax-summary" class="mb-3 bg-slate-900/60 border border-slate-800 rounded-xl p-3">
+                            <div class="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-2">
+                                <span class="text-[10px] uppercase tracking-wider font-bold text-slate-300"><i class="fa-solid fa-calculator text-emerald-400 mr-1.5"></i>Sintesi Fiscale & Accise (Cassa SPV)</span>
+                                <span class="text-[9px] text-slate-500 font-mono">D.Lgs. 504/1995 &bull; DPR 633/1972</span>
+                            </div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-850">
+                                    <span class="block text-[9px] text-slate-400">Credito IVA di Picco</span>
+                                    <span id="tax-kpi-vat-peak" class="font-mono text-xs font-bold text-sky-300">—</span>
+                                </div>
+                                <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-850">
+                                    <span class="block text-[9px] text-slate-400">Rimborso Mod. TR Tot.</span>
+                                    <span id="tax-kpi-vat-refund" class="font-mono text-xs font-bold text-emerald-400">—</span>
+                                </div>
+                                <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-850">
+                                    <span class="block text-[9px] text-slate-400">Accise PPA On-Site (Y1)</span>
+                                    <span id="tax-kpi-excise-total" class="font-mono text-xs font-bold text-amber-300">—</span>
+                                </div>
+                                <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-850">
+                                    <span class="block text-[9px] text-slate-400">Diritto Licenza UTF</span>
+                                    <span id="tax-kpi-utf-fee" class="font-mono text-xs font-bold text-slate-200">—</span>
                                 </div>
                             </div>
                         </div>
@@ -1623,7 +2047,7 @@
                                         <option value="EPC FV">EPC FV</option>
                                         <option value="EPC BESS">EPC BESS</option>
                                         <option value="Connessione rete">Connessione rete</option>
-                                        <option value="Sviluppo">Sviluppo</option>
+                                        <option value="Compensazioni">Compensazioni</option>
                                         <option value="Acquisto SPV">Acquisto SPV</option>
                                         <option value="Terreno">Terreno</option>
                                         <option value="Altro">Altro</option>
@@ -1635,8 +2059,10 @@
                             </div>
                             <div id="capex-pay-cat-info" class="mt-1.5 text-[10px] text-slate-400 bg-slate-950/60 border border-slate-800/60 rounded-lg px-2 py-1"></div>
                             <div id="capex-pay-rows" class="mt-2 space-y-1"></div>
-                            <div class="flex justify-end mt-2">
-                                <button id="capex-save-btn" onclick="saveCapexPayments()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-floppy-disk mr-1"></i>Salva esborsi CAPEX</button>
+                            <div class="flex justify-end items-center mt-2 text-[10px] text-slate-500">
+                                <span class="flex items-center gap-1.5 text-emerald-400 font-semibold text-[10px]" title="Gli esborsi vengono salvati automaticamente ad ogni aggiunta, modifica o rimozione">
+                                    <i class="fa-solid fa-cloud-arrow-up text-emerald-400"></i> Salvataggio automatico attivo
+                                </span>
                             </div>
                         </div>
                         <div class="mb-3 pt-3 border-t border-slate-800/80">
@@ -1691,8 +2117,10 @@
                             </div>
                             <div id="opexev-cat-info" class="mt-1.5 text-[10px] text-slate-400 bg-slate-950/60 border border-slate-800/60 rounded-lg px-2 py-1"></div>
                             <div id="opexev-rows" class="mt-2 space-y-1"></div>
-                            <div class="flex justify-end mt-2">
-                                <button id="opexev-save-btn" onclick="saveOpexEvents()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-[10px] transition-colors"><i class="fa-solid fa-floppy-disk mr-1"></i>Salva eventi OPEX</button>
+                            <div class="flex justify-end items-center mt-2 text-[10px] text-slate-500">
+                                <span class="flex items-center gap-1.5 text-emerald-400 font-semibold text-[10px]" title="Gli eventi vengono salvati automaticamente ad ogni aggiunta, modifica o rimozione">
+                                    <i class="fa-solid fa-cloud-arrow-up text-emerald-400"></i> Salvataggio automatico attivo
+                                </span>
                             </div>
                         </div>
             </div>
@@ -1800,7 +2228,7 @@
                                     <input type="number" id="plant-connection-cost" value="0" oninput="recalcPlantKpis()" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                                 </div>
                                 <div>
-                                    <label class="block text-[11px] text-slate-400 mb-1">Costo Sviluppo (€)</label>
+                                    <label class="block text-[11px] text-slate-400 mb-1">Costo Compensazioni (€)</label>
                                     <input type="number" id="plant-development-cost" value="0" oninput="recalcPlantKpis()" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                                 </div>
                             </div>
@@ -1843,8 +2271,16 @@
                             </div>
                             <!-- KPI calcolati -->
                             <div class="border-t border-slate-800/60 pt-2.5 mt-1">
-                                <p class="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-2">KPI Impianto (Calcolati)</p>
-                                <div class="grid grid-cols-3 gap-2">
+                                <div class="flex items-center justify-between mb-2">
+                                    <p class="text-[9px] text-slate-500 uppercase tracking-widest font-bold">KPI Impianto (Calcolati)</p>
+                                    <div class="flex items-center space-x-1.5">
+                                        <label class="text-[10px] text-slate-400 font-semibold" for="plant-prod-multiplier" title="Coefficiente moltiplicatore applicato a tutte le ore della produzione dell'impianto">Moltiplicatore:</label>
+                                        <input type="number" id="plant-prod-multiplier" step="0.001" min="0.001" max="5.0" value="1.000"
+                                            class="w-20 bg-slate-900 border border-slate-700 hover:border-cyan-500 focus:border-cyan-400 rounded px-2 py-0.5 text-cyan-300 font-bold text-xs text-right outline-none transition-colors"
+                                            placeholder="1.000" title="Coefficiente moltiplicatore applicato a tutte le ore della produzione dell'impianto (default: 1.000)">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-3 gap-2 mb-2">
                                     <div>
                                         <label class="block text-[10px] text-slate-400 mb-1">Rendimento <span class="text-emerald-400">(kWh/kWp)</span></label>
                                         <input type="text" id="plant-kpi-yield" value="—" disabled class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-emerald-300 font-bold text-xs cursor-not-allowed outline-none">
@@ -1854,8 +2290,22 @@
                                         <input type="text" id="plant-kpi-production" value="—" disabled class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-emerald-300 font-bold text-xs cursor-not-allowed outline-none">
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] text-slate-400 mb-1">LCOE <span class="text-emerald-400">(€/MWh)</span></label>
+                                        <label class="block text-[10px] text-slate-400 mb-1">LCOE <span class="text-amber-400">(€/MWh)</span></label>
                                         <input type="text" id="plant-kpi-lcoe" value="—" disabled class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-amber-300 font-bold text-xs cursor-not-allowed outline-none">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/50">
+                                    <div>
+                                        <label class="block text-[10px] text-cyan-300 mb-1">Rendimento Corretto <span class="text-cyan-400">(kWh/kWp)</span></label>
+                                        <input type="text" id="plant-kpi-yield-corrected" value="—" disabled class="w-full bg-slate-900/90 border border-cyan-900/60 rounded px-2 py-1.5 text-cyan-300 font-bold text-xs cursor-not-allowed outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-cyan-300 mb-1">Produzione Corretto <span class="text-cyan-400">(MWh/a)</span></label>
+                                        <input type="text" id="plant-kpi-production-corrected" value="—" disabled class="w-full bg-slate-900/90 border border-cyan-900/60 rounded px-2 py-1.5 text-cyan-300 font-bold text-xs cursor-not-allowed outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-cyan-300 mb-1">LCOE Corretto <span class="text-cyan-400">(€/MWh)</span></label>
+                                        <input type="text" id="plant-kpi-lcoe-corrected" value="—" disabled class="w-full bg-slate-900/90 border border-cyan-900/60 rounded px-2 py-1.5 text-cyan-300 font-bold text-xs cursor-not-allowed outline-none">
                                     </div>
                                 </div>
                             </div>
@@ -2356,7 +2806,7 @@
                                     <th>CAPEX EPC</th>
                                     <th>Connessione</th>
                                     <th>Terreno</th>
-                                    <th>Sviluppo</th>
+                                    <th>Compensazioni</th>
                                     <th>Acq. SPV</th>
                                     <th>O&M FV /anno</th>
                                     <th>BESS</th>
@@ -2383,6 +2833,7 @@
                         <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5">
                             <i class="fa-solid fa-file-excel text-emerald-400 text-sm"></i>
                             <h3 class="font-bold text-white text-xs tracking-wide uppercase">Importazione Listino GME</h3>
+                            <span id="gme-admin-badge" class="hidden text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 border bg-amber-500/10 text-amber-400 border-amber-500/30 ml-auto">Solo Admin</span>
                         </div>
                         <p class="text-slate-400 text-xs leading-relaxed">
                             Carica il file Excel dei prezzi orari rilasciato dal GME. Il parser estrarrà automaticamente i prezzi zonali storici del PUN per mese, giorno ed ora, sovrascrivendo i record obsoleti.
@@ -2390,9 +2841,12 @@
                         <div class="p-4 bg-slate-950 border border-dashed border-slate-700/80 rounded-xl text-center space-y-3">
                             <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-500"></i>
                             <input type="file" id="gme-xlsx-file" accept=".xlsx" class="hidden" onchange="importGmeXlsx(event)">
-                            <button onclick="document.getElementById('gme-xlsx-file').click()" class="w-full py-2 bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-750 font-bold rounded-lg text-xs transition-colors flex items-center justify-center cursor-pointer">
+                            <button id="btn-upload-gme" onclick="triggerGmeUpload()" class="w-full py-2 bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-750 font-bold rounded-lg text-xs transition-colors flex items-center justify-center cursor-pointer">
                                 Scegli file XLSX GME
                             </button>
+                        </div>
+                        <div id="gme-admin-notice" class="hidden bg-amber-500/10 border border-amber-500/30 p-2.5 rounded-lg text-[10px] text-amber-400 font-medium">
+                            <i class="fa-solid fa-shield-halved mr-1.5"></i> Aggiornamento listini zonali riservato agli utenti con ruolo Amministratore.
                         </div>
                         <div class="bg-indigo-950/20 border border-indigo-500/20 p-3 rounded-lg text-[10px] text-indigo-400">
                             <span class="font-bold">Info:</span> Carica un listino per sovrascrivere i PUN orari storici o sincronizzali da Supabase.
@@ -2543,230 +2997,231 @@
             </div>
         </div>
 
-        <!-- Tab: RID Config -->
+        <!-- Tab: RID / CER Config -->
         <div id="tab-rid" class="tab-content space-y-6">
             <div class="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
                 <div>
                     <h2 class="text-base font-bold text-white tracking-tight uppercase flex items-center space-x-2">
                         <i class="fa-solid fa-scale-balanced text-emerald-400 text-sm"></i>
-                        <span>Configurazione Rete & Ritiro Dedicato (RID)</span>
+                        <span>Configurazione Rete, Ritiro Dedicato (RID) & Comunità Energetiche (CER)</span>
                     </h2>
-                    <p class="text-[11px] text-slate-400 mt-0.5">Gestione delle perdite di rete per connessione in immissione e prelievo (ARERA 2026) e dei costi di sbilanciamento GSE.</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Gestione delle perdite di rete per connessione (ARERA 2026), costi di sbilanciamento GSE, corrispettivo TIAD e incentivi MASE (CACER).</p>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-                <!-- Coefficienti di Perdita di Rete -->
-                <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
-                    <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
-                        <i class="fa-solid fa-chart-line text-sky-400 text-sm"></i>
-                        <h3 class="font-bold text-white text-xs tracking-wide uppercase">Perdite di Rete convenzionali per Tensione</h3>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-xs text-slate-300">
-                            <thead>
-                                <tr class="border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400">
-                                    <th class="py-2">Tensione Connessione</th>
-                                    <th class="py-2 text-right">Iniezione (RID) (%)</th>
-                                    <th class="py-2 text-right">Prelievo (ARERA) (%)</th>
-                                    <th class="py-2 text-right">TIAD cPR (%)</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-800/40 font-medium">
-                                <tr>
-                                    <td class="py-3 text-slate-400">Bassa Tensione (BT)</td>
-                                    <td class="py-3 text-right">
-                                        <input type="number" id="input-ridLossInjectBt" value="5.2" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                    </td>
-                                    <td class="py-3 text-right">
-                                        <input type="number" id="input-ridLossWithdrawBt" value="10.2" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                    </td>
-                                    <td class="py-3 text-right">
-                                        <input type="number" id="input-cerLossCprBt" value="2.6" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td class="py-3 text-slate-400">Media Tensione (MT)</td>
-                                    <td class="py-3 text-right">
-                                        <input type="number" id="input-ridLossInjectMt" value="2.3" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                    </td>
-                                    <td class="py-3 text-right">
-                                        <input type="number" id="input-ridLossWithdrawMt" value="3.8" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                    </td>
-                                    <td class="py-3 text-right">
-                                        <input type="number" id="input-cerLossCprMt" value="1.2" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td class="py-3 text-slate-400">Alta Tensione (AT)</td>
-                                    <td class="py-3 text-right">
-                                        <input type="number" id="input-ridLossInjectAt" value="0.0" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                    </td>
-                                    <td class="py-3 text-right">
-                                        <input type="number" id="input-ridLossWithdrawAt" value="2.0" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                    </td>
-                                    <td class="py-3 text-right">
-                                        <input type="number" id="input-cerLossCprAt" value="0.0" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+            <!-- SEZIONE 1: Rete di Distribuzione & Ritiro Dedicato (RID) -->
+            <div class="space-y-4">
+                <div class="flex items-center space-x-2 text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>1. Rete di Distribuzione & Ritiro Dedicato (RID)</span>
                 </div>
-
-                <!-- Gestione Sbilanciamento GSE -->
-                <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4 flex flex-col justify-between">
-                    <div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+                    <!-- Coefficienti di Perdita di Rete -->
+                    <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
                         <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
-                            <i class="fa-solid fa-triangle-exclamation text-amber-500 text-sm"></i>
-                            <h3 class="font-bold text-white text-xs tracking-wide uppercase">Costi di Sbilanciamento</h3>
+                            <i class="fa-solid fa-chart-line text-sky-400 text-sm"></i>
+                            <h3 class="font-bold text-white text-xs tracking-wide uppercase">Perdite di Rete convenzionali per Tensione</h3>
                         </div>
-                        <p class="text-[11px] text-slate-400 mb-4">
-                            Corrispettivo orario applicato dal GME/GSE sulle deviazioni tra la produzione dichiarata e l'effettiva immissione in rete del fotovoltaico e dello storage.
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs text-slate-300">
+                                <thead>
+                                    <tr class="border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400">
+                                        <th class="py-2">Tensione Connessione</th>
+                                        <th class="py-2 text-right">Iniezione (RID) (%)</th>
+                                        <th class="py-2 text-right">Prelievo (ARERA) (%)</th>
+                                        <th class="py-2 text-right">TIAD cPR (%)</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/40 font-medium">
+                                    <tr>
+                                        <td class="py-3 text-slate-400">Bassa Tensione (BT)</td>
+                                        <td class="py-3 text-right">
+                                            <input type="number" id="input-ridLossInjectBt" value="5.2" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                        </td>
+                                        <td class="py-3 text-right">
+                                            <input type="number" id="input-ridLossWithdrawBt" value="10.2" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                        </td>
+                                        <td class="py-3 text-right">
+                                            <input type="number" id="input-cerLossCprBt" value="2.6" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-3 text-slate-400">Media Tensione (MT)</td>
+                                        <td class="py-3 text-right">
+                                            <input type="number" id="input-ridLossInjectMt" value="2.3" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                        </td>
+                                        <td class="py-3 text-right">
+                                            <input type="number" id="input-ridLossWithdrawMt" value="3.8" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                        </td>
+                                        <td class="py-3 text-right">
+                                            <input type="number" id="input-cerLossCprMt" value="1.2" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="py-3 text-slate-400">Alta Tensione (AT)</td>
+                                        <td class="py-3 text-right">
+                                            <input type="number" id="input-ridLossInjectAt" value="0.0" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                        </td>
+                                        <td class="py-3 text-right">
+                                            <input type="number" id="input-ridLossWithdrawAt" value="2.0" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                        </td>
+                                        <td class="py-3 text-right">
+                                            <input type="number" id="input-cerLossCprAt" value="0.0" step="0.1" class="w-20 bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-emerald-400 font-bold text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Gestione Sbilanciamento GSE -->
+                    <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
+                                <i class="fa-solid fa-triangle-exclamation text-amber-500 text-sm"></i>
+                                <h3 class="font-bold text-white text-xs tracking-wide uppercase">Costi di Sbilanciamento</h3>
+                            </div>
+                            <p class="text-[11px] text-slate-400 mb-4">
+                                Corrispettivo orario applicato dal GME/GSE sulle deviazioni tra la produzione dichiarata e l'effettiva immissione in rete del fotovoltaico e dello storage.
+                            </p>
+                            <div class="grid grid-cols-1 gap-4">
+                                <div>
+                                    <label class="block text-[11px] text-slate-400 mb-1">Costo Sbilanciamento GSE (€/MWh)</label>
+                                    <input type="number" id="input-ridImbalanceCost" value="1.5" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                </div>
+                                <div class="border-t border-slate-800/60 pt-3">
+                                    <label class="block text-[11px] text-slate-400 mb-1">Ricavi Servizi Ancillari BESS — MSD / Capacity Market (€/MW/anno)</label>
+                                    <input type="number" id="input-msd-eur-mw-yr" value="0" min="0" step="1000" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-emerald-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" placeholder="0">
+                                    <p class="text-[10px] text-slate-500 mt-1.5 leading-relaxed">Ricavo annuo per MW di potenza BESS installata (dispacciamento MSD, capacity market, FCR). 0 = disattivato. Indicizzato all'inflazione.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 italic mt-4 border-t border-slate-800/50 pt-2">
+                            Nota: I valori immessi qui avranno un effetto retroattivo immediato sulle simulazioni di tutti gli impianti commerciali.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SEZIONE 2: Comunità Energetiche Rinnovabili (CER) -->
+            <div class="space-y-4 pt-4 border-t border-slate-800/60">
+                <div class="flex items-center space-x-2 text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                    <span>2. Comunità Energetiche Rinnovabili (CER — Quadro MASE & TIAD 2026)</span>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+                    <!-- Sezione TIAD & TRAS -->
+                    <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
+                        <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
+                            <i class="fa-solid fa-network-wired text-sky-400 text-sm"></i>
+                            <h3 class="font-bold text-white text-xs tracking-wide uppercase">Valorizzazione TIAD</h3>
+                        </div>
+                        <p class="text-[11px] text-slate-400">
+                            Corrispettivo unitario di trasmissione per l'energia condivisa virtuale (TIAD Delibera ARERA 727/2022).
                         </p>
-                        <div class="grid grid-cols-1 gap-4">
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Componente TRAS (€/MWh)</label>
+                            <input type="number" id="input-cerTras" value="8.4" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-sky-400 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Sezione Quota Fissa e Cap MASE -->
+                    <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4 col-span-2">
+                        <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
+                            <i class="fa-solid fa-award text-yellow-400 text-sm"></i>
+                            <h3 class="font-bold text-white text-xs tracking-wide uppercase">Incentivo MASE (Quota Fissa e Cap) per Taglia</h3>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4">
+                            <!-- Small -->
+                            <div class="border border-slate-800/80 p-3 rounded-lg bg-slate-950/20">
+                                <span class="text-[10px] font-bold text-slate-400 block mb-2">Piccola Taglia (≤20 kW)</span>
+                                <div class="space-y-2">
+                                    <div>
+                                        <label class="block text-[9px] text-slate-500">Quota Fissa (€/MWh)</label>
+                                        <input type="number" id="input-cerFissaSmall" value="80.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[9px] text-slate-500">Cap Incentivo (€/MWh)</label>
+                                        <input type="number" id="input-cerCapSmall" value="120.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Medium -->
+                            <div class="border border-slate-800/80 p-3 rounded-lg bg-slate-950/20">
+                                <span class="text-[10px] font-bold text-slate-400 block mb-2">Media Taglia (>20 kW e ≤200 kW)</span>
+                                <div class="space-y-2">
+                                    <div>
+                                        <label class="block text-[9px] text-slate-500">Quota Fissa (€/MWh)</label>
+                                        <input type="number" id="input-cerFissaMedium" value="70.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[9px] text-slate-500">Cap Incentivo (€/MWh)</label>
+                                        <input type="number" id="input-cerCapMedium" value="110.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Large -->
+                            <div class="border border-slate-800/80 p-3 rounded-lg bg-slate-950/20">
+                                <span class="text-[10px] font-bold text-slate-400 block mb-2">Grande Taglia (>200 kW e ≤1 MW)</span>
+                                <div class="space-y-2">
+                                    <div>
+                                        <label class="block text-[9px] text-slate-500">Quota Fissa (€/MWh)</label>
+                                        <input type="number" id="input-cerFissaLarge" value="60.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[9px] text-slate-500">Cap Incentivo (€/MWh)</label>
+                                        <input type="number" id="input-cerCapLarge" value="100.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+                    <!-- Sezione Quota Variabile -->
+                    <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
+                        <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
+                            <i class="fa-solid fa-arrow-trend-down text-indigo-400 text-sm"></i>
+                            <h3 class="font-bold text-white text-xs tracking-wide uppercase">Quota Variabile MASE</h3>
+                        </div>
+                        <p class="text-[11px] text-slate-400">
+                            La quota variabile aumenta progressivamente quando il prezzo zonale (PUN) scende al di sotto del prezzo di riferimento.
+                        </p>
+                        <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-[11px] text-slate-400 mb-1">Costo Sbilanciamento GSE (€/MWh)</label>
-                                <input type="number" id="input-ridImbalanceCost" value="1.5" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                <label class="block text-[11px] text-slate-400 mb-1">Prezzo Riferimento Prif (€/MWh)</label>
+                                <input type="number" id="input-cerVarReferencePrice" value="180.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                             </div>
-                            <div class="border-t border-slate-800/60 pt-3">
-                                <label class="block text-[11px] text-slate-400 mb-1">Ricavi Servizi Ancillari BESS — MSD / Capacity Market (€/MW/anno)</label>
-                                <input type="number" id="input-msd-eur-mw-yr" value="0" min="0" step="1000" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-emerald-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none" placeholder="0">
-                                <p class="text-[10px] text-slate-500 mt-1.5 leading-relaxed">Ricavo annuo per MW di potenza BESS installata (dispacciamento MSD, capacity market, FCR). 0 = disattivato. Indicizzato all'inflazione.</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-[10px] text-slate-500 italic mt-4 border-t border-slate-800/50 pt-2">
-                        Nota: I valori immessi qui avranno un effetto retroattivo immediato sulle simulazioni di tutti gli impianti commerciali.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tab: CER Config -->
-        <div id="tab-cer" class="tab-content space-y-6">
-            <div class="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
-                <div>
-                    <h2 class="text-base font-bold text-white tracking-tight uppercase flex items-center space-x-2">
-                        <i class="fa-solid fa-users-rectangle text-emerald-400 text-sm"></i>
-                        <span>Configurazione Comunità Energetiche Rinnovabili (CER)</span>
-                    </h2>
-                    <p class="text-[11px] text-slate-400 mt-0.5">Tariffa premio MASE (Decreto CACER 2026), valorizzazione TIAD e maggiorazioni geografiche.</p>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-                <!-- Sezione TIAD & TRAS -->
-                <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
-                    <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
-                        <i class="fa-solid fa-network-wired text-sky-400 text-sm"></i>
-                        <h3 class="font-bold text-white text-xs tracking-wide uppercase">Valorizzazione TIAD</h3>
-                    </div>
-                    <p class="text-[11px] text-slate-400">
-                        Corrispettivo unitario di trasmissione per l'energia condivisa virtuale (TIAD Delibera ARERA 727/2022).
-                    </p>
-                    <div>
-                        <label class="block text-[11px] text-slate-400 mb-1">Componente TRAS (€/MWh)</label>
-                        <input type="number" id="input-cerTras" value="8.4" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-sky-400 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                    </div>
-                </div>
-
-                <!-- Sezione Quota Fissa e Cap MASE -->
-                <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4 col-span-2">
-                    <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
-                        <i class="fa-solid fa-award text-yellow-400 text-sm"></i>
-                        <h3 class="font-bold text-white text-xs tracking-wide uppercase">Incentivo MASE (Quota Fissa e Cap) per Taglia</h3>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <!-- Small -->
-                        <div class="border border-slate-800/80 p-3 rounded-lg bg-slate-950/20">
-                            <span class="text-[10px] font-bold text-slate-400 block mb-2">Piccola Taglia (≤20 kW)</span>
-                            <div class="space-y-2">
-                                <div>
-                                    <label class="block text-[9px] text-slate-500">Quota Fissa (€/MWh)</label>
-                                    <input type="number" id="input-cerFissaSmall" value="80.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-[9px] text-slate-500">Cap Incentivo (€/MWh)</label>
-                                    <input type="number" id="input-cerCapSmall" value="120.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Medium -->
-                        <div class="border border-slate-800/80 p-3 rounded-lg bg-slate-950/20">
-                            <span class="text-[10px] font-bold text-slate-400 block mb-2">Media Taglia (>20 kW e ≤200 kW)</span>
-                            <div class="space-y-2">
-                                <div>
-                                    <label class="block text-[9px] text-slate-500">Quota Fissa (€/MWh)</label>
-                                    <input type="number" id="input-cerFissaMedium" value="70.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-[9px] text-slate-500">Cap Incentivo (€/MWh)</label>
-                                    <input type="number" id="input-cerCapMedium" value="110.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Large -->
-                        <div class="border border-slate-800/80 p-3 rounded-lg bg-slate-950/20">
-                            <span class="text-[10px] font-bold text-slate-400 block mb-2">Grande Taglia (>200 kW e ≤1 MW)</span>
-                            <div class="space-y-2">
-                                <div>
-                                    <label class="block text-[9px] text-slate-500">Quota Fissa (€/MWh)</label>
-                                    <input type="number" id="input-cerFissaLarge" value="60.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                </div>
-                                <div>
-                                    <label class="block text-[9px] text-slate-500">Cap Incentivo (€/MWh)</label>
-                                    <input type="number" id="input-cerCapLarge" value="100.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-slate-300 font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                                </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-400 mb-1">Quota Variabile Max (€/MWh)</label>
+                                <input type="number" id="input-cerVarMax" value="40.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-                <!-- Sezione Quota Variabile -->
-                <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
-                    <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
-                        <i class="fa-solid fa-arrow-trend-down text-indigo-400 text-sm"></i>
-                        <h3 class="font-bold text-white text-xs tracking-wide uppercase">Quota Variabile MASE</h3>
-                    </div>
-                    <p class="text-[11px] text-slate-400">
-                        La quota variabile aumenta progressivamente quando il prezzo zonale (PUN) scende al di sotto del prezzo di riferimento.
-                    </p>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-[11px] text-slate-400 mb-1">Prezzo Riferimento Prif (€/MWh)</label>
-                            <input type="number" id="input-cerVarReferencePrice" value="180.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                    <!-- Sezione Correzioni Geografiche -->
+                    <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
+                        <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
+                            <i class="fa-solid fa-earth-europe text-emerald-400 text-sm"></i>
+                            <h3 class="font-bold text-white text-xs tracking-wide uppercase">Correzione Geografica (maggiorazione)</h3>
                         </div>
-                        <div>
-                            <label class="block text-[11px] text-slate-400 mb-1">Quota Variabile Max (€/MWh)</label>
-                            <input type="number" id="input-cerVarMax" value="40.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Sezione Correzioni Geografiche -->
-                <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4">
-                    <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
-                        <i class="fa-solid fa-earth-europe text-emerald-400 text-sm"></i>
-                        <h3 class="font-bold text-white text-xs tracking-wide uppercase">Correzione Geografica (maggiorazione)</h3>
-                    </div>
-                    <p class="text-[11px] text-slate-400">
-                        Maggiorazioni tariffarie concesse in base alla zona geografica per tenere conto del diverso irraggiamento solare.
-                    </p>
-                    <div class="grid grid-cols-3 gap-2">
-                        <div>
-                            <label class="block text-[10px] text-slate-400 mb-1">Zona NORD (€/MWh)</label>
-                            <input type="number" id="input-cerGeoNord" value="10.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-slate-400 mb-1">Zona CENTRO (€/MWh)</label>
-                            <input type="number" id="input-cerGeoCentro" value="4.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-slate-400 mb-1">Zona SUD (€/MWh)</label>
-                            <input type="number" id="input-cerGeoSud" value="0.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                        <p class="text-[11px] text-slate-400">
+                            Maggiorazioni tariffarie concesse in base alla zona geografica per tenere conto del diverso irraggiamento solare.
+                        </p>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <label class="block text-[10px] text-slate-400 mb-1">Zona NORD (€/MWh)</label>
+                                <input type="number" id="input-cerGeoNord" value="10.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-slate-400 mb-1">Zona CENTRO (€/MWh)</label>
+                                <input type="number" id="input-cerGeoCentro" value="4.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-slate-400 mb-1">Zona SUD (€/MWh)</label>
+                                <input type="number" id="input-cerGeoSud" value="0.0" step="0.1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2879,13 +3334,13 @@
                         </h3>
                         <p class="text-[11px] text-slate-400">Analisi dello sviluppo dei volumi fisici di energia e dei relativi valori unitari realizzati per canale.</p>
                     </div>
-                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center">
+                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center select-none">
                         <i class="fa-solid fa-arrows-left-right mr-1.5 text-slate-400"></i> Trascina lateralmente per scorrere gli anni
                     </div>
                 </div>
 
                 <div class="overflow-x-auto sync-scroll premium-scrollbar rounded-xl border border-slate-800 bg-[#020617]">
-                    <table class="w-full text-left text-[11px] whitespace-nowrap" style="border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-kpis">
+                    <table class="w-max min-w-full text-left text-[11px] whitespace-nowrap" style="table-layout: fixed; border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-kpis">
                         <thead>
                             <tr class="bg-[#020617] text-slate-300 uppercase font-semibold text-[9px] tracking-wider border-b border-slate-800" id="pl-header-kpis">
                                 <!-- JS Injected -->
@@ -2899,22 +3354,22 @@
             </section>
 
             <!-- Sezione A: Conto Economico Civilistico SPV -->
-            <section class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
+            <section id="card-pl-section-a" class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
                 <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 pb-4 gap-4">
                     <div>
                         <h3 class="font-bold text-white text-base tracking-tight flex items-center space-x-2">
                             <span class="px-2.5 py-0.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] border border-indigo-500/20 uppercase tracking-wider font-bold">Sezione A</span>
                             <span>Conto Economico Civilistico SPV (Portafoglio)</span>
                         </h3>
-                        <p class="text-[11px] text-slate-400">Analisi economica dell'EBITDA, EBIT, EBT ed Utile Netto consolidato a livello delle SPV operative.</p>
+                        <p class="text-[11px] text-slate-400">Ricavi energetici, costi operativi, ammortamenti civilistici, imposte e utile civilistico a livello di Società di Progetto.</p>
                     </div>
-                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center">
+                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center select-none">
                         <i class="fa-solid fa-arrows-left-right mr-1.5 text-slate-400"></i> Trascina lateralmente per scorrere gli anni
                     </div>
                 </div>
 
                 <div class="overflow-x-auto sync-scroll premium-scrollbar rounded-xl border border-slate-800 bg-[#020617]">
-                    <table class="w-full text-left text-[11px] whitespace-nowrap" style="border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-a">
+                    <table class="w-max min-w-full text-left text-[11px] whitespace-nowrap" style="table-layout: fixed; border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-a">
                         <thead>
                             <tr class="bg-[#020617] text-slate-300 uppercase font-semibold text-[9px] tracking-wider border-b border-slate-800" id="pl-header-a">
                                 <!-- JS Injected -->
@@ -2928,7 +3383,7 @@
             </section>
 
             <!-- Sezione B: Rendiconto Finanziario SPV & Waterfall -->
-            <section class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
+            <section id="card-pl-section-b" class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
                 <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 pb-4 gap-4">
                     <div>
                         <h3 class="font-bold text-white text-base tracking-tight flex items-center space-x-2">
@@ -2937,13 +3392,13 @@
                         </h3>
                         <p class="text-[11px] text-slate-400">Ricostruzione indiretta della cassa reale (CFADS), servizio del debito senior bancario ed erogazione dei flussi a HoldCo.</p>
                     </div>
-                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center">
+                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center select-none">
                         <i class="fa-solid fa-arrows-left-right mr-1.5 text-slate-400"></i> Trascina lateralmente per scorrere gli anni
                     </div>
                 </div>
 
                 <div class="overflow-x-auto sync-scroll premium-scrollbar rounded-xl border border-slate-800 bg-[#020617]">
-                    <table class="w-full text-left text-[11px] whitespace-nowrap" style="border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-b">
+                    <table class="w-max min-w-full text-left text-[11px] whitespace-nowrap" style="table-layout: fixed; border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-b">
                         <thead>
                             <tr class="bg-[#020617] text-slate-300 uppercase font-semibold text-[9px] tracking-wider border-b border-slate-800" id="pl-header-b">
                                 <!-- JS Injected -->
@@ -2956,29 +3411,58 @@
                 </div>
             </section>
 
-            <!-- Sezione C: Rendiconto Finanziario Holding (HoldCo Level) -->
-            <section class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
+            <!-- Sezione C: Conto Economico Civilistico Holding (HoldCo Level) -->
+            <section id="card-pl-section-c" class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
                 <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 pb-4 gap-4">
                     <div>
                         <h3 class="font-bold text-white text-base tracking-tight flex items-center space-x-2">
                             <span class="px-2.5 py-0.5 bg-sky-500/10 text-sky-400 rounded text-[10px] border border-sky-500/20 uppercase tracking-wider font-bold">Sezione C</span>
-                            <span>Rendiconto Finanziario Holding (HoldCo Level)</span>
+                            <span>Conto Economico Civilistico Holding (HoldCo Level)</span>
                         </h3>
-                        <p class="text-[11px] text-slate-400">Flussi di cassa risaliti dalle SPV operative, imposte della Holding e distribuzione del flusso netto investitore (FCFE).</p>
+                        <p class="text-[11px] text-slate-400">Proventi da partecipazioni (dividendi SPV), proventi finanziari, ricavi per servizi, costi operativi, oneri finanziari e imposte societarie Holding (IRES/IRAP).</p>
                     </div>
-                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center">
+                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center select-none">
                         <i class="fa-solid fa-arrows-left-right mr-1.5 text-slate-400"></i> Trascina lateralmente per scorrere gli anni
                     </div>
                 </div>
 
                 <div class="overflow-x-auto sync-scroll premium-scrollbar rounded-xl border border-slate-800 bg-[#020617]">
-                    <table class="w-full text-left text-[11px] whitespace-nowrap" style="border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-c">
+                    <table class="w-max min-w-full text-left text-[11px] whitespace-nowrap" style="table-layout: fixed; border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-c">
                         <thead>
                             <tr class="bg-[#020617] text-slate-300 uppercase font-semibold text-[9px] tracking-wider border-b border-slate-800" id="pl-header-c">
                                 <!-- JS Injected -->
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/40" id="pl-body-c">
+                            <!-- JS Injected -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Sezione D: Rendiconto Finanziario Holding (HoldCo Level) -->
+            <section id="card-pl-section-d" class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
+                <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 pb-4 gap-4">
+                    <div>
+                        <h3 class="font-bold text-white text-base tracking-tight flex items-center space-x-2">
+                            <span class="px-2.5 py-0.5 bg-amber-500/10 text-amber-400 rounded text-[10px] border border-amber-500/20 uppercase tracking-wider font-bold">Sezione D</span>
+                            <span>Rendiconto Finanziario Holding (HoldCo Level)</span>
+                        </h3>
+                        <p class="text-[11px] text-slate-400">Flussi di cassa risaliti dalle SPV operative, imposte della Holding, servizio debito e distribuzione del flusso netto investitore (FCFE).</p>
+                    </div>
+                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center select-none">
+                        <i class="fa-solid fa-arrows-left-right mr-1.5 text-slate-400"></i> Trascina lateralmente per scorrere gli anni
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto sync-scroll premium-scrollbar rounded-xl border border-slate-800 bg-[#020617]">
+                    <table class="w-max min-w-full text-left text-[11px] whitespace-nowrap" style="table-layout: fixed; border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-d">
+                        <thead>
+                            <tr class="bg-[#020617] text-slate-300 uppercase font-semibold text-[9px] tracking-wider border-b border-slate-800" id="pl-header-d">
+                                <!-- JS Injected -->
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/40" id="pl-body-d">
                             <!-- JS Injected -->
                         </tbody>
                     </table>
@@ -2992,13 +3476,13 @@
                         <h3 class="font-bold text-white text-base tracking-tight">Piano di Ammortamento del Debito & Finanziamento Soci (20 Anni)</h3>
                         <p class="text-[11px] text-slate-400">Dettaglio debito Senior mutuo ed evoluzione finanziamento soci fruttifero (HoldCo e Partner)</p>
                     </div>
-                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center">
+                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center select-none">
                         <i class="fa-solid fa-arrows-left-right mr-1.5 text-slate-400"></i> Trascina lateralmente per scorrere gli anni
                     </div>
                 </div>
 
                 <div class="overflow-x-auto sync-scroll premium-scrollbar rounded-xl border border-slate-800 bg-[#020617]">
-                    <table class="w-full text-left text-[11px] whitespace-nowrap" style="border-collapse: separate; border-spacing: 0;" id="table-debt-matrix">
+                    <table class="w-max min-w-full text-left text-[11px] whitespace-nowrap" style="table-layout: fixed; border-collapse: separate; border-spacing: 0;" id="table-debt-matrix">
                         <thead>
                             <tr class="bg-[#020617] text-slate-300 uppercase font-semibold text-[9px] tracking-wider border-b border-slate-800" id="debt-header">
                                 <!-- JS Injected -->
@@ -3133,6 +3617,20 @@
                                 <div id="stab-ppa-type-desc" class="mt-2 text-[10px] text-slate-500 bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-800">
                                     <i class="fa-solid fa-circle-info mr-1 text-sky-500"></i>
                                     <span id="stab-ppa-type-desc-text">On-Site: l'energia è consegnata fisicamente allo stabilimento. La quota eccedente va al Ritiro Dedicato (RID) valorizzata al PUN.</span>
+                                </div>
+                                <!-- Accise PPA On-Site (D.Lgs. 504/1995 TUA) -->
+                                <div id="stab-excise-allocation-container" class="mt-3 p-3 bg-slate-900/40 border border-slate-800 rounded-lg">
+                                    <div class="flex items-center justify-between mb-1.5">
+                                        <label class="block text-[11px] font-bold text-slate-300">Regime Accise PPA On-Site (D.Lgs. 504/1995 TUA)</label>
+                                        <span class="text-[9px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded font-mono">Impianti &gt; 20 kW</span>
+                                    </div>
+                                    <select id="stab-excise-allocation" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-white text-xs focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none">
+                                        <option value="off-taker" selected>A carico Off-taker (standard: addebito in fattura PPA, neutro per SPV)</option>
+                                        <option value="spv">A carico SPV (prezzo PPA all-inclusive, costo a carico SPV)</option>
+                                    </select>
+                                    <p class="text-[9px] text-slate-500 mt-1.5 leading-snug">
+                                        Scaglioni mensili per usi industriali: 0,0125 €/kWh (&le; 200k kWh), 0,0075 €/kWh (200k-1,2M kWh), 0,0025 €/kWh (&gt; 1,2M kWh). Circolare ADM 13/D/2021: perdite BESS ed ausiliari esenti.
+                                    </p>
                                 </div>
                             </div>
 
@@ -3579,7 +4077,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=37"></script>
+    <script src="./src/main.js?v=140"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {
