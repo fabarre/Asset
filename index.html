@@ -2253,10 +2253,14 @@
                             </div>
                             <div class="border-t border-slate-800/60 pt-2.5">
                                 <p class="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-2">Connessione Rete</p>
-                                <div class="grid grid-cols-2 gap-3">
+                                <div class="grid grid-cols-3 gap-2">
                                     <div>
                                         <label class="block text-[11px] text-slate-400 mb-1">Pot. Immissione (kW)</label>
                                         <input type="number" id="plant-grid-connection-kw" value="0" min="0" step="1" oninput="validateGridConnectionPower()" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] text-slate-400 mb-1" title="Potenza massima prelevabile dalla rete per la carica BESS (0 kW = nessun arbitraggio da rete, solo time shifting solare)">Pot. Prelievo (kW)</label>
+                                        <input type="number" id="plant-grid-withdrawal-kw" value="0" min="0" step="1" oninput="validateGridConnectionPower()" title="Potenza massima di prelievo da rete (0 = solo time shifting, nessun arbitraggio)" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                                     </div>
                                     <div>
                                         <label class="block text-[11px] text-slate-400 mb-1">Livello Tensione</label>
@@ -4077,7 +4081,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=140"></script>
+    <script src="./src/main.js?v=141"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

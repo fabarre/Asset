@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS "public"."plants" (
     "bess_type" character varying(50) DEFAULT 'lfp'::character varying,
     "bess_connection" character varying(50) DEFAULT 'ac'::character varying,
     "grid_connection_kw" numeric(12,2) DEFAULT 0,
+    "grid_withdrawal_kw" numeric(12,2) DEFAULT 0,
     "grid_voltage" "text" DEFAULT 'none'::"text",
     "inverter_brand" "text" DEFAULT ''::"text",
     "inverter_model" "text" DEFAULT ''::"text",

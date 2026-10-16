@@ -33,6 +33,30 @@ function getBrpLifetimeAvgFeeForMonth(plant, monthIndex) {
     return sum / BRP_DISPATCH_HORIZON_YEARS;
 }
 
+// Potenza massima di PRELIEVO dalla rete utilizzabile per caricare il BESS (kW, lato POD).
+//  - undefined/null (oggetti legacy senza il campo) -> nessun vincolo aggiuntivo (= potenza BESS)
+//  - 0 -> carica da rete vietata: nessun arbitraggio, il BESS opera solo in time shifting da FV
+//  - >0 -> vincolo c_grid(t) <= min(P_prelievo, P_BESS)
+function resolveGridWithdrawalCapKw(p, maxPowerKw) {
+    const raw = p ? p.gridWithdrawalKw : undefined;
+    if (raw === undefined || raw === null || raw === '') return maxPowerKw;
+    const v = Number(raw);
+    if (!isFinite(v) || v <= 0) return 0;
+    return Math.min(v, maxPowerKw);
+}
+
+// Prezzo (€/kWh) dell'energia BESS di origine RETE (arbitraggio) re-immessa.
+// RID/BRP: stesso prezzo orario di immissione dell'energia FV.
+// FER X: la tariffa incentivante spetta solo all'energia rinnovabile; l'energia
+// prelevata e re-immessa è valorizzata al prezzo zonale orario (con perdite convenzionali).
+function arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID) {
+    return marketType === 'fer_x' ? (pricePUN * lossMult / 1000) : priceRID;
+}
+
+// Penalità di throughput (€/kWh) usata da DP e LP: rompe la degenerazione tra soluzioni
+// equivalenti ed esclude carica/scarica simultanea nello stesso intervallo.
+const BESS_THROUGHPUT_PENALTY = 0.0001;
+
 // ═══ CF3: COD dinamico e lag di incasso per regime ═══
 // Data COD 'YYYY-MM-DD' -> {y,m,d} oppure null
 function parseCodDate(codDate) {
@@ -240,8 +264,14 @@ async function getHighs() {
 }
 
 // Dispatch BESS via LP globale su 8760h (stesso contratto di output di simulateBessHourly).
-// Variabili/ora: c_pv, c_grid, d_grid, d_ppa, s (autoconsumo FV), soc.
-// Carica/scarica simultanea esclusa dall'ottimo per RTE < 100% (LP puro, niente binarie).
+// Modello a DUE serbatoi contabili con tracciamento ESATTO dell'origine dell'energia:
+//   ss = energia di origine FV (include la riserva minSoc, mai scaricata)
+//   sg = energia di origine RETE (arbitraggio)
+// Variabili/ora: cpv, cgr, dgs (scarica FV->rete), dgg (scarica rete->rete),
+//                dppa (scarica FV->carico PPA), s (autoconsumo FV), ss, sg.
+// L'energia prelevata dalla rete non può alimentare il PPA on-site (coerente con la DP 2D).
+// Vincoli di rete: cgr <= min(P_prelievo, P_BESS). P_prelievo = 0 -> solo time shifting.
+// Carica/scarica simultanea esclusa da RTE < 100% + penalità di throughput (LP puro, niente binarie).
 function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
     const H = 8760;
     const bessMw = p.bessMw;
@@ -267,9 +297,11 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
     const maxSoc = bessMwh * 1000 * (socMaxPct / 100);
     const minSoc = (socMinPct !== null) ? (bessMwh * 1000 * (socMinPct / 100)) : maxSoc * (1 - dod);
     const maxPower = bessMw * 1000;
+    const wdCap = resolveGridWithdrawalCapKw(p, maxPower);
     const chargeSolarEff = bessConnection === 'dc' ? 0.98 : Math.sqrt(rte);
     const chargeGridEff = Math.sqrt(rte);
     const dischargeEff = Math.sqrt(rte);
+    const eps = BESS_THROUGHPUT_PENALTY;
 
     // Media mensile PUN per contratto pun_medio
     const monthlyAveragePun = new Float64Array(12);
@@ -282,59 +314,70 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
     for (let m = 0; m < 12; m++) if (monthlyCounts[m] > 0) monthlyAveragePun[m] /= monthlyCounts[m];
 
     // ── Costruzione del modello in formato LP testuale (highs-js accetta stringhe) ──
-    // Variabili/ora: cpv{t}, cgr{t}, dgr{t}, dppa{t}, s{t}, soc{t}
     const fmt = (v) => {
         if (!isFinite(v)) return '0';
         return Math.abs(v) < 1e-12 ? '0' : Number(v.toPrecision(10)).toString();
     };
+    const term = (coef, name) => (coef >= 0 ? ' + ' : ' - ') + fmt(Math.abs(coef)) + ' ' + name;
     const objParts = [];
     const ctrParts = [];
     const bndParts = [];
+    const invEffD = 1 / dischargeEff;
     for (let t = 0; t < H; t++) {
         const pricePUN = punProfile[t];
         const month = getMonthOfHour(t);
         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
-        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
+        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
             : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
+        const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
         const pricePPA = ppaPrice / 1000;
         const lodVal = loadProfile ? Math.max(0, loadProfile[t]) : 0;
-        const solVal = solarProfile[t];
+        const solVal = Math.max(0, solarProfile[t]);
 
-        // Objective coefficients (max): ricavi PPA/RID - costi prelievo
-        objParts.push((-priceRID >= 0 ? '+' : '') + fmt(-priceRID) + ' cpv' + t);
-        objParts.push((-costGrid >= 0 ? '+' : '') + fmt(-costGrid) + ' cgr' + t);
-        objParts.push((priceRID >= 0 ? '+' : '') + fmt(priceRID) + ' dgr' + t);
-        objParts.push((pricePPA >= 0 ? '+' : '') + fmt(pricePPA) + ' dppa' + t);
-        const sCoef = pricePPA - priceRID;
-        objParts.push((sCoef >= 0 ? '+' : '') + fmt(sCoef) + ' s' + t);
+        // Funzione obiettivo (max): ricavi PPA/RID/arbitraggio - costi prelievo - penalità throughput
+        objParts.push(term(-priceRID - eps, 'cpv' + t));
+        objParts.push(term(-costGrid - eps, 'cgr' + t));
+        objParts.push(term(priceRID - eps, 'dgs' + t));
+        objParts.push(term(priceArb - eps, 'dgg' + t));
+        objParts.push(term(pricePPA - eps, 'dppa' + t));
+        objParts.push(term(pricePPA - priceRID, 's' + t));
 
-        // socdyn: soc{t} - soc{t-1} - effCS*cpv - effCG*cgr + (1/effD)*(dgr+dppa) = (t==0 ? minSoc : 0)
-        ctrParts.push(' socdyn' + t + ': soc' + t
-            + (t > 0 ? ' - soc' + (t - 1) : '')
+        // Dinamica serbatoio FV: ss_t - ss_{t-1} - effCS*cpv + (dgs + dppa)/effD = (t==0 ? minSoc : 0)
+        ctrParts.push(' dyns' + t + ': ss' + t
+            + (t > 0 ? ' - ss' + (t - 1) : '')
             + ' - ' + fmt(chargeSolarEff) + ' cpv' + t
-            + ' - ' + fmt(chargeGridEff) + ' cgr' + t
-            + ' + ' + fmt(1 / dischargeEff) + ' dgr' + t
-            + ' + ' + fmt(1 / dischargeEff) + ' dppa' + t
+            + ' + ' + fmt(invEffD) + ' dgs' + t
+            + ' + ' + fmt(invEffD) + ' dppa' + t
             + ' = ' + fmt(t === 0 ? minSoc : 0));
-        // Limiti potenza
+        // Dinamica serbatoio RETE: sg_t - sg_{t-1} - effCG*cgr + dgg/effD = 0
+        ctrParts.push(' dyng' + t + ': sg' + t
+            + (t > 0 ? ' - sg' + (t - 1) : '')
+            + ' - ' + fmt(chargeGridEff) + ' cgr' + t
+            + ' + ' + fmt(invEffD) + ' dgg' + t
+            + ' = 0');
+        // Capacità totale
+        ctrParts.push(' soccap' + t + ': ss' + t + ' + sg' + t + ' <= ' + fmt(maxSoc));
+        // Limiti potenza BESS
         ctrParts.push(' chcap' + t + ': cpv' + t + ' + cgr' + t + ' <= ' + fmt(maxPower));
-        ctrParts.push(' discap' + t + ': dgr' + t + ' + dppa' + t + ' <= ' + fmt(maxPower));
+        ctrParts.push(' discap' + t + ': dgs' + t + ' + dgg' + t + ' + dppa' + t + ' <= ' + fmt(maxPower));
         // Ripartizione solare: autoconsumo + carica <= generazione
         ctrParts.push(' solsplit' + t + ': s' + t + ' + cpv' + t + ' <= ' + fmt(solVal));
         // Scarica PPA + autoconsumo <= fabbisogno
         ctrParts.push(' ppalim' + t + ': dppa' + t + ' + s' + t + ' <= ' + fmt(lodVal));
 
-        // Bounds
-        bndParts.push(' 0 <= cpv' + t + ' <= ' + fmt(solVal));
-        bndParts.push(' 0 <= cgr' + t + ' <= ' + fmt(maxPower));
-        bndParts.push(' 0 <= dgr' + t + ' <= ' + fmt(maxPower));
-        bndParts.push(' 0 <= dppa' + t + ' <= ' + fmt(lodVal));
-        bndParts.push(' 0 <= s' + t + ' <= ' + fmt(lodVal));
-        bndParts.push(' ' + fmt(minSoc) + ' <= soc' + t + ' <= ' + fmt(maxSoc));
+        // Bounds (cgr limitato dalla potenza di prelievo del punto di connessione)
+        bndParts.push(' 0 <= cpv' + t + ' <= ' + fmt(Math.min(solVal, maxPower)));
+        bndParts.push(' 0 <= cgr' + t + ' <= ' + fmt(wdCap));
+        bndParts.push(' 0 <= dgs' + t + ' <= ' + fmt(maxPower));
+        bndParts.push(' 0 <= dgg' + t + ' <= ' + fmt(wdCap > 0 ? maxPower : 0));
+        bndParts.push(' 0 <= dppa' + t + ' <= ' + fmt(Math.min(lodVal, maxPower)));
+        bndParts.push(' 0 <= s' + t + ' <= ' + fmt(Math.min(lodVal, solVal)));
+        bndParts.push(' ' + fmt(minSoc) + ' <= ss' + t + ' <= ' + fmt(maxSoc));
+        bndParts.push(' 0 <= sg' + t + ' <= ' + fmt(wdCap > 0 ? Math.max(0, maxSoc - minSoc) : 0));
     }
-    const lpString = 'Maximize\n obj: ' + objParts.join(' ')
+    const lpString = 'Maximize\n obj:' + objParts.join('')
         + '\nSubject To\n' + ctrParts.join('\n')
         + '\nBounds\n' + bndParts.join('\n')
         + '\nEnd\n';
@@ -378,43 +421,29 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
 
     let totalUplift = 0;
     let annualShiftedKwh = 0;
-    let socGridVal = 0; // pool energia caricata da rete (tracciamento proporzionale, come DP)
 
     for (let t = 0; t < H; t++) {
-        const solValRaw = solarProfile[t];
-        const lodValRaw = loadProfile ? Math.max(0, loadProfile[t]) : 0;
+        const solVal = Math.max(0, solarProfile[t]);
+        const lodVal = loadProfile ? Math.max(0, loadProfile[t]) : 0;
         // Clamp fisico delle tolleranze numeriche del solver (~1e-3 kW)
-        let c_pv = Math.min(Math.max(0, colValByName('cpv' + t)), solValRaw);
-        const c_grid = Math.max(0, colValByName('cgr' + t));
-        const d_grid = Math.max(0, colValByName('dgr' + t));
-        const s = Math.min(Math.max(0, colValByName('s' + t)), Math.max(0, solValRaw - c_pv));
-        const d_ppa = Math.min(Math.max(0, colValByName('dppa' + t)), Math.max(0, lodValRaw - s));
-        const socEnd = colValByName('soc' + t);
+        const c_pv = Math.min(Math.max(0, colValByName('cpv' + t)), solVal);
+        const c_grid = Math.min(Math.max(0, colValByName('cgr' + t)), wdCap);
+        const d_gs = Math.max(0, colValByName('dgs' + t));
+        const d_gg = wdCap > 0 ? Math.max(0, colValByName('dgg' + t)) : 0;
+        const s = Math.min(Math.max(0, colValByName('s' + t)), Math.max(0, solVal - c_pv));
+        const d_ppa = Math.min(Math.max(0, colValByName('dppa' + t)), Math.max(0, lodVal - s));
+        const d_grid = d_gs + d_gg;
+        const socEnd = colValByName('ss' + t) + colValByName('sg' + t);
 
-        const solVal = solValRaw;
-        const lodVal = lodValRaw;
         const pricePUN = punProfile[t];
         const month = getMonthOfHour(t);
         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
-        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
+        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
             : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
+        const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
         const pricePPA = ppaPrice / 1000;
-
-        const socStart = (t === 0) ? minSoc : colValByName('soc' + (t - 1));
-        const deltaSoC = socEnd - socStart;
-
-        // Split arbitraggio/timeshifting via pool proporzionale (stessa logica DP)
-        let d_grid_from_grid = 0;
-        if (deltaSoC > 0) {
-            socGridVal += c_grid * chargeGridEff;
-        } else if (deltaSoC < 0) {
-            const fraction = socStart > 0 ? (socGridVal / socStart) : 0;
-            const E_dis_grid = Math.min(-deltaSoC, Math.max(0, socGridVal));
-            socGridVal = Math.max(0, socGridVal - E_dis_grid);
-            d_grid_from_grid = Math.min(d_grid, E_dis_grid * dischargeEff * (fraction > 0 ? 1 : 1));
-        }
 
         const p_fed_pv = Math.max(0, solVal - s - c_pv);
 
@@ -433,15 +462,15 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
         hourlyLossesRte[t] = c_pv * (1 - chargeSolarEff) + c_grid * (1 - chargeGridEff) + (d_grid + d_ppa) * ((1 / dischargeEff) - 1);
         hourlyRevenueRidPure[t] = solVal * priceRID;
         hourlyRevenueRidActual[t] = p_fed_pv * priceRID;
-        hourlyRevenueArbitrageGrid[t] = d_grid_from_grid * priceRID;
-        hourlyRevenueTimeshifting[t] = Math.max(0, d_grid - d_grid_from_grid) * priceRID;
+        hourlyRevenueArbitrageGrid[t] = d_gg * priceArb;
+        hourlyRevenueTimeshifting[t] = d_gs * priceRID;
         hourlyRevenuePpaPv[t] = s * pricePPA;
         hourlyRevenuePpaBess[t] = d_ppa * pricePPA;
         hourlyCostWithdrawal[t] = c_grid * costGrid;
-        hourlyDischargeArbitrage[t] = d_grid_from_grid;
-        hourlyDischargeTimeshifting[t] = Math.max(0, d_grid - d_grid_from_grid);
+        hourlyDischargeArbitrage[t] = d_gg;
+        hourlyDischargeTimeshifting[t] = d_gs;
 
-        totalUplift += (s + d_ppa) * pricePPA + (p_fed_pv + d_grid) * priceRID - c_grid * costGrid;
+        totalUplift += (s + d_ppa) * pricePPA + (p_fed_pv + d_gs) * priceRID + d_gg * priceArb - c_grid * costGrid;
         annualShiftedKwh += d_grid + d_ppa;
     }
 
@@ -797,12 +826,13 @@ function runSensitivityLoop(baseState, config) {
             const maxSoc = bessMwh * 1000 * (socMaxPct / 100); // kWh
             const minSoc = (socMinPct !== null) ? (bessMwh * 1000 * (socMinPct / 100)) : maxSoc * (1 - dod);
             const maxPower = bessMw * 1000; // kW
+            const wdCap = resolveGridWithdrawalCapKw(p, maxPower);
             
             const chargeSolarEff = bessConnection === 'dc' ? 0.98 : Math.sqrt(rte);
             const chargeGridEff = Math.sqrt(rte);
             const dischargeEff = Math.sqrt(rte);
             
-            // Check if we need 2D DP
+            // Check if we need 2D DP: required when on-site PPA load exists OR when FER X differentiates solar vs grid-charged arbitrage price
             let hasOnSiteLoad = false;
             if (loadProfile) {
                 for (let t = 0; t < 8760; t++) {
@@ -812,7 +842,7 @@ function runSensitivityLoop(baseState, config) {
                     }
                 }
             }
-            const run2D = hasOnSiteLoad && ppaPrice > 0;
+            const run2D = (hasOnSiteLoad && ppaPrice > 0) || (marketType === 'fer_x' && wdCap > 0);
             
             // Pre-compute monthly averages of PUN for pun_medio contract
             const monthStartHours = [0, 744, 1416, 2160, 2880, 3624, 4344, 5088, 5832, 6552, 7296, 8016, 8760];
@@ -876,7 +906,9 @@ function runSensitivityLoop(baseState, config) {
                         const month = getMonthOfHour(h);
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                         
-                        const priceRID = (pricePUN * lossMult - gseImb) / 1000;
+                        const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
+                            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
+                            : ((pricePUN * lossMult - gseImb) / 1000);
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
                         
                         const V_next = V[t+1];
@@ -916,9 +948,10 @@ function runSensitivityLoop(baseState, config) {
                                     c_pv = E_ch_pv / chargeSolarEff;
                                     c_grid = E_ch_grid / chargeGridEff;
                                     
-                                    if (c_pv + c_grid <= maxPower + 1e-5) {
+                                    if (c_pv + c_grid <= maxPower + 1e-5 && c_grid <= wdCap + 1e-5) {
                                         feasible = true;
                                         if (c_pv > solVal) c_pv = solVal;
+                                        if (c_grid > wdCap) c_grid = wdCap;
                                         const p_fed_pv = Math.max(0, solVal - c_pv);
                                         reward = p_fed_pv * priceRID - c_grid * costGrid;
                                     }
@@ -936,7 +969,7 @@ function runSensitivityLoop(baseState, config) {
                                 
                                 if (feasible) {
                                     const throughput = c_pv + c_grid + d_grid;
-                                    const penalty = throughput * 0.0001;
+                                    const penalty = throughput * BESS_THROUGHPUT_PENALTY;
                                     const val = reward - penalty + V_next[iNext];
                                     if (val > bestVal) {
                                         bestVal = val;
@@ -988,11 +1021,12 @@ function runSensitivityLoop(baseState, config) {
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
                             : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
                             : ((pricePUN * lossMult - gseImb) / 1000);
+                        const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
                         const pricePPA = ppaPrice / 1000;
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
                         
-                        // Proportional grid-charged pool tracking in 1D DP
+                        // Proportional grid-charged pool tracking in 1D DP (su energia utile sopra minSoc)
                         const socStart = socLevels[currState];
                         const socEnd = socLevels[ns];
                         const deltaSoC = socEnd - socStart;
@@ -1002,13 +1036,14 @@ function runSensitivityLoop(baseState, config) {
                             const E_ch = deltaSoC;
                             const E_ch_pv = Math.min(E_ch, solVal * chargeSolarEff);
                             const E_ch_grid = E_ch - E_ch_pv;
-                            socGridVal = socGridVal + E_ch_grid;
+                            socGridVal = Math.min(Math.max(0, socEnd - minSoc), socGridVal + E_ch_grid);
                         } else if (deltaSoC < 0) {
                             const E_dis = -deltaSoC;
-                            const fraction = socStart > 0 ? (socGridVal / socStart) : 0;
-                            const E_dis_grid = E_dis * fraction;
+                            const usableStart = Math.max(0, socStart - minSoc);
+                            const fraction = usableStart > 0 ? Math.min(1, socGridVal / usableStart) : 0;
+                            const E_dis_grid = Math.min(socGridVal, E_dis * fraction);
                             socGridVal = Math.max(0, socGridVal - E_dis_grid);
-                            d_grid_from_grid = E_dis_grid * dischargeEff;
+                            d_grid_from_grid = Math.min(d_grid, E_dis_grid * dischargeEff);
                         }
                         
                         const p_fed_pv = Math.max(0, solVal - c_pv);
@@ -1019,7 +1054,7 @@ function runSensitivityLoop(baseState, config) {
                         hourlyGridFeedPv[h] = p_fed_pv;
                         hourlyRevenueRidPure[h] = solVal * priceRID;
                         hourlyRevenueRidActual[h] = p_fed_pv * priceRID;
-                        hourlyRevenueArbitrageGrid[h] = d_grid_from_grid * priceRID;
+                        hourlyRevenueArbitrageGrid[h] = d_grid_from_grid * priceArb;
                         hourlyRevenueTimeshifting[h] = Math.max(0, d_grid - d_grid_from_grid) * priceRID;
                         hourlyRevenuePpaPv[h] = 0;
                         hourlyRevenuePpaBess[h] = 0;
@@ -1049,12 +1084,14 @@ function runSensitivityLoop(baseState, config) {
                     const i = Math.floor(s / (M + 1));
                     const j = s % (M + 1);
                     stateSoc[s] = socLevels[i];
-                    stateSocGrid[s] = (j / M) * socLevels[i];
+                    // Pool di rete limitato alla sola capacità utile sopra minSoc (evita energia "intrappolata" sotto DoD)
+                    stateSocGrid[s] = (j / M) * Math.max(0, socLevels[i] - minSoc);
                 }
                 
                 const validTransitions = Array.from({ length: numStates }, () => []);
                 const maxChgEnergy = maxPower * Math.max(chargeSolarEff, chargeGridEff);
                 const maxDisEnergy = maxPower / dischargeEff;
+                const maxChgGridEnergy = wdCap * chargeGridEff;
                 
                 for (let s = 0; s < numStates; s++) {
                     const socStart = stateSoc[s];
@@ -1071,6 +1108,7 @@ function runSensitivityLoop(baseState, config) {
                         
                         if (deltaSoC > 0) {
                             if (deltaSoCGrid < -1e-5 || (deltaSoC - deltaSoCGrid) < -1e-5) continue;
+                            if (deltaSoCGrid > maxChgGridEnergy + 1e-3) continue;
                         } else if (deltaSoC < 0) {
                             if (deltaSoCGrid > 1e-5) continue;
                             if (-deltaSoCGrid > socGridStart + 1e-5) continue;
@@ -1100,7 +1138,7 @@ function runSensitivityLoop(baseState, config) {
                     for (let t = 23; t >= 0; t--) {
                         const h = dayStart + t;
                         const solVal = solarProfile[h];
-                        const lodVal = loadProfile[h];
+                        const lodVal = loadProfile ? loadProfile[h] : 0;
                         const pricePUN = punProfile[h];
                         const month = getMonthOfHour(h);
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
@@ -1109,6 +1147,7 @@ function runSensitivityLoop(baseState, config) {
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
             : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
             : ((pricePUN * lossMult - gseImb) / 1000);
+                        const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
                         
                         const V_next = V[t+1];
@@ -1154,9 +1193,10 @@ function runSensitivityLoop(baseState, config) {
                                     c_grid = E_ch_grid / chargeGridEff;
                                     c_pv = E_ch_pv / chargeSolarEff;
                                     
-                                    if (c_grid + c_pv <= maxPower + 1e-5 && c_pv <= solVal + 1e-5) {
+                                    if (c_grid + c_pv <= maxPower + 1e-5 && c_grid <= wdCap + 1e-5 && c_pv <= solVal + 1e-5) {
                                         feasible = true;
                                         if (c_pv > solVal) c_pv = solVal;
+                                        if (c_grid > wdCap) c_grid = wdCap;
                                         const p_self_pv = solVal - c_pv < lodVal ? solVal - c_pv : lodVal;
                                         const p_fed_pv = solVal - c_pv - lodVal > 0 ? solVal - c_pv - lodVal : 0;
                                         reward = p_self_pv * pricePPA + p_fed_pv * priceRID - c_grid * costGrid;
@@ -1174,10 +1214,12 @@ function runSensitivityLoop(baseState, config) {
                                     
                                     d_ppa = lodVal - p_self_pv < p_dis_ppa_max ? lodVal - p_self_pv : p_dis_ppa_max;
                                     d_grid = p_dis_delivered - d_ppa > 0 ? p_dis_delivered - d_ppa : 0;
+                                    const d_grid_arb = Math.min(d_grid, E_dis_grid * dischargeEff);
+                                    const d_grid_ts = Math.max(0, d_grid - d_grid_arb);
                                     
                                     if (d_ppa + d_grid <= maxPower + 1e-5) {
                                         feasible = true;
-                                        reward = (p_self_pv + d_ppa) * pricePPA + (p_fed_pv + d_grid) * priceRID;
+                                        reward = (p_self_pv + d_ppa) * pricePPA + (p_fed_pv + d_grid_ts) * priceRID + d_grid_arb * priceArb;
                                     }
                                 } else {
                                     feasible = true;
@@ -1188,7 +1230,7 @@ function runSensitivityLoop(baseState, config) {
                                 
                                 if (feasible) {
                                     const throughput = c_pv + c_grid + d_ppa + d_grid;
-                                    const penalty = throughput * 0.0001;
+                                    const penalty = throughput * BESS_THROUGHPUT_PENALTY;
                                     const val = reward - penalty + V_next[sNext];
                                     if (val > bestVal) {
                                         bestVal = val;
@@ -1231,12 +1273,13 @@ function runSensitivityLoop(baseState, config) {
                         hourlyDischargePpa[h] = d_ppa;
                         
                         const solVal = solarProfile[h];
-                        const lodVal = loadProfile[h];
+                        const lodVal = loadProfile ? loadProfile[h] : 0;
                         const pricePUN = punProfile[h];
                         const month = getMonthOfHour(h);
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
                             : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
                             : ((pricePUN * lossMult - gseImb) / 1000);
+                        const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
                         const pricePPA = ppaPrice / 1000;
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
@@ -1271,7 +1314,7 @@ function runSensitivityLoop(baseState, config) {
                         hourlyGridFeedPv[h] = p_fed_pv;
                         hourlyRevenueRidPure[h] = solVal * priceRID;
                         hourlyRevenueRidActual[h] = p_fed_pv * priceRID;
-                        hourlyRevenueArbitrageGrid[h] = d_grid_from_grid * priceRID;
+                        hourlyRevenueArbitrageGrid[h] = d_grid_from_grid * priceArb;
                         hourlyRevenueTimeshifting[h] = Math.max(0, d_grid - d_grid_from_grid) * priceRID;
                         hourlyRevenuePpaPv[h] = p_self_pv * pricePPA;
                         hourlyRevenuePpaBess[h] = d_ppa * pricePPA;
@@ -1543,6 +1586,7 @@ function runSensitivityLoop(baseState, config) {
                     brpFee3: plant.brpFee3,
                     gridLosses: resolveGridLosses(plant.gridVoltage, 'inject'),
                     gridLossesWithdraw: resolveGridLosses(plant.gridVoltage, 'withdraw'),
+                    gridWithdrawalKw: plant.gridWithdrawalKw,
                     gseImbalance: State.inputs.ridImbalanceCost || 0,
                     ppaPrice: ppaPrice
                 };
@@ -1673,11 +1717,12 @@ function runSensitivityLoop(baseState, config) {
                         arbitrageRevY1 += plantSim.hourlyRevenueArbitrageGrid[t] || 0;
                         arbitrageCostY1 += plantSim.hourlyCostWithdrawal[t] || 0;
                     }
-                    timeshiftingRevY1 = bessRidRevY1 - arbitrageRevY1 + arbitrageCostY1;
+                    timeshiftingRevY1 = bessRidRevY1 - arbitrageRevY1;
+                    bessGridChargingCostY1 = arbitrageCostY1;
                     solarSelfConsMwhY1 = plant.annualSolarProductionMWh;
                     solarGridFeedMwhY1 = 0;
                     bessSelfConsMwhY1 = 0;
-                    bessGridFeedMwhY1 = 0;
+                    bessGridFeedMwhY1 = plantSim.hourlyDischargeGrid.reduce((a, b) => a + b, 0) / 1000;
                 } else if (stab && stab.ppaType === 'cer') {
                     solarPpaRevY1 = 0;
                     bessPpaRevY1 = 0;
@@ -2632,7 +2677,7 @@ function runSensitivityLoop(baseState, config) {
                                 pPhysSolarRid = Math.max(0, pPhysSolarGen - pPhysSolarPpa - pPhysSolarToBess);
 
                                 if (plant.marketType === 'brp') {
-                                    // Per BRP recalculate hourly to account for dynamic monthly fees
+                                    // Per BRP ricalcolo orario esatto con fee dinamiche del mese/anno yr e prezzo puntuale di scarica
                                     solarRidRev = 0;
                                     timeshiftingRev = 0;
                                     arbitrageRev = 0;
@@ -2646,39 +2691,27 @@ function runSensitivityLoop(baseState, config) {
                                     for (let t = 0; t < 8760; t++) {
                                         const fee = getBrpFeeForMonth(plant, yr, getMonthOfHour(t));
                                         const pricePUN = zonePrices[t];
-                                        const priceRID = ((pricePUN + fee) * lossMult / 1000) * currentRidDecay;
+                                        const basePriceBrp = (pricePUN + fee) * lossMult / 1000;
+                                        const priceRID = basePriceBrp * currentRidDecay;
+                                        const priceTs = basePriceBrp * currentTimeshiftingDecay;
+                                        const priceArb = basePriceBrp * currentArbitrageDecay;
                                         
                                         const solarGridFeedHourly = Math.max(0, plant.generation[t] - (loadProfile ? Math.min(plant.generation[t], loadProfile[t]) : 0) - (plantSim.hourlyChargeSolar ? plantSim.hourlyChargeSolar[t] : 0));
                                         solarRidRev += solarGridFeedHourly * solarDegradation * priceRID;
+                                        
+                                        const tsDischHourly = (plantSim && plantSim.hourlyDischargeTimeshifting) ? (plantSim.hourlyDischargeTimeshifting[t] || 0) : 0;
+                                        const arbDischHourly = (plantSim && plantSim.hourlyDischargeArbitrage) ? (plantSim.hourlyDischargeArbitrage[t] || 0) : 0;
+                                        timeshiftingRev += tsDischHourly * bessDegradationMult * priceTs;
+                                        arbitrageRev += arbDischHourly * bessDegradationMult * priceArb;
                                         
                                         if (yr > ppaDuration && (plantSim.hourlySelfCons && plantSim.hourlyChargeSolar)) {
                                             // BESS PPA becomes BESS RID after PPA expires
                                             const actualPpa = plantSim.hourlySelfCons[t];
                                             const baseSolarPpa = loadProfile ? Math.min(plant.generation[t], loadProfile[t]) : 0;
-                                            timeshiftingRev += (actualPpa - baseSolarPpa) * bessDegradationMult * priceRID;
+                                            timeshiftingRev += (actualPpa - baseSolarPpa) * bessDegradationMult * priceTs;
                                             pPhysBessGridFeed += (actualPpa - baseSolarPpa) * bessDegradationMult / 1000;
                                         }
                                     }
-                                    
-                                    let tsGridFeedMwh = 0;
-                                    let arbGridFeedMwh = 0;
-                                    if (plantSim && plantSim.hourlyDischargeTimeshifting) {
-                                        for(let t=0; t<8760; t++) tsGridFeedMwh += plantSim.hourlyDischargeTimeshifting[t];
-                                    }
-                                    if (plantSim && plantSim.hourlyDischargeArbitrage) {
-                                        for(let t=0; t<8760; t++) arbGridFeedMwh += plantSim.hourlyDischargeArbitrage[t];
-                                    }
-                                    let avgFeeYr = 0;
-                                    for(let m=0; m<12; m++) avgFeeYr += getBrpFeeForMonth(plant, yr, m);
-                                    avgFeeYr /= 12;
-                                    const avgPriceRidBess = ((plant._weightedPun + avgFeeYr) * lossMult / 1000) * currentRidDecay;
-                                    
-                                    timeshiftingRev = (tsGridFeedMwh / 1000) * bessDegradationMult * avgPriceRidBess;
-                                    if (yr > ppaDuration) {
-                                        const bessPpaMwhYr = (plant._bessSelfConsMwhY1 || 0) * bessDegradationMult;
-                                        timeshiftingRev += bessPpaMwhYr * avgPriceRidBess;
-                                    }
-                                    arbitrageRev = (arbGridFeedMwh / 1000) * bessDegradationMult * avgPriceRidBess * currentArbitrageDecay / currentRidDecay;
                                     pBessGridChargingCost = (plant._arbitrageCostY1 || 0) * bessDegradationMult * currentArbitrageDecay;
                                     
                                 } else {
@@ -2738,7 +2771,11 @@ function runSensitivityLoop(baseState, config) {
                                             solarRidRev += solar * priceRID;
                                             pPhysSolarRid += solar / 1000;
                                         }
-                                        bessRidRev += (actualRid - solar) * priceRID;
+                                        const hourlyArb = (plantSim.hourlyRevenueArbitrageGrid[t] || 0) * bessDegradationMult * currentArbitrageDecay;
+                                        const bessTotalHourly = (actualRid - solar) * priceRID;
+                                        arbitrageRev += hourlyArb;
+                                        timeshiftingRev += (bessTotalHourly - hourlyArb);
+                                        pBessGridChargingCost += gridCharge * costGrid;
                                     } else {
                                         const baseSolarPpa = loadProfile ? Math.min(solar, loadProfile[t]) : 0;
                                         const actualSolarGridFeed = Math.max(0, solar - baseSolarPpa - chargeSolar);
@@ -2758,22 +2795,20 @@ function runSensitivityLoop(baseState, config) {
 
                                         solarRidRev += actualSolarGridFeed * priceRID;
                                         pPhysSolarRid += actualSolarGridFeed / 1000;
-                                    }
 
-                                    const hourlyTs = (plantSim.hourlyRevenueTimeshifting[t] || 0) * bessDegradationMult * currentTimeshiftingDecay;
-                                    const hourlyArb = (plantSim.hourlyRevenueArbitrageGrid[t] || 0) * bessDegradationMult * currentArbitrageDecay;
-                                    timeshiftingRev += hourlyTs;
-                                    arbitrageRev += hourlyArb;
-                                    pBessGridChargingCost += gridCharge * costGrid;
+                                        const hourlyTs = (plantSim.hourlyRevenueTimeshifting[t] || 0) * bessDegradationMult * currentTimeshiftingDecay;
+                                        const hourlyArb = (plantSim.hourlyRevenueArbitrageGrid[t] || 0) * bessDegradationMult * currentArbitrageDecay;
+                                        timeshiftingRev += hourlyTs;
+                                        arbitrageRev += hourlyArb;
+                                        pBessGridChargingCost += gridCharge * costGrid;
+                                    }
                                 }
 
-                                if (!isOffsite) {
-                                    let sumDischGrid = 0;
-                                    if (plantSim && plantSim.hourlyDischargeGrid) {
-                                        for (let i = hStart; i < hEnd; i++) sumDischGrid += plantSim.hourlyDischargeGrid[i];
-                                    }
-                                    pPhysBessGridFeed = Math.max(0, (sumDischGrid / 1000 * bessDegradationMult) - pPhysBessSelfCons);
+                                let sumDischGrid = 0;
+                                if (plantSim && plantSim.hourlyDischargeGrid) {
+                                    for (let i = hStart; i < hEnd; i++) sumDischGrid += plantSim.hourlyDischargeGrid[i];
                                 }
+                                pPhysBessGridFeed = Math.max(0, (sumDischGrid / 1000 * bessDegradationMult) - pPhysBessSelfCons);
                             }
                         }
 

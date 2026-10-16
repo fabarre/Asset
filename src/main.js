@@ -1383,21 +1383,32 @@
             if (decayParams) decayParams.classList.toggle('hidden', marketType === 'fer_x');
         };
 
-        // Validate that gridConnectionKw >= inverterKw + bessMw*1000
+        // Validate gridConnectionKw (immissione) and gridWithdrawalKw (prelievo)
         function validateGridConnectionPower() {
             const gridKw = parseFloat((document.getElementById('plant-grid-connection-kw') || {}).value) || 0;
+            const withdrawKw = parseFloat((document.getElementById('plant-grid-withdrawal-kw') || {}).value) || 0;
+            const bessTypeVal = (document.getElementById('plant-bess-type') || {}).value || 'none';
             const bessConn = (document.getElementById('plant-bess-connection') || {}).value || 'none';
             const isDc = (bessConn === 'dc');
             // DC: inverter is not present - only BESS power counts
             const invKw = isDc ? 0 : (parseFloat((document.getElementById('plant-inverter-power-kw') || {}).value) || 0);
             const bessMwVal = parseFloat((document.getElementById('plant-bess-mw') || {}).value) || 0;
-            const bessKw = bessMwVal * 1000;
+            const bessKw = (bessTypeVal !== 'none') ? bessMwVal * 1000 : 0;
             const minRequired = invKw + bessKw;
             const warningEl = document.getElementById('grid-power-warning');
             const warningText = document.getElementById('grid-power-warning-text');
             if (warningEl && warningText) {
+                const messages = [];
                 if (minRequired > 0 && gridKw > 0 && gridKw < minRequired) {
-                    warningText.textContent = `\u26A0 Potenza immissione (${gridKw.toLocaleString('it-IT')} kW) inferiore alla somma Inverter + BESS (${minRequired.toLocaleString('it-IT')} kW). Verificare il contratto di connessione.`;
+                    messages.push(`\u26A0 Potenza immissione (${gridKw.toLocaleString('it-IT')} kW) inferiore alla somma Inverter + BESS (${minRequired.toLocaleString('it-IT')} kW). Verificare il contratto di connessione.`);
+                }
+                if (bessKw > 0 && withdrawKw <= 0) {
+                    messages.push(`\u2139 Potenza prelievo = 0 kW: carica BESS da rete disabilitata (solo Time Shifting solare, nessun Arbitraggio).`);
+                } else if (bessKw > 0 && withdrawKw > 0 && withdrawKw < bessKw) {
+                    messages.push(`\u2139 Potenza prelievo (${withdrawKw.toLocaleString('it-IT')} kW) inferiore alla potenza BESS (${bessKw.toLocaleString('it-IT')} kW): la carica da rete per arbitraggio sarà limitata a ${withdrawKw.toLocaleString('it-IT')} kW.`);
+                }
+                if (messages.length > 0) {
+                    warningText.textContent = messages.join(' ');
                     warningEl.classList.remove('hidden');
                 } else {
                     warningEl.classList.add('hidden');
@@ -1576,6 +1587,7 @@
             const bessCapexKwh = formHasBess ? getFloat('plant-bess-capex-kwh') : 0;
             
             const gridConnectionKw = getFloat('plant-grid-connection-kw');
+            const gridWithdrawalKw = getFloat('plant-grid-withdrawal-kw');
             const gridVoltage = getVal('plant-grid-voltage');
             const inverterBrand = getVal('plant-inverter-brand');
             const inverterModel = getVal('plant-inverter-model');
@@ -1627,6 +1639,7 @@
                    landCost !== originalPlantData.landCost ||
                    spvAcquisitionCost !== originalPlantData.spvAcquisitionCost ||
                    gridConnectionKw !== (originalPlantData.gridConnectionKw || 0) ||
+                   gridWithdrawalKw !== (originalPlantData.gridWithdrawalKw || 0) ||
                    gridVoltage !== (originalPlantData.gridVoltage || 'none') ||
                    inverterBrand !== (originalPlantData.inverterBrand || '') ||
                    inverterModel !== (originalPlantData.inverterModel || '') ||
@@ -1755,6 +1768,7 @@
             
             // Grid connection fields
             document.getElementById('plant-grid-connection-kw').value = plant.gridConnectionKw || 0;
+            document.getElementById('plant-grid-withdrawal-kw').value = plant.gridWithdrawalKw || 0;
             document.getElementById('plant-grid-voltage').value = plant.gridVoltage || 'none';
 
             // Trader & network parameters
@@ -1896,6 +1910,7 @@
             document.getElementById('plant-land-cost').value = 0;
             document.getElementById('plant-spv-acquisition-cost').value = 0;
             document.getElementById('plant-grid-connection-kw').value = 0;
+            document.getElementById('plant-grid-withdrawal-kw').value = 0;
             document.getElementById('plant-grid-voltage').value = 'none';
 
             // Trader & network parameters reset
@@ -2024,6 +2039,7 @@
                 
                 // Grid connection
                 gridConnectionKw: parseFloat(document.getElementById('plant-grid-connection-kw').value) || 0,
+                gridWithdrawalKw: parseFloat(document.getElementById('plant-grid-withdrawal-kw').value) || 0,
                 gridVoltage: document.getElementById('plant-grid-voltage').value,
 
                 // Inverter
@@ -2092,7 +2108,7 @@
         
         function initWorker() {
             if (!simWorker) {
-                simWorker = new Worker('./src/worker/simulation.worker.js?v=140');
+                simWorker = new Worker('./src/worker/simulation.worker.js?v=141');
                 simWorker.onmessage = function(e) {
                     const data = e.data;
                     try {
@@ -4164,6 +4180,7 @@
                                 bessCycles: (p.bess_type && p.bess_type !== 'none' && (parseFloat(p.bess_mwh) || 0) > 0) ? parseFloat(p.bess_cycles || 0) : 0,
                                 bessWarrantyYears: (p.bess_type && p.bess_type !== 'none' && (parseFloat(p.bess_mwh) || 0) > 0) ? parseFloat(p.bess_warranty_years || 0) : 0,
                                 gridConnectionKw: parseFloat(p.grid_connection_kw || 0),
+                                gridWithdrawalKw: parseFloat(p.grid_withdrawal_kw || 0),
                                 gridVoltage: p.grid_voltage || 'none',
                                 inverterBrand: p.inverter_brand || '',
                                 inverterModel: p.inverter_model || '',
@@ -4678,6 +4695,7 @@
                     bess_cycles: plant.bessCycles || 0,
                     bess_warranty_years: plant.bessWarrantyYears || 0,
                     grid_connection_kw: plant.gridConnectionKw || 0,
+                    grid_withdrawal_kw: plant.gridWithdrawalKw || 0,
                     grid_voltage: plant.gridVoltage || 'none',
                     inverter_brand: plant.inverterBrand || '',
                     inverter_model: plant.inverterModel || '',
@@ -4735,9 +4753,10 @@
                     plantError = insertErr;
                 }
                 
-                if (plantError && (plantError.message && (plantError.message.includes('pnrr_contribution_pct') || plantError.code === 'PGRST204'))) {
-                    console.warn("Colonna 'pnrr_contribution_pct' non presente nel database impianti. Riprovo senza questa colonna.");
-                    delete payload.pnrr_contribution_pct;
+                if (plantError && (plantError.message && (plantError.message.includes('pnrr_contribution_pct') || plantError.message.includes('grid_withdrawal_kw') || plantError.code === 'PGRST204'))) {
+                    console.warn("Colonne opzionali ('pnrr_contribution_pct' / 'grid_withdrawal_kw') non presenti nel database impianti. Riprovo senza queste colonne.");
+                    if (plantError.message.includes('pnrr_contribution_pct')) delete payload.pnrr_contribution_pct;
+                    if (plantError.message.includes('grid_withdrawal_kw')) delete payload.grid_withdrawal_kw;
                     const { data: updateDataRetry, error: retryErr } = await supabaseClient
                         .from('plants')
                         .update(payload)
@@ -4799,7 +4818,7 @@
         }
 
         // Parser for PVGIS CSV - now also extracts all metadata from header
-        window.importPvgisCsv = async function(fileContent, plantName, plantCapacityKwp, plantZone, capex, opex, connectionCost, landType, landCost, developmentCost, spvAcquisitionCost, bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax, bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears, bessType, bessConnection, gridConnectionKw, gridVoltage, inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV, opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement, earnoutType, earnoutVal, earnoutYears, serviceType, serviceVal, serviceYears, traderContractType, traderSpread, traderDisp, pnrrContributionPct, degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct, marketType, ferxTariff) {
+        window.importPvgisCsv = async function(fileContent, plantName, plantCapacityKwp, plantZone, capex, opex, connectionCost, landType, landCost, developmentCost, spvAcquisitionCost, bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax, bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears, bessType, bessConnection, gridConnectionKw, gridWithdrawalKw, gridVoltage, inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV, opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement, earnoutType, earnoutVal, earnoutYears, serviceType, serviceVal, serviceYears, traderContractType, traderSpread, traderDisp, pnrrContributionPct, degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct, marketType, ferxTariff) {
             if (!supabaseClient) {
                 showToast("Database non connesso. Impossibile importare l'impianto.", 'error');
                 return;
@@ -4912,6 +4931,7 @@
                 developmentCost: developmentCost,
                 spvAcquisitionCost: spvAcquisitionCost,
                 gridConnectionKw: gridConnectionKw || 0,
+                gridWithdrawalKw: gridWithdrawalKw || 0,
                 gridVoltage: gridVoltage || 'none',
                 inverterBrand: inverterBrand || '',
                 inverterModel: inverterModel || '',
@@ -5143,6 +5163,7 @@
             const bessWarrantyYears = addHasBess ? (parseFloat(document.getElementById('plant-bess-warranty-years').value) || 0) : 0;
             const bessConnection = addHasBess ? document.getElementById('plant-bess-connection').value : 'none';
             const gridConnectionKw = parseFloat(document.getElementById('plant-grid-connection-kw').value) || 0;
+            const gridWithdrawalKw = parseFloat(document.getElementById('plant-grid-withdrawal-kw').value) || 0;
             const gridVoltage = document.getElementById('plant-grid-voltage').value;
             const isDcAdd = (document.getElementById('plant-bess-connection').value === 'dc');
             const inverterBrand = document.getElementById('plant-inverter-brand').value;
@@ -5177,7 +5198,7 @@
                     enabled: true,
                     opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement,
                     connectionCost, landType, landCost, developmentCost, spvAcquisitionCost,
-                    gridConnectionKw, gridVoltage,
+                    gridConnectionKw, gridWithdrawalKw, gridVoltage,
                     inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV,
                     bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax,
                     bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears,
@@ -5205,7 +5226,7 @@
                 return;
             }
 
-            const importArgs = [name, cap, zone, capex, opex, connectionCost, landType, landCost, developmentCost, spvAcquisitionCost, bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax, bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears, bessType, bessConnection, gridConnectionKw, gridVoltage, inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV, opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement, earnoutType, earnoutVal, earnoutYears, serviceType, serviceVal, serviceYears, traderContractType, traderSpread, traderDisp, pnrrContributionPct, degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct, marketType, ferxTariff];
+            const importArgs = [name, cap, zone, capex, opex, connectionCost, landType, landCost, developmentCost, spvAcquisitionCost, bessMw, bessMwh, bessEfficiency, bessDoD, bessSocMin, bessSocMax, bessDegradation, bessCapexKwh, bessTempMin, bessTempMax, bessCycles, bessWarrantyYears, bessType, bessConnection, gridConnectionKw, gridWithdrawalKw, gridVoltage, inverterBrand, inverterModel, inverterPowerKw, inverterEfficiency, inverterMpptCount, inverterMaxDcV, opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement, earnoutType, earnoutVal, earnoutYears, serviceType, serviceVal, serviceYears, traderContractType, traderSpread, traderDisp, pnrrContributionPct, degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct, marketType, ferxTariff];
             if (fileInput.files.length > 0) {
                 const file = fileInput.files[0];
                 const reader = new FileReader();
@@ -12740,18 +12761,19 @@ function _repRelazioneTecnica(doc) {
         return [
             pl.name || 'Impianto',
             parseFloat(pl.gridConnectionKw || 0).toLocaleString('it-IT', { maximumFractionDigits: 0 }) + ' kW',
+            parseFloat(pl.gridWithdrawalKw || 0).toLocaleString('it-IT', { maximumFractionDigits: 0 }) + ' kW',
             pl.gridVoltage || 'Media Tensione',
             pl.inverterBrand || 'N/A',
             (parseFloat(pl.inverterEfficiency || 0) * 100).toFixed(1) + '%'
         ];
     });
-    if (invBody.length === 0) invBody.push(['-', '-', '-', '-', '-']);
+    if (invBody.length === 0) invBody.push(['-', '-', '-', '-', '-', '-']);
     doc.autoTable({
         startY: y,
         theme: 'grid',
         headStyles: { fillColor: [15, 23, 42], textColor: [148, 163, 184], fontSize: 8 },
         bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
-        head: [['Impianto', 'Potenza Immissione', 'Tensione Rete', 'Marca Inverter', 'Efficienza Inv.']],
+        head: [['Impianto', 'Potenza Immissione', 'Potenza Prelievo', 'Tensione Rete', 'Marca Inverter', 'Efficienza Inv.']],
         body: invBody,
         margin: { left: 14, right: 14 }
     });

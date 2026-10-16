@@ -300,6 +300,7 @@ const I18N_EN = {
     'Acquisto SPV (€)': 'SPV Acquisition (€)',
     'Connessione Rete': 'Grid Connection',
     'Pot. Immissione (kW)': 'Injection Power (kW)',
+    'Pot. Prelievo (kW)': 'Withdrawal Power (kW)',
     'Livello Tensione': 'Voltage Level',
     'BT — Bassa Tensione': 'LV — Low Voltage',
     'MT — Media Tensione': 'MV — Medium Voltage',

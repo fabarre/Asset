@@ -1020,6 +1020,101 @@ check('Modalità Riporto: nessun rimborso', mcRip.vatRefundReceived.every(v => v
 check('Modalità Riporto: nessuna compensazione', mcRip.vatCompensated.every(v => v === 0));
 check('Modalità Riporto: credito continua ad accumularsi', mcRip.vatCreditEnd[mcRip.vatCreditEnd.length - 1] > 1000000);
 
+// ── Test 41: Potenza di Prelievo (gridWithdrawalKw) e Audit Arbitraggio (DP & LP, FER X, BRP, Off-site COD) ──
+console.log('\n[Test 41] Potenza di Prelievo (gridWithdrawalKw) e Audit Arbitraggio');
+
+const zonalArb = new Float64Array(8760);
+for (let t = 0; t < 8760; t++) {
+    const h = t % 24;
+    if (h >= 0 && h <= 5) zonalArb[t] = 35;        // notte: prezzo basso per ricarica da rete
+    else if (h >= 10 && h <= 15) zonalArb[t] = 55; // ore solari: prezzo medio-basso
+    else if (h >= 18 && h <= 21) zonalArb[t] = 185; // picco serale: prezzo alto per scarica
+    else zonalArb[t] = 95;
+}
+const zonalPunArb = { NORD: zonalArb, CNOR: zonalArb, CSUD: zonalArb, SUD: zonalArb, SICI: zonalArb, SARD: zonalArb };
+
+// 1. gridWithdrawalKw = 0 -> zero prelievo da rete, zero arbitraggio, solo Time Shifting
+const r41_dp0 = run(buildState({
+    inputs: { bessOptimizer: 'dp' },
+    plant: { gridWithdrawalKw: 0 },
+    zonalPun: zonalPunArb
+}));
+const simDp0 = r41_dp0.plantsMetrics[0].sim;
+const sumChgGridDp0 = simDp0.hourlyChargeGrid.reduce((a, b) => a + b, 0);
+const sumDisArbDp0 = simDp0.hourlyDischargeArbitrage.reduce((a, b) => a + b, 0);
+check('DP con gridWithdrawalKw = 0: prelievo orario da rete = 0', sumChgGridDp0 === 0, `got=${sumChgGridDp0}`);
+check('DP con gridWithdrawalKw = 0: scarica arbitraggio oraria = 0', sumDisArbDp0 === 0, `got=${sumDisArbDp0}`);
+check('DP con gridWithdrawalKw = 0: ricavi Arbitraggio Y1..Y20 = 0', r41_dp0.matrix.revenueArbitrage.slice(1).every(v => v === 0));
+check('DP con gridWithdrawalKw = 0: costi ricarica rete Y1..Y20 = 0', r41_dp0.matrix.opexGridCharging.slice(1).every(v => v === 0));
+check('DP con gridWithdrawalKw = 0: Time Shifting attivo (> 0)', r41_dp0.matrix.revenueTimeshifting[1] > 0, `got=${r41_dp0.matrix.revenueTimeshifting[1]}`);
+
+// 2. Vincolo intermedio gridWithdrawalKw = 400 kW vs 2000 kW (su BESS 2 MW / 4 MWh)
+const r41_dp400 = run(buildState({
+    inputs: { bessOptimizer: 'dp' },
+    plant: { gridWithdrawalKw: 400 },
+    zonalPun: zonalPunArb
+}));
+const r41_dp2000 = run(buildState({
+    inputs: { bessOptimizer: 'dp' },
+    plant: { gridWithdrawalKw: 2000 },
+    zonalPun: zonalPunArb
+}));
+const simDp400 = r41_dp400.plantsMetrics[0].sim;
+const simDp2000 = r41_dp2000.plantsMetrics[0].sim;
+let maxChgGrid400 = 0;
+for (let t = 0; t < 8760; t++) if (simDp400.hourlyChargeGrid[t] > maxChgGrid400) maxChgGrid400 = simDp400.hourlyChargeGrid[t];
+const sumChgGrid400 = simDp400.hourlyChargeGrid.reduce((a, b) => a + b, 0);
+const sumChgGrid2000 = simDp2000.hourlyChargeGrid.reduce((a, b) => a + b, 0);
+check('DP con gridWithdrawalKw = 400 kW: picco orario di prelievo <= 400 kW', maxChgGrid400 <= 400 + 1e-2, `max=${maxChgGrid400}`);
+check('DP monotonia prelievo: 0 < prelievo(400 kW) < prelievo(2000 kW)', sumChgGrid400 > 0 && sumChgGrid400 < sumChgGrid2000, `400=${sumChgGrid400.toFixed(0)} vs 2000=${sumChgGrid2000.toFixed(0)}`);
+check('DP monotonia ricavi arbitraggio: 0 < arb(400 kW) < arb(2000 kW)',
+    r41_dp400.matrix.revenueArbitrage[1] > 0 && r41_dp400.matrix.revenueArbitrage[1] < r41_dp2000.matrix.revenueArbitrage[1],
+    `400=${r41_dp400.matrix.revenueArbitrage[1].toFixed(0)} vs 2000=${r41_dp2000.matrix.revenueArbitrage[1].toFixed(0)}`);
+
+// 3. FER X + Arbitraggio: la scarica da rete è valorizzata a PUN zonale, non a tariffa FER X
+const r41_ferx0 = run(buildState({
+    plant: { marketType: 'fer_x', ferxTariff: 95, gridWithdrawalKw: 0 },
+    zonalPun: zonalPunArb
+}));
+const r41_ferx2000_t95 = run(buildState({
+    plant: { marketType: 'fer_x', ferxTariff: 95, gridWithdrawalKw: 2000 },
+    zonalPun: zonalPunArb
+}));
+const r41_ferx2000_t300 = run(buildState({
+    plant: { marketType: 'fer_x', ferxTariff: 300, gridWithdrawalKw: 2000 },
+    zonalPun: zonalPunArb
+}));
+check('FER X con gridWithdrawalKw = 0: ricavi FER X diretti > 0 e zero Arbitraggio',
+    r41_ferx0.matrix.revenueRid[1] > 0 && r41_ferx0.matrix.revenueArbitrage[1] === 0,
+    `rid=${r41_ferx0.matrix.revenueRid[1]} arb=${r41_ferx0.matrix.revenueArbitrage[1]}`);
+check('FER X con gridWithdrawalKw = 2000: Arbitraggio valorizzato a mercato (> 0) e indipendente da ferxTariff',
+    r41_ferx2000_t95.matrix.revenueArbitrage[1] > 0 &&
+    Math.abs(r41_ferx2000_t95.matrix.revenueArbitrage[1] - r41_ferx2000_t300.matrix.revenueArbitrage[1]) < 1,
+    `arb@95=${r41_ferx2000_t95.matrix.revenueArbitrage[1].toFixed(0)} arb@300=${r41_ferx2000_t300.matrix.revenueArbitrage[1].toFixed(0)}`);
+
+// 4. BRP multi-anno: Anno 2 preserva lo spread orario di arbitraggio (non schiacciato sul PUN medio ponderato solare)
+const r41_brp = run(buildState({
+    plant: { marketType: 'brp', brpFee1: 2, brpFee1Months: 18, brpFee2: 1, brpFee2Months: 6, brpFee3: 0, gridWithdrawalKw: 2000, degradeArbitragePct: 0, degradeTimeshiftingPct: 0 },
+    zonalPun: zonalPunArb
+}));
+check('BRP Anno 2: ricavo Arbitraggio coerente con integrazione oraria (> 85% di Y1)',
+    r41_brp.matrix.revenueArbitrage[2] > r41_brp.matrix.revenueArbitrage[1] * 0.85,
+    `Y1=${r41_brp.matrix.revenueArbitrage[1].toFixed(0)} Y2=${r41_brp.matrix.revenueArbitrage[2].toFixed(0)}`);
+
+// 5. Partial-year COD + PPA Off-Site + BESS: nessun ReferenceError su bessRidRev
+const r41_offsite = run(buildState({
+    plant: { codDate: '2026-07-01', gridWithdrawalKw: 2000 },
+    zonalPun: zonalPunArb,
+    stabilimenti: [{
+        id: 's1', name: 'Stab Offsite', plantId: 'p1', enabled: true, annualConsumptionMwh: 5000,
+        profileType: 'two_shifts', ppaType: 'off-site', ppaPrice: 110, ppaDuration: 10, zone: 'CNOR'
+    }]
+}));
+check('PPA Off-Site con COD parziale + BESS: calcolo completato senza ReferenceError',
+    r41_offsite.matrix.revenuePpa[1] > 0 && Number.isFinite(r41_offsite.matrix.ebitda[1]),
+    `ppa=${r41_offsite.matrix.revenuePpa[1]} ebitda=${r41_offsite.matrix.ebitda[1]}`);
+
 console.log('\n═══════════════════════════════════');
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);
+
