@@ -128,7 +128,7 @@ function collectionLagForPlant(plant, inputs, plantHasCer) {
 }
 
 // Calcolo dinamico festività italiane (fisse e mobili ex Computus Pasqua di Butcher-Meeus)
-function getItalianHolidays(year = 2025) {
+function getItalianHolidays(year = 2026) {
     const fixedHolidays = [
         { m: 0, d: 1 },   // Capodanno
         { m: 0, d: 6 },   // Epifania
@@ -173,7 +173,39 @@ function getItalianHolidays(year = 2025) {
 
     return holidays;
 }
-const IT_HOLIDAYS_2025 = getItalianHolidays(2025);
+const IT_HOLIDAYS_2026 = getItalianHolidays(2026);
+const IT_HOLIDAYS_2025 = IT_HOLIDAYS_2026;
+
+// Calcolo dinamico cambio ora solare <-> ora legale (Direttiva UE 2000/84/CE: ultima domenica di marzo -> ultima domenica di ottobre)
+function getItalianDstBounds(year = 2026) {
+    const march31Dow = new Date(Date.UTC(year, 2, 31)).getUTCDay();
+    const springDay = 31 - march31Dow; // Ultima domenica di marzo (es. 29/03/2026)
+    const oct31Dow = new Date(Date.UTC(year, 9, 31)).getUTCDay();
+    const autumnDay = 31 - oct31Dow;   // Ultima domenica di ottobre (es. 25/10/2026)
+    const springDayIdx = 31 + 28 + springDay - 1; // 0-based su 365 giorni (2026 -> 87, d=88)
+    const autumnDayIdx = 273 + autumnDay - 1;     // 0-based su 365 giorni (2026 -> 297, d=298)
+    return { springDay, autumnDay, springDayIdx, autumnDayIdx };
+}
+
+// Restituisce true se (dayIdx 0..364, solarHour 0..23 in ora solare standard) cade nel periodo di ora legale (CEST = UTC+2)
+function isItalianDstHour(dayIdx, solarHour, year = 2026) {
+    const { springDayIdx, autumnDayIdx } = getItalianDstBounds(year);
+    if (dayIdx < springDayIdx || dayIdx > autumnDayIdx) return false;
+    if (dayIdx > springDayIdx && dayIdx < autumnDayIdx) return true;
+    if (dayIdx === springDayIdx) return solarHour >= 2; // alle 02:00 solare scatta le 03:00 legale
+    return solarHour < 2; // ultima domenica di ottobre: alle 02:00 solare (03:00 legale) si torna in ora solare
+}
+
+// Mappa un'ora PVGIS (in ora solare fissa senza DST) sull'indice 0..8759 in ora civile italiana (CET/CEST)
+function getPvgisCivilHourIndex(month, day, solarHour, year = 2026) {
+    const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1] || solarHour < 0 || solarHour > 23) return -1;
+    let dayIdx = day - 1;
+    for (let m = 0; m < month - 1; m++) dayIdx += daysInMonth[m];
+    const dst = isItalianDstHour(dayIdx, solarHour, year);
+    const civilHour = dst ? ((solarHour + 1) % 24) : solarHour;
+    return dayIdx * 24 + civilHour;
+}
 
 self.onmessage = async function(e) {
     const { action, payload } = e.data;
@@ -4851,14 +4883,14 @@ function runSensitivityLoop(baseState, config) {
 
         function generateLoadCurve(annualMwh, worksSat, worksSun, worksHol, shiftType, plantId) {
             const plant = State && State.plants ? State.plants.find(p => p.id === plantId) : null;
+            const cod = plant && plant.codDate ? parseCodDate(plant.codDate) : null;
+            const calYear = cod ? cod.y : (State && State.inputs && State.inputs.anchorYear ? Number(State.inputs.anchorYear) : 2026);
             if (shiftType === 'public_lighting') {
                 const lat = plant ? plant.pvgisLatitude : null;
                 const lng = plant ? plant.pvgisLongitude : null;
-                return calculateTwilightCurve(annualMwh, lat, lng);
+                return calculateTwilightCurve(annualMwh, lat, lng, calYear);
             }
 
-            const cod = plant && plant.codDate ? parseCodDate(plant.codDate) : null;
-            const calYear = cod ? cod.y : (State && State.inputs && State.inputs.anchorYear ? Number(State.inputs.anchorYear) : 2025);
             const startDow = new Date(Date.UTC(calYear, 0, 1)).getUTCDay();
             const holidays = getItalianHolidays(calYear);
 
@@ -4919,7 +4951,7 @@ function runSensitivityLoop(baseState, config) {
             return load;
         }
 
-        function generateDomesticCurve(annualMwh, worksSat, worksSun, worksHol, calYear = 2025) {
+        function generateDomesticCurve(annualMwh, worksSat, worksSun, worksHol, calYear = 2026) {
             const startDow = new Date(Date.UTC(calYear, 0, 1)).getUTCDay();
             const holidays = getItalianHolidays(calYear);
             const rawLoad = new Float64Array(8760);
@@ -4982,11 +5014,12 @@ function runSensitivityLoop(baseState, config) {
             return load;
         }
 
-        function calculateTwilightCurve(annualMwh, lat, lng) {
+        function calculateTwilightCurve(annualMwh, lat, lng, calYear = 2026) {
             const rawLoad = new Float64Array(8760);
             const latitude = (lat !== null && lat !== undefined) ? lat : 43.591;
             const longitude = (lng !== null && lng !== undefined) ? lng : 10.394;
             const latRad = latitude * Math.PI / 180;
+            const { springDayIdx, autumnDayIdx } = getItalianDstBounds(calYear);
             
             for (let dayIdx = 0; dayIdx < 365; dayIdx++) {
                 const d = dayIdx + 1;
@@ -5009,7 +5042,7 @@ function runSensitivityLoop(baseState, config) {
                 const eot = 9.87 * Math.sin(2 * b) - 7.53 * Math.cos(b) - 1.5 * Math.sin(b);
                 const eotHours = eot / 60;
                 
-                const isDST = (d >= 89 && d < 299);
+                const isDST = (dayIdx >= springDayIdx && dayIdx < autumnDayIdx);
                 const tzOffset = isDST ? 2 : 1;
                 
                 const solarNoon = 12 - (longitude - 15 * tzOffset) / 15 - eotHours;

@@ -55,6 +55,36 @@
             return (dayOffset + (day - 1)) * 24 + hour;
         }
 
+        // Calcolo dinamico cambio ora solare <-> ora legale (Direttiva UE 2000/84/CE)
+        function getItalianDstBounds(year = 2026) {
+            const march31Dow = new Date(Date.UTC(year, 2, 31)).getUTCDay();
+            const springDay = 31 - march31Dow; // Ultima domenica di marzo (es. 29/03/2026)
+            const oct31Dow = new Date(Date.UTC(year, 9, 31)).getUTCDay();
+            const autumnDay = 31 - oct31Dow;   // Ultima domenica di ottobre (es. 25/10/2026)
+            const springDayIdx = 31 + 28 + springDay - 1; // 0-based su 365 giorni (2026 -> 87, d=88)
+            const autumnDayIdx = 273 + autumnDay - 1;     // 0-based su 365 giorni (2026 -> 297, d=298)
+            return { springDay, autumnDay, springDayIdx, autumnDayIdx };
+        }
+
+        function isItalianDstHour(dayIdx, solarHour, year = 2026) {
+            const { springDayIdx, autumnDayIdx } = getItalianDstBounds(year);
+            if (dayIdx < springDayIdx || dayIdx > autumnDayIdx) return false;
+            if (dayIdx > springDayIdx && dayIdx < autumnDayIdx) return true;
+            if (dayIdx === springDayIdx) return solarHour >= 2;
+            return solarHour < 2;
+        }
+
+        // Mappa un'ora PVGIS (in ora solare fissa senza DST) sull'indice 0..8759 in ora civile italiana (CET/CEST)
+        function getPvgisCivilHourIndex(month, day, solarHour, year = 2026) {
+            const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+            if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1] || solarHour < 0 || solarHour > 23) return -1;
+            let dayIdx = day - 1;
+            for (let m = 0; m < month - 1; m++) dayIdx += daysInMonth[m];
+            const dst = isItalianDstHour(dayIdx, solarHour, year);
+            const civilHour = dst ? ((solarHour + 1) % 24) : solarHour;
+            return dayIdx * 24 + civilHour;
+        }
+
         
         // Perdite di rete da configurazione utente (allineato al worker: prima erano hardcoded
         // BT 5.2 / MT 2.3 / AT 0 e ignoravano gli input ridLossInject*/ridLossWithdraw*/cerLossCpr*)
@@ -2230,10 +2260,11 @@
         //  STABILIMENTI & PPA - Core Functions
         // ═══════════════════════════════════════════════════════════════════
 
-        // Italian public holidays 2025 (day index 0-based from Jan 1)
-        // Jan1=0, Jan6=5, EasterMon Apr21=110, Apr25=114, May1=120,
+        // Italian public holidays 2026 (day index 0-based from Jan 1, 2026)
+        // Jan1=0, Jan6=5, Easter Apr5=94, EasterMon Apr6=95, Apr25=114, May1=120,
         // Jun2=152, Aug15=226, Nov1=304, Dec8=341, Dec25=358, Dec26=359
-        const IT_HOLIDAYS_2025 = new Set([0, 5, 109, 110, 114, 120, 152, 226, 304, 341, 358, 359]);
+        const IT_HOLIDAYS_2026 = new Set([0, 5, 94, 95, 114, 120, 152, 226, 304, 341, 358, 359]);
+        const IT_HOLIDAYS_2025 = IT_HOLIDAYS_2026; // Backward compatibility alias
         
         function generateLoadCurve(annualMwh, worksSat, worksSun, worksHol, shiftType, plantId) {
             if (shiftType === 'public_lighting') {
@@ -2249,8 +2280,9 @@
 
             const rawLoad = new Float64Array(8760);
             for (let dayIdx = 0; dayIdx < 365; dayIdx++) {
-                const dow = (3 + dayIdx) % 7; // 0=Sun,6=Sat
-                const isHoliday = IT_HOLIDAYS_2025.has(dayIdx);
+                // Jan 1 2026 = Thursday -> (4 + dayIdx) % 7
+                const dow = (4 + dayIdx) % 7; // 0=Sun,6=Sat
+                const isHoliday = IT_HOLIDAYS_2026.has(dayIdx);
                 const isSunday  = dow === 0;
                 const isSaturday= dow === 6;
                 let isWorkDay = true;
@@ -2303,8 +2335,9 @@
         function generateDomesticCurve(annualMwh, worksSat, worksSun, worksHol) {
             const rawLoad = new Float64Array(8760);
             for (let dayIdx = 0; dayIdx < 365; dayIdx++) {
-                const dow = (3 + dayIdx) % 7;
-                const isHoliday = IT_HOLIDAYS_2025.has(dayIdx);
+                // Jan 1 2026 = Thursday -> (4 + dayIdx) % 7
+                const dow = (4 + dayIdx) % 7;
+                const isHoliday = IT_HOLIDAYS_2026.has(dayIdx);
                 const isSunday  = dow === 0;
                 const isSaturday= dow === 6;
                 let isWorkDay = true;
@@ -2364,6 +2397,7 @@
             const latitude = (lat !== null && lat !== undefined) ? lat : 43.591;
             const longitude = (lng !== null && lng !== undefined) ? lng : 10.394;
             const latRad = latitude * Math.PI / 180;
+            const dst = getItalianDstBounds(2026);
             
             for (let dayIdx = 0; dayIdx < 365; dayIdx++) {
                 const d = dayIdx + 1;
@@ -2384,7 +2418,7 @@
                 const eot = 9.87 * Math.sin(2 * b) - 7.53 * Math.cos(b) - 1.5 * Math.sin(b);
                 const eotHours = eot / 60;
                 
-                const isDST = (d >= 89 && d < 299);
+                const isDST = (dayIdx >= dst.springDayIdx && dayIdx < dst.autumnDayIdx);
                 const tzOffset = isDST ? 2 : 1;
                 
                 const solarNoon = 12 - (longitude - 15 * tzOffset) / 15 - eotHours;
@@ -2408,8 +2442,8 @@
             for (let t = 0; t < 8760; t++) load[t] = rawLoad[t] * scaleFactor;
             return load;
         }
-        // Jan 1 2025 = Wednesday -> getDay() = 3
-        // dayOfWeek = (3 + dayIdx) % 7, where 0=Sun,1=Mon,...,6=Sat
+        // Jan 1 2026 = Thursday -> getDay() = 4
+        // dayOfWeek = (4 + dayIdx) % 7, where 0=Sun,1=Mon,...,6=Sat
 
         let stabPreviewChartInstance = null;
         let stabPreviewDebounceTimer = null;
@@ -2467,9 +2501,8 @@
             const load = generateLoadCurve(annualMwh, worksSat, worksSun, worksHol, shiftType, plantId);
             stabLoadedCurve = load;
 
-            // Show week 1 (Jan 6 Mon -> Jan 12 Sun) = hours 120..287
-            // Actually show a typical week starting Mon Jan 6 (dayIdx=5): hours 120-287
-            const weekStart = 5 * 24; // dayIdx=5 = Jan 6 (Mon)
+            // Show a typical non-holiday week starting Mon Jan 12, 2026 (dayIdx=11): hours 264-431
+            const weekStart = 11 * 24; // dayIdx=11 = Jan 12, 2026 (Mon)
             const labels = [];
             const data   = [];
             for (let i = 0; i < 168; i++) {
@@ -2589,8 +2622,8 @@
             const bandWeight = Array.from({ length: 12 }, () => [0, 0, 0]);
             for (let d = 0; d < 365; d++) {
                 const m = getMonthOfHour(d * 24);
-                const dow = (3 + d) % 7;
-                const isHoliday = IT_HOLIDAYS_2025.has(d);
+                const dow = (4 + d) % 7; // Jan 1 2026 = Thursday (4)
+                const isHoliday = IT_HOLIDAYS_2026.has(d);
                 for (let h = 0; h < 24; h++) {
                     const t = d * 24 + h;
                     monthWeight[m] += w[t];
@@ -2781,8 +2814,8 @@
             const bandOf = new Int8Array(8760);
             for (let d = 0; d < 365; d++) {
                 const m = getMonthOfHour(d * 24);
-                const dow = (3 + d) % 7;
-                const isHoliday = IT_HOLIDAYS_2025.has(d);
+                const dow = (4 + d) % 7; // Jan 1 2026 = Thursday (4)
+                const isHoliday = IT_HOLIDAYS_2026.has(d);
                 for (let h = 0; h < 24; h++) {
                     const t = d * 24 + h;
                     const b = getAreraBand(dow, h, isHoliday);
@@ -2808,8 +2841,8 @@
             fasceKwh = Array.from({ length: 12 }, () => [0, 0, 0]);
             for (let d = 0; d < 365; d++) {
                 const m = getMonthOfHour(d * 24);
-                const dow = (3 + d) % 7;
-                const isHoliday = IT_HOLIDAYS_2025.has(d);
+                const dow = (4 + d) % 7; // Jan 1 2026 = Thursday (4)
+                const isHoliday = IT_HOLIDAYS_2026.has(d);
                 for (let h = 0; h < 24; h++) {
                     const t = d * 24 + h;
                     fasceKwh[m][getAreraBand(dow, h, isHoliday)] += curve[t];
@@ -4886,7 +4919,8 @@
                         const hour = parseInt(hourMin.substring(0, 2));
                         
                         if (!isNaN(month) && !isNaN(day) && !isNaN(hour)) {
-                            const index = getHourIndex(month, day, hour);
+                            // Align PVGIS standard solar time with Italian civil time (DST/ora legale 2026)
+                            const index = getPvgisCivilHourIndex(month, day, hour, 2026);
                             if (index >= 0 && index < 8760 && !isNaN(powerVal)) {
                                 generation[index] = powerVal / 1000; // Convert W to kW
                                 count++;
@@ -5025,60 +5059,152 @@
                     const punBackup = {};
                     Object.keys(State.zonalPun).forEach(z => { punBackup[z] = Float64Array.from(State.zonalPun[z]); });
                     
+                    // Group rows by day for DST transition handling (23h spring / 25h autumn)
+                    const dayGroups = new Map();
                     jsonData.forEach(row => {
                         let dateVal = row["Data"] || row["Date"] || row["data"] || row["date"];
                         let hourVal = row["Ora"] || row["Hour"] || row["ora"] || row["hour"];
                         if (!dateVal || hourVal === undefined) return;
-                        
-                        let dateObj;
+
+                        let day = null, month = null, year = null;
                         if (typeof dateVal === 'number') {
-                            dateObj = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
+                            const utcMs = Math.round((dateVal - 25569) * 86400 * 1000);
+                            const d = new Date(utcMs);
+                            year = d.getUTCFullYear();
+                            month = d.getUTCMonth() + 1;
+                            day = d.getUTCDate();
                         } else {
                             const cleanStr = String(dateVal).trim();
-                            const parts = cleanStr.split(/[-/.]/);
-                            if (parts.length === 3) {
-                                let day, month, year;
-                                if (parts[2].length === 4) {
-                                    day = parseInt(parts[0], 10);
-                                    month = parseInt(parts[1], 10);
-                                    year = parseInt(parts[2], 10);
-                                } else if (parts[0].length === 4) {
-                                    year = parseInt(parts[0], 10);
-                                    month = parseInt(parts[1], 10);
-                                    day = parseInt(parts[2], 10);
+                            if (/^\d{8}$/.test(cleanStr)) {
+                                year = parseInt(cleanStr.substring(0, 4), 10);
+                                month = parseInt(cleanStr.substring(4, 6), 10);
+                                day = parseInt(cleanStr.substring(6, 8), 10);
+                            } else {
+                                const parts = cleanStr.split(/[-/.]/);
+                                if (parts.length === 3) {
+                                    if (parts[2].length === 4) {
+                                        day = parseInt(parts[0], 10);
+                                        month = parseInt(parts[1], 10);
+                                        year = parseInt(parts[2], 10);
+                                    } else if (parts[0].length === 4) {
+                                        year = parseInt(parts[0], 10);
+                                        month = parseInt(parts[1], 10);
+                                        day = parseInt(parts[2], 10);
+                                    }
                                 }
-                                if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-                                    dateObj = new Date(year, month - 1, day);
+                                if (!day || !month) {
+                                    const parsed = new Date(cleanStr);
+                                    if (!isNaN(parsed.getTime())) {
+                                        year = parsed.getFullYear();
+                                        month = parsed.getMonth() + 1;
+                                        day = parsed.getDate();
+                                    }
                                 }
-                            }
-                            if (!dateObj || isNaN(dateObj.getTime())) {
-                                dateObj = new Date(cleanStr);
                             }
                         }
-                        if (!dateObj || isNaN(dateObj.getTime())) return;
-                        
-                        const month = dateObj.getMonth() + 1;
-                        const day = dateObj.getDate();
-                        const hour = parseInt(hourVal) - 1;
-                        if (hour < 0 || hour > 23) return;
-                        
-                        const hourIndex = getHourIndex(month, day, hour);
-                        
+                        if (!day || !month || month < 1 || month > 12 || day < 1 || day > 31) return;
+
+                        const rawHourNum = parseInt(String(hourVal).replace(/\D/g, ''), 10);
+                        const dayKey = `${month}_${day}`;
+                        if (!dayGroups.has(dayKey)) {
+                            dayGroups.set(dayKey, { month, day, rows: [] });
+                        }
+                        dayGroups.get(dayKey).rows.push({ rawHour: isNaN(rawHourNum) ? 0 : rawHourNum, rawRow: row });
+                    });
+
+                    dayGroups.forEach(group => {
+                        const { month, day, rows } = group;
+                        rows.sort((a, b) => a.rawHour - b.rawHour);
+
                         Object.keys(zonesMapping).forEach(zone => {
-                            let rawVal = null;
                             const possibleKeys = zonesMapping[zone];
-                            for (let key of possibleKeys) {
-                                if (row[key] !== undefined) {
-                                    rawVal = row[key];
-                                    break;
+                            const getPrice = (r) => {
+                                for (let key of possibleKeys) {
+                                    if (r.rawRow[key] !== undefined) {
+                                        let cleanVal = String(r.rawRow[key]).trim().replace(',', '.');
+                                        let p = parseFloat(cleanVal);
+                                        return isNaN(p) ? null : p;
+                                    }
                                 }
+                                return null;
+                            };
+
+                            const dailyPrices = new Float64Array(24);
+                            const filled = new Uint8Array(24);
+
+                            if (rows.length === 23) {
+                                // Spring DST (23 hours in civil day, missing civil hour 2 = 02:00-03:00)
+                                let hasHour3 = rows.some(r => r.rawHour === 3);
+                                if (!hasHour3 && rows.some(r => r.rawHour === 24)) {
+                                    rows.forEach(r => {
+                                        const h = r.rawHour - 1;
+                                        const p = getPrice(r);
+                                        if (h >= 0 && h < 24 && p !== null) { dailyPrices[h] = p; filled[h] = 1; }
+                                    });
+                                } else {
+                                    for (let i = 0; i < 23; i++) {
+                                        const p = getPrice(rows[i]);
+                                        if (p === null) continue;
+                                        if (i < 2) { dailyPrices[i] = p; filled[i] = 1; }
+                                        else { dailyPrices[i + 1] = p; filled[i + 1] = 1; }
+                                    }
+                                }
+                                // Interpolate missing civil hour 2
+                                const p1 = filled[1] ? dailyPrices[1] : (filled[0] ? dailyPrices[0] : 100);
+                                const p3 = filled[3] ? dailyPrices[3] : p1;
+                                dailyPrices[2] = (p1 + p3) / 2;
+                                filled[2] = 1;
+                            } else if (rows.length === 25) {
+                                // Autumn DST (25 hours in civil day, hour 2 = 02:00-03:00 is repeated)
+                                if (rows.some(r => r.rawHour === 25)) {
+                                    for (let i = 0; i < rows.length; i++) {
+                                        const p = getPrice(rows[i]);
+                                        if (p === null) continue;
+                                        if (i < 2) { dailyPrices[i] = p; filled[i] = 1; }
+                                        else if (i === 2) { dailyPrices[2] = p; filled[2] = 1; }
+                                        else if (i === 3) {
+                                            dailyPrices[2] = filled[2] ? (dailyPrices[2] + p) / 2 : p;
+                                            filled[2] = 1;
+                                        } else if (i - 1 < 24) {
+                                            dailyPrices[i - 1] = p;
+                                            filled[i - 1] = 1;
+                                        }
+                                    }
+                                } else {
+                                    const hourMap = new Map();
+                                    rows.forEach(r => {
+                                        const h = Math.min(23, Math.max(0, r.rawHour - 1));
+                                        const p = getPrice(r);
+                                        if (p !== null) {
+                                            if (!hourMap.has(h)) hourMap.set(h, []);
+                                            hourMap.get(h).push(p);
+                                        }
+                                    });
+                                    hourMap.forEach((vals, h) => {
+                                        const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+                                        dailyPrices[h] = avg;
+                                        filled[h] = 1;
+                                    });
+                                }
+                            } else {
+                                // Standard 24 hours
+                                rows.forEach(r => {
+                                    const h = r.rawHour > 0 ? (r.rawHour - 1) : 0;
+                                    if (h >= 0 && h < 24) {
+                                        const p = getPrice(r);
+                                        if (p !== null) { dailyPrices[h] = p; filled[h] = 1; }
+                                    }
+                                });
                             }
-                            if (rawVal !== null && rawVal !== undefined) {
-                                let cleanVal = String(rawVal).trim().replace(',', '.');
-                                let price = parseFloat(cleanVal);
-                                if (!isNaN(price)) {
-                                    State.zonalPun[zone][hourIndex] = price;
-                                    count++;
+
+                            // Write resolved daily prices to State.zonalPun
+                            for (let h = 0; h < 24; h++) {
+                                if (filled[h]) {
+                                    const hourIndex = getHourIndex(month, day, h);
+                                    if (hourIndex >= 0 && hourIndex < 8760) {
+                                        State.zonalPun[zone][hourIndex] = dailyPrices[h];
+                                        count++;
+                                    }
                                 }
                             }
                         });
@@ -8262,7 +8388,7 @@
             const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
             
             if (resolution === 'giorno') {
-                const dateStr = new Date(2025, 0, index).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
+                const dateStr = new Date(Date.UTC(2026, 0, index)).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', timeZone: 'UTC' });
                 return {
                     startHour: (index - 1) * 24,
                     numHours: 24,
@@ -8706,16 +8832,16 @@
                 
                 for (let i = 0; i < length; i++) {
                     const hourIndex = start + i;
-                    const date = new Date(Date.UTC(2025, 0, Math.floor(hourIndex / 24) + 1, hourIndex % 24));
+                    const date = new Date(Date.UTC(2026, 0, Math.floor(hourIndex / 24) + 1, hourIndex % 24));
                     dateList.push(date);
-                    const dayStr = date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+                    const dayStr = date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', timeZone: 'UTC' });
                     const hourOfDay = hourIndex % 24;
                     const hhStr = hourOfDay.toString().padStart(2, '0');
                     
                     if (length <= 24) {
                         labelList.push(`${hhStr}:00`);
                     } else if (length <= 168) {
-                        const weekday = date.toLocaleDateString('it-IT', { weekday: 'short' });
+                        const weekday = date.toLocaleDateString('it-IT', { weekday: 'short', timeZone: 'UTC' });
                         labelList.push(`${weekday} ${hhStr}:00`);
                     } else {
                         labelList.push(`${dayStr} ${hhStr}:00`);
@@ -8725,17 +8851,17 @@
                 if (resolution === 'giorno') {
                     start = index - 1;
                     length = 1;
-                    const date = new Date(2025, 0, index);
+                    const date = new Date(Date.UTC(2026, 0, index));
                     dateList.push(date);
-                    labelList.push(date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }));
+                    labelList.push(date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', timeZone: 'UTC' }));
                 } else if (resolution === 'settimana') {
                     start = (index - 1) * 7;
                     length = 7;
                     for (let d = 0; d < 7; d++) {
-                        const date = new Date(2025, 0, start + d + 1);
+                        const date = new Date(Date.UTC(2026, 0, start + d + 1));
                         dateList.push(date);
-                        const weekday = date.toLocaleDateString('it-IT', { weekday: 'short' });
-                        const dayStr = date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+                        const weekday = date.toLocaleDateString('it-IT', { weekday: 'short', timeZone: 'UTC' });
+                        const dayStr = date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', timeZone: 'UTC' });
                         labelList.push(`${weekday} ${dayStr}`);
                     }
                 } else if (resolution === 'mese') {
@@ -8744,7 +8870,7 @@
                     start = startDay;
                     length = monthDays[index - 1];
                     for (let d = 0; d < length; d++) {
-                        const date = new Date(2025, 0, start + d + 1);
+                        const date = new Date(Date.UTC(2026, 0, start + d + 1));
                         dateList.push(date);
                         labelList.push(`${d + 1}`);
                     }
@@ -8754,23 +8880,23 @@
                     start = startDay;
                     length = qDays[index - 1];
                     for (let d = 0; d < length; d++) {
-                        const date = new Date(2025, 0, start + d + 1);
+                        const date = new Date(Date.UTC(2026, 0, start + d + 1));
                         dateList.push(date);
-                        labelList.push(date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }));
+                        labelList.push(date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', timeZone: 'UTC' }));
                     }
                 } else if (resolution === 'semestre') {
                     start = index === 1 ? 0 : 181;
                     length = index === 1 ? 181 : 184;
                     for (let d = 0; d < length; d++) {
-                        const date = new Date(2025, 0, start + d + 1);
+                        const date = new Date(Date.UTC(2026, 0, start + d + 1));
                         dateList.push(date);
-                        labelList.push(date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }));
+                        labelList.push(date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', timeZone: 'UTC' }));
                     }
                 } else if (resolution === 'anno') {
                     start = 0;
                     length = 365;
                     for (let d = 0; d < 365; d++) {
-                        const date = new Date(Date.UTC(2025, 0, d + 1));
+                        const date = new Date(Date.UTC(2026, 0, d + 1));
                         dateList.push(date);
                         labelList.push(date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', timeZone: 'UTC' }));
                     }
@@ -8778,23 +8904,23 @@
             } else if (aggregation === 'mensile') {
                 if (resolution === 'giorno' || resolution === 'settimana') {
                     const currentDay = resolution === 'giorno' ? index : (index - 1) * 7 + 1;
-                    const d = new Date(2025, 0, currentDay);
-                    start = d.getMonth();
+                    const d = new Date(Date.UTC(2026, 0, currentDay));
+                    start = d.getUTCMonth();
                     length = 1;
-                    const date = new Date(2025, start, 1);
+                    const date = new Date(Date.UTC(2026, start, 1));
                     dateList.push(date);
                     labelList.push(monthNames[start]);
                 } else if (resolution === 'mese') {
                     start = index - 1;
                     length = 1;
-                    const date = new Date(2025, start, 1);
+                    const date = new Date(Date.UTC(2026, start, 1));
                     dateList.push(date);
                     labelList.push(monthNames[start]);
                 } else if (resolution === 'trimestre') {
                     start = (index - 1) * 3;
                     length = 3;
                     for (let m = 0; m < 3; m++) {
-                        const date = new Date(2025, start + m, 1);
+                        const date = new Date(Date.UTC(2026, start + m, 1));
                         dateList.push(date);
                         labelList.push(monthNames[start + m]);
                     }
@@ -8802,7 +8928,7 @@
                     start = index === 1 ? 0 : 6;
                     length = 6;
                     for (let m = 0; m < 6; m++) {
-                        const date = new Date(2025, start + m, 1);
+                        const date = new Date(Date.UTC(2026, start + m, 1));
                         dateList.push(date);
                         labelList.push(monthNames[start + m]);
                     }
@@ -8810,7 +8936,7 @@
                     start = 0;
                     length = 12;
                     for (let m = 0; m < 12; m++) {
-                        const date = new Date(2025, m, 1);
+                        const date = new Date(Date.UTC(2026, m, 1));
                         dateList.push(date);
                         labelList.push(monthNames[m]);
                     }
@@ -9470,25 +9596,29 @@
         }
 
         // Fascia ARERA per una riga della tabella/export (orario: esatta; giorno/mese: dominante)
-        function isItHoliday2025(date) {
-            const dayIdx = Math.floor((date - new Date(2025, 0, 1)) / 86400000);
-            return IT_HOLIDAYS_2025.has(dayIdx);
+        function isItHoliday2026(date) {
+            const utcTime = date.getTime();
+            const yearStart = Date.UTC(2026, 0, 1);
+            const dayIdx = Math.floor((utcTime - yearStart) / 86400000);
+            return IT_HOLIDAYS_2026.has(dayIdx);
         }
+        const isItHoliday2025 = isItHoliday2026; // Backward compatibility alias
+
         function getFasciaForRow(date, aggregation) {
             if (!date || !(date instanceof Date) || isNaN(date)) return '\u2014';
             if (aggregation === 'orario') {
-                return 'F' + (getAreraBand(date.getDay(), date.getHours(), isItHoliday2025(date)) + 1);
+                return 'F' + (getAreraBand(date.getUTCDay(), date.getUTCHours(), isItHoliday2026(date)) + 1);
             }
             const counts = [0, 0, 0];
             if (aggregation === 'giornaliero') {
-                for (let h = 0; h < 24; h++) counts[getAreraBand(date.getDay(), h, isItHoliday2025(date))]++;
+                for (let h = 0; h < 24; h++) counts[getAreraBand(date.getUTCDay(), h, isItHoliday2026(date))]++;
             } else { // mensile
-                const y = date.getFullYear(), m = date.getMonth();
-                const dim = new Date(y, m + 1, 0).getDate();
+                const y = date.getUTCFullYear(), m = date.getUTCMonth();
+                const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
                 for (let d = 1; d <= dim; d++) {
-                    const dd = new Date(y, m, d);
-                    const hol = isItHoliday2025(dd);
-                    for (let h = 0; h < 24; h++) counts[getAreraBand(dd.getDay(), h, hol)]++;
+                    const dd = new Date(Date.UTC(y, m, d));
+                    const hol = isItHoliday2026(dd);
+                    for (let h = 0; h < 24; h++) counts[getAreraBand(dd.getUTCDay(), h, hol)]++;
                 }
             }
             return 'F' + (counts.indexOf(Math.max(counts[0], counts[1], counts[2])) + 1);
@@ -10129,16 +10259,16 @@
                 slider.min = 1;
                 slider.max = 12;
                 const currentDay = State.selectedDay || 1;
-                const d = new Date(2025, 0, currentDay);
-                State.selectedPeriodIndex = d.getMonth() + 1;
+                const d = new Date(Date.UTC(2026, 0, currentDay));
+                State.selectedPeriodIndex = d.getUTCMonth() + 1;
                 slider.value = State.selectedPeriodIndex;
                 sliderContainer.style.display = 'flex';
             } else if (resolution === 'trimestre') {
                 slider.min = 1;
                 slider.max = 4;
                 const currentDay = State.selectedDay || 1;
-                const d = new Date(2025, 0, currentDay);
-                State.selectedPeriodIndex = Math.floor(d.getMonth() / 3) + 1;
+                const d = new Date(Date.UTC(2026, 0, currentDay));
+                State.selectedPeriodIndex = Math.floor(d.getUTCMonth() / 3) + 1;
                 slider.value = State.selectedPeriodIndex;
                 sliderContainer.style.display = 'flex';
             } else if (resolution === 'semestre') {
@@ -10667,7 +10797,8 @@
                                     const day   = parseInt(yearMonthDay.substring(6, 8));
                                     const hour  = parseInt(hourMin.substring(0, 2));
                                     if (!isNaN(month) && !isNaN(day) && !isNaN(hour)) {
-                                        const index = getHourIndex(month, day, hour);
+                                        // Align PVGIS standard solar time with Italian civil time (DST/ora legale 2026)
+                                        const index = getPvgisCivilHourIndex(month, day, hour, 2026);
                                         if (index >= 0 && index < 8760 && !isNaN(powerVal)) {
                                             generation[index] = powerVal / 1000; // W -> kW
                                             count++;

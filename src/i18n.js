@@ -398,6 +398,7 @@ const I18N_EN = {
     'Tutti': 'All',
     'Seleziona Periodo:': 'Select Period:',
     'Tutto l\'anno (2025)': 'Whole year (2025)',
+    'Tutto l\'anno (2026)': 'Whole year (2026)',
     'Gennaio': 'January', 'Febbraio': 'February', 'Marzo': 'March', 'Aprile': 'April',
     'Maggio': 'May', 'Giugno': 'June', 'Luglio': 'July', 'Agosto': 'August',
     'Settembre': 'September', 'Ottobre': 'October', 'Novembre': 'November', 'Dicembre': 'December',

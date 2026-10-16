@@ -75,7 +75,7 @@ const monthlyCashflow = {
     anchorYear: 2026,
     months: Array.from({ length: 72 }, (_, i) => i + 1),
     labels: Array.from({ length: 72 }, (_, i) => {
-        const y = 2025 + Math.floor(i / 12);
+        const y = 2026 + Math.floor(i / 12);
         const m = (i % 12) + 1;
         return `${m < 10 ? '0' + m : m}/${y}${i < 12 ? ' (Y0)' : ''}`;
     }),
@@ -100,9 +100,9 @@ const monthlyCashflow = {
     holdcoOtherCosts: Array.from({ length: 72 }, () => 100),
     holdcoCashClosing: Array.from({ length: 72 }, (_, i) => 10000 + i * 1000),
     minCashClosing: -550000,
-    minCashMonth: '01/2025 (Y0)',
+    minCashMonth: '01/2026 (Y0)',
     fundedMinCashClosing: -50000,
-    fundedMinMonth: '01/2025 (Y0)',
+    fundedMinMonth: '01/2026 (Y0)',
     negativeMonths: 14,
     negativeNetMonths: 12,
     vatMaxCredit: 50000,
