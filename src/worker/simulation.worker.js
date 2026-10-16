@@ -438,7 +438,9 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
     const hourlyGridFeed = new Float64Array(H);
     const hourlySelfCons = new Float64Array(H);
     const hourlyChargeGrid = new Float64Array(H);
+    const hourlyChargeGridNet = new Float64Array(H);
     const hourlyChargeSolar = new Float64Array(H);
+    const hourlyChargeSolarNet = new Float64Array(H);
     const hourlyDischargeGrid = new Float64Array(H);
     const hourlyDischargePpa = new Float64Array(H);
     const hourlySelfConsSolar = new Float64Array(H);
@@ -487,7 +489,9 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
         hourlyCharge[t] = c_pv + c_grid;
         hourlyDischarge[t] = d_grid + d_ppa;
         hourlyChargeGrid[t] = c_grid;
+        hourlyChargeGridNet[t] = c_grid * chargeGridEff;
         hourlyChargeSolar[t] = c_pv;
+        hourlyChargeSolarNet[t] = c_pv * chargeSolarEff;
         hourlyDischargeGrid[t] = d_grid;
         hourlyDischargePpa[t] = d_ppa;
         hourlySelfConsSolar[t] = s;
@@ -512,7 +516,7 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
 
     return {
         hourlySoC, hourlyCharge, hourlyDischarge, hourlyGridFeed, hourlySelfCons,
-        hourlyChargeGrid, hourlyChargeSolar, hourlyDischargeGrid, hourlyDischargePpa,
+        hourlyChargeGrid, hourlyChargeGridNet, hourlyChargeSolar, hourlyChargeSolarNet, hourlyDischargeGrid, hourlyDischargePpa,
         hourlySelfConsSolar, hourlySelfConsBess, hourlyLossesRte,
         hourlyGridFeedPv, hourlyRevenueRidPure, hourlyRevenueRidActual,
         hourlyRevenueArbitrageGrid, hourlyRevenuePpaPv, hourlyRevenuePpaBess,
@@ -552,7 +556,9 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
     const hourlyGridFeed = new Float64Array(H);
     const hourlySelfCons = new Float64Array(H);
     const hourlyChargeGrid = new Float64Array(H);
+    const hourlyChargeGridNet = new Float64Array(H);
     const hourlyChargeSolar = new Float64Array(H);
+    const hourlyChargeSolarNet = new Float64Array(H);
     const hourlyDischargeGrid = new Float64Array(H);
     const hourlyDischargePpa = new Float64Array(H);
     const hourlySelfConsSolar = new Float64Array(H);
@@ -641,8 +647,8 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
         }
     } else {
         // 'rolling' (e fallback per 'global'): finestra d'asta GME MGP 13:00 (lookahead rolling 35h, commit 24h)
-        // Ore 0-12 del giorno 1 (prima della prima pubblicazione MGP)
-        windows.push({ tStart: 0, W: Math.min(13, H), commit: Math.min(13, H) });
+        // Ore 0-12 del giorno 1: i prezzi del giorno 1 sono già noti dall'asta di ieri (31/12) alle 13:00 (lookahead 24h, commit 13h)
+        windows.push({ tStart: 0, W: Math.min(24, H), commit: Math.min(13, H) });
         // Dalle ore 13:00 di ogni giorno d: lookahead di 35 ore (11h rimanenti oggi + 24h domani)
         // con impegno operativo (commit) fino alle ore 13:00 di domani (24h)
         for (let d = 0; d < 365; d++) {
@@ -896,7 +902,9 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
             hourlyCharge[t] = c_pv + c_grid;
             hourlyDischarge[t] = d_grid + d_ppa;
             hourlyChargeGrid[t] = c_grid;
+            hourlyChargeGridNet[t] = c_grid * chargeGridEff;
             hourlyChargeSolar[t] = c_pv;
+            hourlyChargeSolarNet[t] = c_pv * chargeSolarEff;
             hourlyDischargeGrid[t] = d_grid;
             hourlyDischargePpa[t] = d_ppa;
             hourlySelfConsSolar[t] = s_val;
@@ -933,7 +941,7 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
 
     return {
         hourlySoC, hourlyCharge, hourlyDischarge, hourlyGridFeed, hourlySelfCons,
-        hourlyChargeGrid, hourlyChargeSolar, hourlyDischargeGrid, hourlyDischargePpa,
+        hourlyChargeGrid, hourlyChargeGridNet, hourlyChargeSolar, hourlyChargeSolarNet, hourlyDischargeGrid, hourlyDischargePpa,
         hourlySelfConsSolar, hourlySelfConsBess, hourlyLossesRte,
         hourlyGridFeedPv, hourlyRevenueRidPure, hourlyRevenueRidActual,
         hourlyRevenueArbitrageGrid, hourlyRevenuePpaPv, hourlyRevenuePpaBess,
@@ -1191,8 +1199,9 @@ function runSensitivityLoop(baseState, config) {
             const hourlyGridFeed = new Float64Array(8760);
             const hourlySelfCons = new Float64Array(8760);
             const hourlyChargeGrid = new Float64Array(8760);
-            
+            const hourlyChargeGridNet = new Float64Array(8760);
             const hourlyChargeSolar = new Float64Array(8760);
+            const hourlyChargeSolarNet = new Float64Array(8760);
             const hourlyDischargeGrid = new Float64Array(8760);
             const hourlyDischargePpa = new Float64Array(8760);
             const hourlySelfConsSolar = new Float64Array(8760);
@@ -1460,8 +1469,10 @@ function runSensitivityLoop(baseState, config) {
                         hourlyCharge[h] = c_pv + c_grid;
                         hourlyDischarge[h] = d_grid;
                         hourlyChargeGrid[h] = c_grid;
+                        hourlyChargeGridNet[h] = c_grid * chargeGridEff;
                         
                         hourlyChargeSolar[h] = c_pv;
+                        hourlyChargeSolarNet[h] = c_pv * chargeSolarEff;
                         hourlyDischargeGrid[h] = d_grid;
                         hourlyDischargePpa[h] = 0;
                         hourlySelfConsSolar[h] = 0;
@@ -1794,7 +1805,9 @@ function runSensitivityLoop(baseState, config) {
                 hourlyGridFeed,
                 hourlySelfCons,
                 hourlyChargeGrid,
+                hourlyChargeGridNet,
                 hourlyChargeSolar,
+                hourlyChargeSolarNet,
                 hourlyDischargeGrid,
                 hourlyDischargePpa,
                 hourlySelfConsSolar,
@@ -1850,8 +1863,9 @@ function runSensitivityLoop(baseState, config) {
             const consolidatedHourlyGridFeed = new Float64Array(8760);
             const consolidatedHourlySelfCons = new Float64Array(8760);
             const consolidatedHourlyChargeGrid = new Float64Array(8760);
-            
+            const consolidatedHourlyChargeGridNet = new Float64Array(8760);
             const consolidatedHourlyChargeSolar = new Float64Array(8760);
+            const consolidatedHourlyChargeSolarNet = new Float64Array(8760);
             const consolidatedHourlyDischargeGrid = new Float64Array(8760);
             const consolidatedHourlyDischargeGridArb = new Float64Array(8760);
             const consolidatedHourlyDischargeGridTs = new Float64Array(8760);
@@ -2416,7 +2430,9 @@ function runSensitivityLoop(baseState, config) {
                     consolidatedHourlyGridFeed[t] += plantSim.hourlyGridFeed[t];
                     consolidatedHourlySelfCons[t] += plantSim.hourlySelfCons[t];
                     consolidatedHourlyChargeGrid[t] += plantSim.hourlyChargeGrid[t];
+                    consolidatedHourlyChargeGridNet[t] += plantSim.hourlyChargeGridNet ? plantSim.hourlyChargeGridNet[t] : plantSim.hourlyChargeGrid[t];
                     consolidatedHourlyChargeSolar[t] += plantSim.hourlyChargeSolar[t];
+                    consolidatedHourlyChargeSolarNet[t] += plantSim.hourlyChargeSolarNet ? plantSim.hourlyChargeSolarNet[t] : plantSim.hourlyChargeSolar[t];
                     consolidatedHourlyDischargeGrid[t] += plantSim.hourlyDischargeGrid[t];
                     consolidatedHourlyDischargeGridArb[t] += plantSim.hourlyDischargeArbitrage[t] || 0;
                     consolidatedHourlyDischargeGridTs[t] += plantSim.hourlyDischargeTimeshifting[t] || 0;
@@ -2491,7 +2507,9 @@ function runSensitivityLoop(baseState, config) {
                 hourlyGridFeed: consolidatedHourlyGridFeed,
                 hourlySelfCons: consolidatedHourlySelfCons,
                 hourlyChargeGrid: consolidatedHourlyChargeGrid,
+                hourlyChargeGridNet: consolidatedHourlyChargeGridNet,
                 hourlyChargeSolar: consolidatedHourlyChargeSolar,
+                hourlyChargeSolarNet: consolidatedHourlyChargeSolarNet,
                 hourlyDischargeGrid: consolidatedHourlyDischargeGrid,
                 hourlyDischargeArbitrage: consolidatedHourlyDischargeGridArb,
                 hourlyDischargeTimeshifting: consolidatedHourlyDischargeGridTs,

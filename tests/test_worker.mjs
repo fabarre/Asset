@@ -1125,6 +1125,13 @@ check('BESS Rolling Horizon MGP 13:00: esecuzione completata con successo', !!si
 check('BESS Rolling Horizon MGP 13:00: energia traslata > 0', simRolling.annualShifted > 0, `shifted=${simRolling.annualShifted}`);
 check('BESS Rolling Horizon MGP 13:00: ricavi Timeshifting > 0', r_rolling.matrix.revenueTimeshifting[1] > 0, `rev=${r_rolling.matrix.revenueTimeshifting[1]}`);
 check('BESS Rolling Horizon MGP 13:00: ricavi Arbitraggio > 0', r_rolling.matrix.revenueArbitrage[1] > 0, `rev=${r_rolling.matrix.revenueArbitrage[1]}`);
+check('BESS Rolling Horizon: hourlyChargeSolarNet definito', !!simRolling.hourlyChargeSolarNet);
+check('BESS Rolling Horizon: hourlyChargeGridNet definito', !!simRolling.hourlyChargeGridNet);
+const hasSolarChg = simRolling.hourlyChargeSolar.some(v => v > 0);
+if (hasSolarChg) {
+    const idx = simRolling.hourlyChargeSolar.findIndex(v => v > 0);
+    check('BESS Carica Netta: net < gross (riflette perdite efficienza carica)', simRolling.hourlyChargeSolarNet[idx] < simRolling.hourlyChargeSolar[idx]);
+}
 
 // 7. Motore BESS Giornaliero Continuo 24h (Senza gradini)
 const r_daily = run(buildState({

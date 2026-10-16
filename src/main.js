@@ -8541,11 +8541,11 @@
                     }
                     
                     if (sim) {
-                        batChargeHourly[t] += sim.hourlyCharge[t] || 0;
+                        batChargeSolarHourly[t] += (sim.hourlyChargeSolarNet ? sim.hourlyChargeSolarNet[t] : (sim.hourlyChargeSolar ? sim.hourlyChargeSolar[t] : 0));
+                        batChargeGridHourly[t] += (sim.hourlyChargeGridNet ? sim.hourlyChargeGridNet[t] : (sim.hourlyChargeGrid ? sim.hourlyChargeGrid[t] : 0));
+                        batChargeHourly[t] += (sim.hourlyChargeSolarNet ? sim.hourlyChargeSolarNet[t] : (sim.hourlyChargeSolar ? sim.hourlyChargeSolar[t] : 0)) + (sim.hourlyChargeGridNet ? sim.hourlyChargeGridNet[t] : (sim.hourlyChargeGrid ? sim.hourlyChargeGrid[t] : 0));
                         batDischargeHourly[t] += sim.hourlyDischarge[t] || 0;
                         totalBessSoC[t] += sim.hourlySoC[t] || 0;
-                        batChargeSolarHourly[t] += sim.hourlyChargeSolar[t] || 0;
-                        batChargeGridHourly[t] += sim.hourlyChargeGrid[t] || 0;
                         batDischargeGridHourly[t] += sim.hourlyDischargeGrid[t] || 0;
                         batDischargeGridArbHourly[t] += sim.hourlyDischargeArbitrage[t] || 0;
                         batDischargeGridTsHourly[t] += sim.hourlyDischargeTimeshifting[t] || 0;
@@ -9706,7 +9706,7 @@
             }
 
             headerHTML += `
-                    <th class="px-4 py-3 text-sky-400 font-semibold border-b border-slate-800 text-right bg-blue-950/10 border-l border-slate-800/60">Carica BESS da FV (kWh)</th>
+                    <th class="px-4 py-3 text-sky-400 font-semibold border-b border-slate-800 text-right bg-blue-950/10 border-l border-slate-800/60" title="Energia netta immagazzinata nel BESS da FV al netto delle perdite di carica (kWh)">Carica BESS da FV (kWh)</th>
                     <th class="px-4 py-3 text-blue-400 font-semibold border-b border-slate-800 text-right bg-blue-950/10">Carica BESS da Rete (kWh)</th>
                     <th class="px-4 py-3 text-emerald-400 font-semibold border-b border-slate-800 text-right bg-blue-950/10">Scarica BESS alla Rete (kWh)</th>
                     <th class="px-4 py-3 text-emerald-500 font-semibold border-b border-slate-800 text-right bg-blue-950/10">Scarica BESS Rete Arb. (kWh)</th>
@@ -10432,10 +10432,10 @@
                         generation_kw: r.combinedSolarProfile[t],
                         price_eur_mwh: r.generalMedionePrices[t],
                         bess_soc_kwh: r.bessSimulation.hourlySoC[t],
-                        bess_charge_kw: r.bessSimulation.hourlyCharge[t],
+                        bess_charge_kw: (r.bessSimulation.hourlyChargeSolarNet ? r.bessSimulation.hourlyChargeSolarNet[t] : r.bessSimulation.hourlyChargeSolar[t]) + (r.bessSimulation.hourlyChargeGridNet ? r.bessSimulation.hourlyChargeGridNet[t] : (r.bessSimulation.hourlyChargeGrid ? r.bessSimulation.hourlyChargeGrid[t] : 0)),
                         bess_discharge_kw: r.bessSimulation.hourlyDischarge[t],
-                        bess_charge_solar_kw: r.bessSimulation.hourlyChargeSolar[t],
-                        bess_charge_grid_kw: r.bessSimulation.hourlyChargeGrid[t],
+                        bess_charge_solar_kw: r.bessSimulation.hourlyChargeSolarNet ? r.bessSimulation.hourlyChargeSolarNet[t] : r.bessSimulation.hourlyChargeSolar[t],
+                        bess_charge_grid_kw: r.bessSimulation.hourlyChargeGridNet ? r.bessSimulation.hourlyChargeGridNet[t] : r.bessSimulation.hourlyChargeGrid[t],
                         bess_discharge_grid_kw: r.bessSimulation.hourlyDischargeGrid[t],
                         bess_discharge_ppa_kw: r.bessSimulation.hourlyDischargePpa[t],
                         self_consumption_solar_kw: r.bessSimulation.hourlySelfConsSolar[t],
