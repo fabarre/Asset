@@ -759,8 +759,20 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
             }
         }
 
-        // Ordinamento per spread marginale netto decrescente
-        trades.sort((a, b) => b.spread - a.spread);
+        // Priorità economica e fisica:
+        // 1. Stored trades (scarica dell'energia ereditata dalla finestra precedente per liberare capacità al miglior prezzo)
+        // 2. Solar trades (Time Shifting solare e PPA con priorità: costo marginale zero del fotovoltaico e vincolo ore diurne)
+        // 3. Grid trades (Arbitraggio puro da rete su capacità residua non occupata dal solare, es. ciclo notturno -> mattutino)
+        trades.sort((a, b) => {
+            const priorityOf = (t) => {
+                if (t.type.startsWith('stored_')) return 3;
+                if (t.type.startsWith('solar_')) return 2;
+                return 1;
+            };
+            const pDiff = priorityOf(b) - priorityOf(a);
+            if (pDiff !== 0) return pDiff;
+            return b.spread - a.spread;
+        });
 
         const remSurplus = Float64Array.from(surplusSol);
         const remPpaLoad = Float64Array.from(remLoad);
@@ -778,7 +790,7 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
             if (type === 'stored_to_ppa') {
                 if (remDisPower[tDis] <= 1e-4) continue;
                 let maxDeliverable = Math.max(0, curInitSs - minSoc);
-                for (let k = 0; k < tDis; k++) maxDeliverable = Math.min(maxDeliverable, Math.max(0, ss[k] - minSoc));
+                for (let k = tDis; k < W; k++) maxDeliverable = Math.min(maxDeliverable, Math.max(0, ss[k] - minSoc));
                 const maxKwh = Math.min(remPpaLoad[tDis], remDisPower[tDis], maxDeliverable * dischargeEff);
                 if (maxKwh > 1e-4) {
                     const energyDrawn = maxKwh / dischargeEff;
@@ -787,12 +799,12 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
                     remDisPower[tDis] -= maxKwh;
                     remChPower[tDis] = 0;
                     curInitSs -= energyDrawn;
-                    for (let k = 0; k < tDis; k++) ss[k] -= energyDrawn;
+                    for (let k = tDis; k < W; k++) ss[k] -= energyDrawn;
                 }
             } else if (type === 'stored_to_grid') {
                 if (remDisPower[tDis] <= 1e-4) continue;
                 let maxDeliverable = Math.max(0, curInitSs - minSoc);
-                for (let k = 0; k < tDis; k++) maxDeliverable = Math.min(maxDeliverable, Math.max(0, ss[k] - minSoc));
+                for (let k = tDis; k < W; k++) maxDeliverable = Math.min(maxDeliverable, Math.max(0, ss[k] - minSoc));
                 const maxKwh = Math.min(remDisPower[tDis], maxDeliverable * dischargeEff);
                 if (maxKwh > 1e-4) {
                     const energyDrawn = maxKwh / dischargeEff;
@@ -800,12 +812,12 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
                     remDisPower[tDis] -= maxKwh;
                     remChPower[tDis] = 0;
                     curInitSs -= energyDrawn;
-                    for (let k = 0; k < tDis; k++) ss[k] -= energyDrawn;
+                    for (let k = tDis; k < W; k++) ss[k] -= energyDrawn;
                 }
             } else if (type === 'stored_grid_to_grid') {
                 if (remDisPower[tDis] <= 1e-4) continue;
                 let maxDeliverable = curInitSg;
-                for (let k = 0; k < tDis; k++) maxDeliverable = Math.min(maxDeliverable, sg[k]);
+                for (let k = tDis; k < W; k++) maxDeliverable = Math.min(maxDeliverable, sg[k]);
                 const maxKwh = Math.min(remDisPower[tDis], maxDeliverable * dischargeEff);
                 if (maxKwh > 1e-4) {
                     const energyDrawn = maxKwh / dischargeEff;
@@ -813,7 +825,7 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
                     remDisPower[tDis] -= maxKwh;
                     remChPower[tDis] = 0;
                     curInitSg -= energyDrawn;
-                    for (let k = 0; k < tDis; k++) sg[k] -= energyDrawn;
+                    for (let k = tDis; k < W; k++) sg[k] -= energyDrawn;
                 }
             } else if (type === 'solar_to_ppa' || type === 'solar_to_grid') {
                 if (remChPower[tCh] <= 1e-4 || remDisPower[tDis] <= 1e-4) continue;
