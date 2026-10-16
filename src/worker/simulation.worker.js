@@ -700,6 +700,8 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
         }
 
         // Generazione delle opportunità di arbitraggio e time shifting
+        // Include il costo di mantenimento/opportunità orario (autoscarica, ausiliari HVAC/BMS e costo opportunità di ciclo)
+        const holdingCostRate = 0.00005; // 0.05 €/MWh per ora di stoccaggio (favorisce scarica tempestiva e liberazione capacità)
         const trades = [];
         for (let tDis = 0; tDis < W; tDis++) {
             const pRidDis = priceRIDArr[tDis];
@@ -707,29 +709,33 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
 
             // 1. Scarica su carico PPA On-Site (priorità economica su PPA)
             if (remLoad[tDis] > 0 && pPpa > 0) {
-                trades.push({ type: 'stored_to_ppa', tCh: -1, tDis, effCost: 0, effVal: pPpa * dischargeEff, spread: pPpa * dischargeEff - eps });
+                const holdCostStored = tDis * holdingCostRate;
+                trades.push({ type: 'stored_to_ppa', tCh: -1, tDis, effCost: 0, effVal: pPpa * dischargeEff, spread: pPpa * dischargeEff - holdCostStored - eps });
                 for (let tCh = 0; tCh <= tDis; tCh++) {
                     if (surplusSol[tCh] > 0) {
                         const effCost = priceRIDArr[tCh] / chargeSolarEff;
                         const effVal = pPpa * dischargeEff;
-                        if (effVal - effCost > eps) {
-                            trades.push({ type: 'solar_to_ppa', tCh, tDis, effCost, effVal, spread: effVal - effCost - eps });
+                        const holdCost = (tDis - tCh) * holdingCostRate;
+                        if (effVal - effCost - holdCost > eps) {
+                            trades.push({ type: 'solar_to_ppa', tCh, tDis, effCost, effVal, spread: effVal - effCost - holdCost - eps });
                         }
                     }
                 }
             }
 
             // 2. Scarica Time Shifting FV su Rete (prezzo RID orario)
-            trades.push({ type: 'stored_to_grid', tCh: -1, tDis, effCost: 0, effVal: pRidDis * dischargeEff, spread: pRidDis * dischargeEff - eps });
+            const holdCostStoredGrid = tDis * holdingCostRate;
+            trades.push({ type: 'stored_to_grid', tCh: -1, tDis, effCost: 0, effVal: pRidDis * dischargeEff, spread: pRidDis * dischargeEff - holdCostStoredGrid - eps });
             if (wdCap > 0) {
-                trades.push({ type: 'stored_grid_to_grid', tCh: -1, tDis, effCost: 0, effVal: priceArbArr[tDis] * dischargeEff, spread: priceArbArr[tDis] * dischargeEff - eps });
+                trades.push({ type: 'stored_grid_to_grid', tCh: -1, tDis, effCost: 0, effVal: priceArbArr[tDis] * dischargeEff, spread: priceArbArr[tDis] * dischargeEff - holdCostStoredGrid - eps });
             }
             for (let tCh = 0; tCh <= tDis; tCh++) {
                 if (surplusSol[tCh] > 0) {
                     const effCost = priceRIDArr[tCh] / chargeSolarEff;
                     const effVal = pRidDis * dischargeEff;
-                    if (effVal - effCost > eps) {
-                        trades.push({ type: 'solar_to_grid', tCh, tDis, effCost, effVal, spread: effVal - effCost - eps });
+                    const holdCost = (tDis - tCh) * holdingCostRate;
+                    if (effVal - effCost - holdCost > eps) {
+                        trades.push({ type: 'solar_to_grid', tCh, tDis, effCost, effVal, spread: effVal - effCost - holdCost - eps });
                     }
                 }
             }
@@ -739,8 +745,9 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
                 for (let tCh = 0; tCh <= tDis; tCh++) {
                     const effCost = costGridArr[tCh] / chargeGridEff;
                     const effVal = priceArbArr[tDis] * dischargeEff;
-                    if (effVal - effCost > eps) {
-                        trades.push({ type: 'grid_to_grid', tCh, tDis, effCost, effVal, spread: effVal - effCost - eps });
+                    const holdCost = (tDis - tCh) * holdingCostRate;
+                    if (effVal - effCost - holdCost > eps) {
+                        trades.push({ type: 'grid_to_grid', tCh, tDis, effCost, effVal, spread: effVal - effCost - holdCost - eps });
                     }
                 }
             }
