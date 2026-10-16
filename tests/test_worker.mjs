@@ -1114,6 +1114,39 @@ check('PPA Off-Site con COD parziale + BESS: calcolo completato senza ReferenceE
     r41_offsite.matrix.revenuePpa[1] > 0 && Number.isFinite(r41_offsite.matrix.ebitda[1]),
     `ppa=${r41_offsite.matrix.revenuePpa[1]} ebitda=${r41_offsite.matrix.ebitda[1]}`);
 
+// 6. Motore BESS Rolling Horizon MGP 13:00 (Mercato Reale GME)
+const r_rolling = run(buildState({
+    inputs: { bessOptimizer: 'rolling' },
+    plant: { gridWithdrawalKw: 2000 },
+    zonalPun: zonalPunArb
+}));
+const simRolling = r_rolling.plantsMetrics[0].sim;
+check('BESS Rolling Horizon MGP 13:00: esecuzione completata con successo', !!simRolling);
+check('BESS Rolling Horizon MGP 13:00: energia traslata > 0', simRolling.annualShifted > 0, `shifted=${simRolling.annualShifted}`);
+check('BESS Rolling Horizon MGP 13:00: ricavi Timeshifting > 0', r_rolling.matrix.revenueTimeshifting[1] > 0, `rev=${r_rolling.matrix.revenueTimeshifting[1]}`);
+check('BESS Rolling Horizon MGP 13:00: ricavi Arbitraggio > 0', r_rolling.matrix.revenueArbitrage[1] > 0, `rev=${r_rolling.matrix.revenueArbitrage[1]}`);
+
+// 7. Motore BESS Giornaliero Continuo 24h (Senza gradini)
+const r_daily = run(buildState({
+    inputs: { bessOptimizer: 'daily' },
+    plant: { gridWithdrawalKw: 2000 },
+    zonalPun: zonalPunArb
+}));
+const simDaily = r_daily.plantsMetrics[0].sim;
+check('BESS Giornaliero Continuo 24h: esecuzione completata con successo', !!simDaily);
+check('BESS Giornaliero Continuo 24h: energia traslata > 0', simDaily.annualShifted > 0, `shifted=${simDaily.annualShifted}`);
+check('BESS Giornaliero Continuo 24h: nessun NaN in matrice', Number.isFinite(r_daily.calculatedProjectIrr));
+
+// 8. Motore BESS LP Globale HiGHS con fallback continuo
+const r_lp = run(buildState({
+    inputs: { bessOptimizer: 'lp' },
+    plant: { gridWithdrawalKw: 2000 },
+    zonalPun: zonalPunArb
+}));
+const simLp = r_lp.plantsMetrics[0].sim;
+check('BESS LP Globale (HiGHS / fallback continuo): esecuzione completata', !!simLp);
+check('BESS LP Globale: energia traslata > 0', simLp.annualShifted > 0, `shifted=${simLp.annualShifted}`);
+
 console.log('\n═══════════════════════════════════');
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);

@@ -209,8 +209,8 @@ function getPvgisCivilHourIndex(month, day, solarHour, year = 2026) {
 
 self.onmessage = async function(e) {
     const { action, payload } = e.data;
-    // Pre-carica il solver LP HiGHS se richiesto (lazy, una sola volta per sessione worker)
-    if (payload && payload.State && payload.State.inputs && payload.State.inputs.bessOptimizer === 'lp') {
+    // Pre-carica il solver LP HiGHS se richiesto (lazy, una sola volta per sessione worker nel browser)
+    if (typeof importScripts === 'function' && payload && payload.State && payload.State.inputs && payload.State.inputs.bessOptimizer === 'lp') {
         await getHighs();
     }
     if (action === 'EXECUTE_CALCULATION') {
@@ -282,6 +282,10 @@ let highsLoadFailed = false;
 const HIGHS_CDN_BASE = 'https://cdn.jsdelivr.net/npm/highs@1.15.2/build/';
 async function getHighs() {
     if (highsSolver || highsLoadFailed) return highsSolver;
+    if (typeof importScripts !== 'function') {
+        highsLoadFailed = true;
+        return null;
+    }
     try {
         importScripts(HIGHS_CDN_BASE + 'highs.js');
         const factory = self.highs || self.Module || self.HiGHS;
@@ -504,6 +508,420 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
 
         totalUplift += (s + d_ppa) * pricePPA + (p_fed_pv + d_gs) * priceRID + d_gg * priceArb - c_grid * costGrid;
         annualShiftedKwh += d_grid + d_ppa;
+    }
+
+    return {
+        hourlySoC, hourlyCharge, hourlyDischarge, hourlyGridFeed, hourlySelfCons,
+        hourlyChargeGrid, hourlyChargeSolar, hourlyDischargeGrid, hourlyDischargePpa,
+        hourlySelfConsSolar, hourlySelfConsBess, hourlyLossesRte,
+        hourlyGridFeedPv, hourlyRevenueRidPure, hourlyRevenueRidActual,
+        hourlyRevenueArbitrageGrid, hourlyRevenuePpaPv, hourlyRevenuePpaBess,
+        hourlyRevenueTimeshifting, hourlyCostWithdrawal,
+        hourlyDischargeArbitrage, hourlyDischargeTimeshifting,
+        totalUplift, annualShifted: annualShiftedKwh / 1000
+    };
+}
+
+// ═══ Motore BESS Continuo & Rolling Horizon MGP 13:00 ═══
+// Modelli supportati:
+//   - 'rolling': Rolling Horizon GME 13:00 (Mercato Reale: finestra mobile 35h dalle 13:00 di oggi
+//                fino alle 24:00 di domani con commit a 24h).
+//   - 'daily':   Giornaliero Continuo 24h (Senza gradini: variabili float64 continue, carica 100%
+//                del surplus solare utile e trasferisce il SoC residuo al giorno successivo).
+//   - 'global':  Continuo Globale 8760h (ottimo deterministico su orizzonte annuale).
+function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode = 'rolling') {
+    const H = 8760;
+    const bessMw = p.bessMw;
+    const bessMwh = p.bessMwh;
+    const bessEfficiency = p.bessEfficiency;
+    const bessType = p.bessType;
+    const bessConnection = p.bessConnection || 'ac';
+
+    const lossMult = 1 + (p.gridLosses / 100);
+    const lossWithdrawMult = 1 + ((p.gridLossesWithdraw || 0) / 100);
+    const gseImb = p.gseImbalance;
+    const spread = p.traderSpread;
+    const disp = p.traderDisp;
+    const ppaPrice = p.ppaPrice || 0;
+    const marketType = p.marketType || 'rid';
+    const ferxTariff = p.ferxTariff !== undefined ? p.ferxTariff : 85;
+
+    const hourlySoC = new Float64Array(H);
+    const hourlyCharge = new Float64Array(H);
+    const hourlyDischarge = new Float64Array(H);
+    const hourlyGridFeed = new Float64Array(H);
+    const hourlySelfCons = new Float64Array(H);
+    const hourlyChargeGrid = new Float64Array(H);
+    const hourlyChargeSolar = new Float64Array(H);
+    const hourlyDischargeGrid = new Float64Array(H);
+    const hourlyDischargePpa = new Float64Array(H);
+    const hourlySelfConsSolar = new Float64Array(H);
+    const hourlySelfConsBess = new Float64Array(H);
+    const hourlyLossesRte = new Float64Array(H);
+    const hourlyGridFeedPv = new Float64Array(H);
+    const hourlyRevenueRidPure = new Float64Array(H);
+    const hourlyRevenueRidActual = new Float64Array(H);
+    const hourlyRevenueArbitrageGrid = new Float64Array(H);
+    const hourlyRevenuePpaPv = new Float64Array(H);
+    const hourlyRevenuePpaBess = new Float64Array(H);
+    const hourlyRevenueTimeshifting = new Float64Array(H);
+    const hourlyCostWithdrawal = new Float64Array(H);
+    const hourlyDischargeArbitrage = new Float64Array(H);
+    const hourlyDischargeTimeshifting = new Float64Array(H);
+
+    // Caso senza BESS o BESS disabilitato
+    if (bessMwh === 0 || bessMw === 0 || bessType === 'none') {
+        for (let t = 0; t < H; t++) {
+            const sol = solarProfile ? Math.max(0, solarProfile[t]) : 0;
+            const lod = loadProfile ? Math.max(0, loadProfile[t]) : 0;
+            const selfCons = Math.min(sol, lod);
+            const p_fed_pv = Math.max(0, sol - lod);
+
+            const pricePUN = punProfile[t];
+            const month = getMonthOfHour(t);
+            const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
+                : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+                : ((pricePUN * lossMult - gseImb) / 1000);
+            const pricePPA = ppaPrice / 1000;
+
+            hourlyGridFeed[t] = p_fed_pv;
+            hourlySelfCons[t] = selfCons;
+            hourlySelfConsSolar[t] = selfCons;
+            hourlyGridFeedPv[t] = p_fed_pv;
+            hourlyRevenueRidPure[t] = sol * priceRID;
+            hourlyRevenueRidActual[t] = p_fed_pv * priceRID;
+            hourlyRevenuePpaPv[t] = selfCons * pricePPA;
+        }
+        return {
+            hourlySoC, hourlyCharge, hourlyDischarge, hourlyGridFeed, hourlySelfCons,
+            hourlyChargeGrid, hourlyChargeSolar, hourlyDischargeGrid, hourlyDischargePpa,
+            hourlySelfConsSolar, hourlySelfConsBess, hourlyLossesRte,
+            hourlyGridFeedPv, hourlyRevenueRidPure, hourlyRevenueRidActual,
+            hourlyRevenueArbitrageGrid, hourlyRevenuePpaPv, hourlyRevenuePpaBess,
+            hourlyRevenueTimeshifting, hourlyCostWithdrawal,
+            hourlyDischargeArbitrage, hourlyDischargeTimeshifting,
+            totalUplift: 0, annualShifted: 0
+        };
+    }
+
+    let rte = bessEfficiency;
+    const configuredDod = (p.bessDoD && p.bessDoD > 0) ? p.bessDoD / 100 : null;
+    const dod = configuredDod !== null ? configuredDod : 0.90;
+    const socMaxPct = (p.bessSocMax !== undefined && p.bessSocMax > 0 && p.bessSocMax <= 100) ? p.bessSocMax : 100;
+    const socMinPct = (p.bessSocMin !== undefined && p.bessSocMin > 0 && p.bessSocMin < socMaxPct) ? p.bessSocMin : null;
+    const maxSoc = bessMwh * 1000 * (socMaxPct / 100);
+    const minSoc = (socMinPct !== null) ? (bessMwh * 1000 * (socMinPct / 100)) : maxSoc * (1 - dod);
+    const maxPower = bessMw * 1000;
+    const wdCap = resolveGridWithdrawalCapKw(p, maxPower);
+    const chargeSolarEff = bessConnection === 'dc' ? 0.98 : Math.sqrt(rte);
+    const chargeGridEff = Math.sqrt(rte);
+    const dischargeEff = Math.sqrt(rte);
+    const eps = BESS_THROUGHPUT_PENALTY;
+
+    // Media mensile PUN per contratti a PUN medio
+    const monthlyAveragePun = new Float64Array(12);
+    const monthlyCounts = new Int32Array(12);
+    for (let t = 0; t < H; t++) {
+        const m = getMonthOfHour(t);
+        monthlyAveragePun[m] += punProfile[t];
+        monthlyCounts[m]++;
+    }
+    for (let m = 0; m < 12; m++) if (monthlyCounts[m] > 0) monthlyAveragePun[m] /= monthlyCounts[m];
+
+    let curSs = minSoc;
+    let curSg = 0;
+
+    // Costruzione delle finestre operative
+    const windows = [];
+    if (mode === 'daily') {
+        for (let d = 0; d < 365; d++) {
+            const tStart = d * 24;
+            const W = Math.min(24, H - tStart);
+            windows.push({ tStart, W, commit: W });
+        }
+    } else {
+        // 'rolling' (e fallback per 'global'): finestra d'asta GME MGP 13:00 (lookahead rolling 35h, commit 24h)
+        // Ore 0-12 del giorno 1 (prima della prima pubblicazione MGP)
+        windows.push({ tStart: 0, W: Math.min(13, H), commit: Math.min(13, H) });
+        // Dalle ore 13:00 di ogni giorno d: lookahead di 35 ore (11h rimanenti oggi + 24h domani)
+        // con impegno operativo (commit) fino alle ore 13:00 di domani (24h)
+        for (let d = 0; d < 365; d++) {
+            const tStart = d * 24 + 13;
+            if (tStart >= H) break;
+            const W = Math.min(H - tStart, 35);
+            const commit = Math.min(H - tStart, 24);
+            windows.push({ tStart, W, commit });
+        }
+    }
+
+    for (let win of windows) {
+        const { tStart, W, commit } = win;
+        const cpv = new Float64Array(W);
+        const cgr = new Float64Array(W);
+        const dgs = new Float64Array(W);
+        const dgg = new Float64Array(W);
+        const dppa = new Float64Array(W);
+        const s = new Float64Array(W);
+        const ss = new Float64Array(W);
+        const sg = new Float64Array(W);
+
+        for (let k = 0; k < W; k++) {
+            ss[k] = curSs;
+            sg[k] = curSg;
+        }
+
+        const surplusSol = new Float64Array(W);
+        const remLoad = new Float64Array(W);
+        const priceRIDArr = new Float64Array(W);
+        const priceArbArr = new Float64Array(W);
+        const costGridArr = new Float64Array(W);
+        const pricePPA = ppaPrice / 1000;
+
+        for (let k = 0; k < W; k++) {
+            const t = tStart + k;
+            const sol = solarProfile ? Math.max(0, solarProfile[t]) : 0;
+            const lod = loadProfile ? Math.max(0, loadProfile[t]) : 0;
+            s[k] = Math.min(sol, lod);
+            surplusSol[k] = Math.max(0, sol - s[k]);
+            remLoad[k] = Math.max(0, lod - s[k]);
+
+            const pricePUN = punProfile[t];
+            const month = getMonthOfHour(t);
+            const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
+            const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
+                : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+                : ((pricePUN * lossMult - gseImb) / 1000);
+            const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
+            const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
+
+            priceRIDArr[k] = priceRID;
+            priceArbArr[k] = priceArb;
+            costGridArr[k] = costGrid;
+        }
+
+        // Generazione delle opportunità di arbitraggio e time shifting
+        const trades = [];
+        for (let tDis = 0; tDis < W; tDis++) {
+            const pRidDis = priceRIDArr[tDis];
+            const pPpa = pricePPA;
+
+            // 1. Scarica su carico PPA On-Site (priorità economica su PPA)
+            if (remLoad[tDis] > 0 && pPpa > 0) {
+                trades.push({ type: 'stored_to_ppa', tCh: -1, tDis, effCost: 0, effVal: pPpa * dischargeEff, spread: pPpa * dischargeEff - eps });
+                for (let tCh = 0; tCh <= tDis; tCh++) {
+                    if (surplusSol[tCh] > 0) {
+                        const effCost = priceRIDArr[tCh] / chargeSolarEff;
+                        const effVal = pPpa * dischargeEff;
+                        if (effVal - effCost > eps) {
+                            trades.push({ type: 'solar_to_ppa', tCh, tDis, effCost, effVal, spread: effVal - effCost - eps });
+                        }
+                    }
+                }
+            }
+
+            // 2. Scarica Time Shifting FV su Rete (prezzo RID orario)
+            trades.push({ type: 'stored_to_grid', tCh: -1, tDis, effCost: 0, effVal: pRidDis * dischargeEff, spread: pRidDis * dischargeEff - eps });
+            if (wdCap > 0) {
+                trades.push({ type: 'stored_grid_to_grid', tCh: -1, tDis, effCost: 0, effVal: priceArbArr[tDis] * dischargeEff, spread: priceArbArr[tDis] * dischargeEff - eps });
+            }
+            for (let tCh = 0; tCh <= tDis; tCh++) {
+                if (surplusSol[tCh] > 0) {
+                    const effCost = priceRIDArr[tCh] / chargeSolarEff;
+                    const effVal = pRidDis * dischargeEff;
+                    if (effVal - effCost > eps) {
+                        trades.push({ type: 'solar_to_grid', tCh, tDis, effCost, effVal, spread: effVal - effCost - eps });
+                    }
+                }
+            }
+
+            // 3. Scarica Arbitraggio puro da Rete (solo se il prelievo da rete è abilitato: wdCap > 0)
+            if (wdCap > 0) {
+                for (let tCh = 0; tCh <= tDis; tCh++) {
+                    const effCost = costGridArr[tCh] / chargeGridEff;
+                    const effVal = priceArbArr[tDis] * dischargeEff;
+                    if (effVal - effCost > eps) {
+                        trades.push({ type: 'grid_to_grid', tCh, tDis, effCost, effVal, spread: effVal - effCost - eps });
+                    }
+                }
+            }
+        }
+
+        // Ordinamento per spread marginale netto decrescente
+        trades.sort((a, b) => b.spread - a.spread);
+
+        const remSurplus = Float64Array.from(surplusSol);
+        const remPpaLoad = Float64Array.from(remLoad);
+        const remChPower = new Float64Array(W).fill(maxPower);
+        const remWdCap = new Float64Array(W).fill(wdCap);
+        const remDisPower = new Float64Array(W).fill(maxPower);
+
+        let curInitSs = curSs;
+        let curInitSg = curSg;
+
+        for (let tr of trades) {
+            if (tr.spread <= 0) break;
+            const { type, tCh, tDis } = tr;
+
+            if (type === 'stored_to_ppa') {
+                if (remDisPower[tDis] <= 1e-4) continue;
+                let maxDeliverable = Math.max(0, curInitSs - minSoc);
+                for (let k = 0; k < tDis; k++) maxDeliverable = Math.min(maxDeliverable, Math.max(0, ss[k] - minSoc));
+                const maxKwh = Math.min(remPpaLoad[tDis], remDisPower[tDis], maxDeliverable * dischargeEff);
+                if (maxKwh > 1e-4) {
+                    const energyDrawn = maxKwh / dischargeEff;
+                    dppa[tDis] += maxKwh;
+                    remPpaLoad[tDis] -= maxKwh;
+                    remDisPower[tDis] -= maxKwh;
+                    remChPower[tDis] = 0;
+                    curInitSs -= energyDrawn;
+                    for (let k = 0; k < tDis; k++) ss[k] -= energyDrawn;
+                }
+            } else if (type === 'stored_to_grid') {
+                if (remDisPower[tDis] <= 1e-4) continue;
+                let maxDeliverable = Math.max(0, curInitSs - minSoc);
+                for (let k = 0; k < tDis; k++) maxDeliverable = Math.min(maxDeliverable, Math.max(0, ss[k] - minSoc));
+                const maxKwh = Math.min(remDisPower[tDis], maxDeliverable * dischargeEff);
+                if (maxKwh > 1e-4) {
+                    const energyDrawn = maxKwh / dischargeEff;
+                    dgs[tDis] += maxKwh;
+                    remDisPower[tDis] -= maxKwh;
+                    remChPower[tDis] = 0;
+                    curInitSs -= energyDrawn;
+                    for (let k = 0; k < tDis; k++) ss[k] -= energyDrawn;
+                }
+            } else if (type === 'stored_grid_to_grid') {
+                if (remDisPower[tDis] <= 1e-4) continue;
+                let maxDeliverable = curInitSg;
+                for (let k = 0; k < tDis; k++) maxDeliverable = Math.min(maxDeliverable, sg[k]);
+                const maxKwh = Math.min(remDisPower[tDis], maxDeliverable * dischargeEff);
+                if (maxKwh > 1e-4) {
+                    const energyDrawn = maxKwh / dischargeEff;
+                    dgg[tDis] += maxKwh;
+                    remDisPower[tDis] -= maxKwh;
+                    remChPower[tDis] = 0;
+                    curInitSg -= energyDrawn;
+                    for (let k = 0; k < tDis; k++) sg[k] -= energyDrawn;
+                }
+            } else if (type === 'solar_to_ppa' || type === 'solar_to_grid') {
+                if (remChPower[tCh] <= 1e-4 || remDisPower[tDis] <= 1e-4) continue;
+                const maxChargeKw = Math.min(remSurplus[tCh], remChPower[tCh]);
+                const maxDischargeKw = type === 'solar_to_ppa' ? Math.min(remPpaLoad[tDis], remDisPower[tDis]) : remDisPower[tDis];
+                let maxHeadroom = maxSoc;
+                for (let k = tCh; k < tDis; k++) {
+                    const headroom = maxSoc - (ss[k] + sg[k]);
+                    if (headroom < maxHeadroom) maxHeadroom = headroom;
+                }
+                if (maxHeadroom <= 1e-4) continue;
+
+                const eInjectableFromCh = maxChargeKw * chargeSolarEff;
+                const eInjectableFromDis = maxDischargeKw / dischargeEff;
+                const deltaSoC = Math.min(eInjectableFromCh, eInjectableFromDis, maxHeadroom);
+
+                if (deltaSoC > 1e-4) {
+                    const kwCharged = deltaSoC / chargeSolarEff;
+                    const kwDischarged = deltaSoC * dischargeEff;
+
+                    cpv[tCh] += kwCharged;
+                    remSurplus[tCh] -= kwCharged;
+                    remChPower[tCh] -= kwCharged;
+                    remDisPower[tCh] = 0;
+
+                    if (type === 'solar_to_ppa') {
+                        dppa[tDis] += kwDischarged;
+                        remPpaLoad[tDis] -= kwDischarged;
+                    } else {
+                        dgs[tDis] += kwDischarged;
+                    }
+                    remDisPower[tDis] -= kwDischarged;
+                    remChPower[tDis] = 0;
+
+                    for (let k = tCh; k < tDis; k++) ss[k] += deltaSoC;
+                }
+            } else if (type === 'grid_to_grid') {
+                if (remChPower[tCh] <= 1e-4 || remDisPower[tDis] <= 1e-4) continue;
+                const maxChargeKw = Math.min(remWdCap[tCh], remChPower[tCh]);
+                const maxDischargeKw = remDisPower[tDis];
+                let maxHeadroom = maxSoc;
+                for (let k = tCh; k < tDis; k++) {
+                    const headroom = maxSoc - (ss[k] + sg[k]);
+                    if (headroom < maxHeadroom) maxHeadroom = headroom;
+                }
+                if (maxHeadroom <= 1e-4) continue;
+
+                const deltaSoC = Math.min(maxChargeKw * chargeGridEff, maxDischargeKw / dischargeEff, maxHeadroom);
+                if (deltaSoC > 1e-4) {
+                    const kwCharged = deltaSoC / chargeGridEff;
+                    const kwDischarged = deltaSoC * dischargeEff;
+
+                    cgr[tCh] += kwCharged;
+                    remWdCap[tCh] -= kwCharged;
+                    remChPower[tCh] -= kwCharged;
+                    remDisPower[tCh] = 0;
+
+                    dgg[tDis] += kwDischarged;
+                    remDisPower[tDis] -= kwDischarged;
+                    remChPower[tDis] = 0;
+
+                    for (let k = tCh; k < tDis; k++) sg[k] += deltaSoC;
+                }
+            }
+        }
+
+        // Commit dei primi `commit` intervalli nella soluzione annuale
+        for (let k = 0; k < commit; k++) {
+            const t = tStart + k;
+            const solVal = solarProfile ? Math.max(0, solarProfile[t]) : 0;
+            const lodVal = loadProfile ? Math.max(0, loadProfile[t]) : 0;
+            const c_pv = cpv[k];
+            const c_grid = cgr[k];
+            const d_gs = dgs[k];
+            const d_gg = dgg[k];
+            const d_ppa = dppa[k];
+            const s_val = s[k];
+            const d_grid = d_gs + d_gg;
+            const p_fed_pv = Math.max(0, solVal - s_val - c_pv);
+
+            const pRid = priceRIDArr[k];
+            const pArb = priceArbArr[k];
+            const pCostGrid = costGridArr[k];
+
+            hourlySoC[t] = ss[k] + sg[k];
+            hourlyCharge[t] = c_pv + c_grid;
+            hourlyDischarge[t] = d_grid + d_ppa;
+            hourlyChargeGrid[t] = c_grid;
+            hourlyChargeSolar[t] = c_pv;
+            hourlyDischargeGrid[t] = d_grid;
+            hourlyDischargePpa[t] = d_ppa;
+            hourlySelfConsSolar[t] = s_val;
+            hourlySelfConsBess[t] = d_ppa;
+            hourlySelfCons[t] = s_val + d_ppa;
+            hourlyGridFeed[t] = p_fed_pv + d_grid;
+            hourlyGridFeedPv[t] = p_fed_pv;
+            hourlyLossesRte[t] = c_pv * (1 - chargeSolarEff) + c_grid * (1 - chargeGridEff) + (d_grid + d_ppa) * ((1 / dischargeEff) - 1);
+            hourlyRevenueRidPure[t] = solVal * pRid;
+            hourlyRevenueRidActual[t] = p_fed_pv * pRid;
+            hourlyRevenueArbitrageGrid[t] = d_gg * pArb;
+            hourlyRevenueTimeshifting[t] = d_gs * pRid;
+            hourlyRevenuePpaPv[t] = s_val * pricePPA;
+            hourlyRevenuePpaBess[t] = d_ppa * pricePPA;
+            hourlyCostWithdrawal[t] = c_grid * pCostGrid;
+            hourlyDischargeArbitrage[t] = d_gg;
+            hourlyDischargeTimeshifting[t] = d_gs;
+        }
+
+        curSs = ss[commit - 1];
+        curSg = sg[commit - 1];
+    }
+
+    let totalUplift = 0;
+    let annualShiftedKwh = 0;
+    for (let t = 0; t < H; t++) {
+        totalUplift += hourlySelfCons[t] * (ppaPrice / 1000)
+            + hourlyRevenueRidActual[t]
+            + hourlyRevenueTimeshifting[t]
+            + hourlyRevenueArbitrageGrid[t]
+            - hourlyCostWithdrawal[t];
+        annualShiftedKwh += hourlyDischarge[t];
     }
 
     return {
@@ -1622,14 +2040,30 @@ function runSensitivityLoop(baseState, config) {
                     gseImbalance: State.inputs.ridImbalanceCost || 0,
                     ppaPrice: ppaPrice
                 };
-                // Motore LP globale (HiGHS) se richiesto, con fallback trasparente su DP
+                // Motore Ottimizzazione BESS (Rolling GME 13:00, Daily Continuo, LP Globale HiGHS, DP Giornaliera)
                 let plantSim = null;
-                if (State.inputs.bessOptimizer === 'lp' && highsSolver && plantBessMwh > 0 && plantBessMw > 0 && plantBessType !== 'none') {
-                    try {
-                        plantSim = simulateBessLP(plantGeneration, plantZonePrices, loadProfile, bessParams);
-                    } catch (lpErr) {
-                        console.warn('[Worker] LP fallita per impianto ' + plant.name + ', fallback DP:', lpErr.message);
-                        plantSim = null;
+                const optMode = State.inputs.bessOptimizer || 'dp';
+                const hasBess = plantBessMwh > 0 && plantBessMw > 0 && plantBessType !== 'none';
+                if (hasBess) {
+                    if (optMode === 'lp' && highsSolver) {
+                        try {
+                            plantSim = simulateBessLP(plantGeneration, plantZonePrices, loadProfile, bessParams);
+                        } catch (lpErr) {
+                            console.warn('[Worker] LP HiGHS fallita per impianto ' + plant.name + ', fallback continuo globale:', lpErr.message);
+                            try {
+                                plantSim = simulateBessContinuous(plantGeneration, plantZonePrices, loadProfile, bessParams, 'global');
+                            } catch (e2) {
+                                plantSim = null;
+                            }
+                        }
+                    } else if (optMode === 'rolling' || optMode === 'daily' || optMode === 'lp') {
+                        try {
+                            const contMode = optMode === 'daily' ? 'daily' : (optMode === 'lp' ? 'global' : 'rolling');
+                            plantSim = simulateBessContinuous(plantGeneration, plantZonePrices, loadProfile, bessParams, contMode);
+                        } catch (contErr) {
+                            console.warn('[Worker] Continuous BESS fallita per impianto ' + plant.name + ', fallback DP:', contErr.message);
+                            plantSim = null;
+                        }
                     }
                 }
                 if (!plantSim) plantSim = simulateBessHourly(plantGeneration, plantZonePrices, loadProfile, bessParams);

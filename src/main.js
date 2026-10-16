@@ -3739,7 +3739,7 @@
             p.fundingEquityDate = getVal('input-funding-equity-date') || '';
             p.fundingSociDate = getVal('input-funding-soci-date') || '';
             p.fundingDebtDate = getVal('input-funding-debt-date') || '';
-            p.bessOptimizer = getVal('select-bess-optimizer') || 'dp';
+            p.bessOptimizer = getVal('select-bess-optimizer') || 'rolling';
             p.punDiscountPct = getNum('input-pun-discount-pct', 0.0);
             p.punZonalFloor = getNum('input-pun-zonal-floor', 60.0);
             p.punBearishDecayRate = getNum('input-pun-bearish-decay-rate', 5) / 100;
@@ -3873,7 +3873,7 @@
             setVal('input-exit-value-mwp', p.exitValuePerMwp);
             setVal('input-exit-ev', p.exitEnterpriseValue);
             setVal('select-price-scenario-type', p.priceScenarioType || 'base');
-            setVal('select-bess-optimizer', p.bessOptimizer || 'dp');
+            setVal('select-bess-optimizer', p.bessOptimizer || 'rolling');
             setVal('input-pun-discount-pct', p.punDiscountPct !== undefined ? p.punDiscountPct : 0);
             setVal('input-pun-zonal-floor', p.punZonalFloor !== undefined ? p.punZonalFloor : 60);
             setVal('input-pun-bearish-decay-rate', p.punBearishDecayRate !== undefined ? p.punBearishDecayRate * 100 : 5);
