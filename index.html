@@ -10,6 +10,23 @@
     <!-- Tailwind CSS: Play CDN 3.4.17 vendored localmente (cdn.tailwindcss.com non invia header CORS:
          SRI impossibile da remoto; same-origin = integrità garantita + offline PWA) -->
     <script src="./vendor/tailwind-3.4.17.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            350: '#b0bccb',
+                            450: '#7b8ba1',
+                            650: '#3d4d63',
+                            750: '#293548',
+                            850: '#151e2e'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
     <!-- FontAwesome Icons -->
@@ -25,7 +42,7 @@
     <!-- Supabase JS Client (versione pinnata + SRI) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous"></script>
     <script src="./supabase_config.js"></script>
-    <script src="./src/excelExport.js?v=140"></script>
+    <script src="./src/excelExport.js?v=147"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
         body {
@@ -677,7 +694,7 @@
                         </button>
                     </div>
                 </div>
-                <div id="dq-summary" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+                <div id="dq-summary-dash" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
                 <div class="overflow-auto max-h-[260px] rounded-xl border border-slate-850">
                     <table class="w-full text-[10px]">
                         <thead class="sticky top-0 bg-[#0b0f19] z-10">
@@ -898,6 +915,7 @@
                                     <option value="relazione_tecnica">Relazione Tecnica & Descrittiva (Impianti e Consumi)</option>
                                     <option value="conto_economico">Conto Economico SPV (20 Anni)</option>
                                     <option value="rendiconto_finanziario">Rendiconto Finanziario SPV (CFADS & Waterfall)</option>
+                                    <option value="stato_patrimoniale">Stato Patrimoniale Civilistico (SPV & Holding)</option>
                                     <option value="bilancio_holding">Bilancio & Rendiconto Holding (HoldCo Level)</option>
                                     <option value="piano_ammortamento">Piano Ammortamento Debito (Senior + Soci + PD)</option>
                                     <option value="struttura_finanziaria">Struttura Finanziaria & Fonti/Impieghi</option>
@@ -3137,7 +3155,7 @@
                     </div>
 
                     <!-- Sezione Quota Fissa e Cap MASE -->
-                    <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4 col-span-2">
+                    <div class="bg-slate-900/40 border border-slate-850 p-5 rounded-2xl space-y-4 lg:col-span-2">
                         <div class="flex items-center space-x-2 border-b border-slate-800 pb-2.5 mb-4">
                             <i class="fa-solid fa-award text-yellow-400 text-sm"></i>
                             <h3 class="font-bold text-white text-xs tracking-wide uppercase">Incentivo MASE (Quota Fissa e Cap) per Taglia</h3>
@@ -3422,6 +3440,35 @@
                 </div>
             </section>
 
+            <!-- Sezione B-bis: Stato Patrimoniale Civilistico SPV (ex Art. 2424 c.c.) -->
+            <section id="card-pl-section-b-bis" class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
+                <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 pb-4 gap-4">
+                    <div>
+                        <h3 class="font-bold text-white text-base tracking-tight flex items-center space-x-2">
+                            <span class="px-2.5 py-0.5 bg-teal-500/10 text-teal-400 rounded text-[10px] border border-teal-500/20 uppercase tracking-wider font-bold">Sezione B-bis</span>
+                            <span>Stato Patrimoniale Civilistico SPV (ex Art. 2424 c.c.)</span>
+                        </h3>
+                        <p class="text-[11px] text-slate-400">Immobilizzazioni materiali nette, crediti commerciali/erariali, disponibilità liquide, patrimonio netto, fondi imposte differite e debiti finanziari/commerciali con quadratura Attivo = Passivo + PN.</p>
+                    </div>
+                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center select-none">
+                        <i class="fa-solid fa-arrows-left-right mr-1.5 text-slate-400"></i> Trascina lateralmente per scorrere gli anni
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto sync-scroll premium-scrollbar rounded-xl border border-slate-800 bg-[#020617]">
+                    <table class="w-max min-w-full text-left text-[11px] whitespace-nowrap" style="table-layout: fixed; border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-b-bis">
+                        <thead>
+                            <tr class="bg-[#020617] text-slate-300 uppercase font-semibold text-[9px] tracking-wider border-b border-slate-800" id="pl-header-b-bis">
+                                <!-- JS Injected -->
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/40" id="pl-body-b-bis">
+                            <!-- JS Injected -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- Sezione C: Conto Economico Civilistico Holding (HoldCo Level) -->
             <section id="card-pl-section-c" class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
                 <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 pb-4 gap-4">
@@ -3480,6 +3527,35 @@
                 </div>
             </section>
 
+            <!-- Sezione D-bis: Stato Patrimoniale Civilistico Holding (HoldCo Level) -->
+            <section id="card-pl-section-d-bis" class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
+                <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 pb-4 gap-4">
+                    <div>
+                        <h3 class="font-bold text-white text-base tracking-tight flex items-center space-x-2">
+                            <span class="px-2.5 py-0.5 bg-violet-500/10 text-violet-400 rounded text-[10px] border border-violet-500/20 uppercase tracking-wider font-bold">Sezione D-bis</span>
+                            <span>Stato Patrimoniale Civilistico Holding (HoldCo Level)</span>
+                        </h3>
+                        <p class="text-[11px] text-slate-400">Partecipazioni in SPV, crediti per finanziamento soci fruttifero, liquidità, patrimonio netto (Sponsor + Preferred Equity) e passività finanziarie Private Debt / imposte con quadratura Attivo = Passivo + PN.</p>
+                    </div>
+                    <div class="text-xs text-slate-500 italic bg-slate-950/50 px-3 py-1.5 rounded-lg border border-slate-800 self-start md:self-center select-none">
+                        <i class="fa-solid fa-arrows-left-right mr-1.5 text-slate-400"></i> Trascina lateralmente per scorrere gli anni
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto sync-scroll premium-scrollbar rounded-xl border border-slate-800 bg-[#020617]">
+                    <table class="w-max min-w-full text-left text-[11px] whitespace-nowrap" style="table-layout: fixed; border-collapse: separate; border-spacing: 0;" id="table-pl-matrix-d-bis">
+                        <thead>
+                            <tr class="bg-[#020617] text-slate-300 uppercase font-semibold text-[9px] tracking-wider border-b border-slate-800" id="pl-header-d-bis">
+                                <!-- JS Injected -->
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/40" id="pl-body-d-bis">
+                            <!-- JS Injected -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- Full 20-Year Debt Schedule -->
             <section class="bg-[#0b0f19] border border-slate-850 p-6 rounded-2xl shadow-xl space-y-4">
                 <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 pb-4 gap-4">
@@ -3512,10 +3588,10 @@
         <!-- Tab 6: Consumi & PPA -->
         <!-- ═══════════════════════════════════════════════════════════════ -->
         <div id="tab-stabilimenti" class="tab-content">
-            <div class="grid grid-cols-12 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
                 <!-- LEFT: Active Stabilimenti Table -->
-                <div class="col-span-4 space-y-4">
+                <div class="lg:col-span-4 space-y-4">
                     <!-- KPI Summary Card -->
                     <div class="bg-[#0b0f19] border border-slate-800 rounded-2xl p-5 space-y-3">
                         <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider" id="stab-kpi-title">Riepilogo Portfolio Consumi / PPA / CER</h4>
@@ -3559,7 +3635,7 @@
                 </div>
 
                 <!-- RIGHT: Add/Edit Form -->
-                <div class="col-span-8">
+                <div class="lg:col-span-8">
                     <div class="bg-[#0b0f19] border border-slate-800 rounded-2xl overflow-hidden">
                         <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
                             <div class="flex items-center space-x-2">
@@ -3868,9 +3944,9 @@
                     </table>
                 </div>
                 <div class="mt-3 text-[10px] text-slate-500 flex items-center space-x-4">
-                    <span>\uD83D\uDFE2 Online (attivit\u00E0 &lt; 1h)</span>
-                    <span>\uD83D\uDFE1 Sessione valida ma inattiva</span>
-                    <span>\u26AB Offline</span>
+                    <span>🟢 Online (attività &lt; 1h)</span>
+                    <span>🟡 Sessione valida ma inattiva</span>
+                    <span>⚫ Offline</span>
                 </div>
             </div>
         </div>
@@ -4088,7 +4164,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=146"></script>
+    <script src="./src/main.js?v=147"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

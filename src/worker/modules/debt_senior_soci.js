@@ -31,20 +31,28 @@ export function generateSeniorDebtSchedule({
     const periodicPmt = calculateFrenchAnnuity(currentBalance, periodicRate, periods);
 
     for (let m = 1; m <= totalMonths; m++) {
+        const beginBal = currentBalance;
         let principalRepayment = 0;
-        let interestPayment = calculateMonthlyInterestAct360(currentBalance, annualRate, 30);
+        let interestPayment = 0;
 
-        if (m > gracePeriodMonths) {
-            // Fuori dalla grazia: rimborso quota capitale alla frequenza stabilita
+        if (m <= gracePeriodMonths) {
+            if (m % frequencyMonths === 0 || frequencyMonths === 1) {
+                interestPayment = beginBal * periodicRate;
+            }
+        } else {
             if ((m - gracePeriodMonths) % frequencyMonths === 0) {
-                principalRepayment = Math.min(currentBalance, periodicPmt - (currentBalance * periodicRate));
-                currentBalance = Math.max(0, currentBalance - principalRepayment);
+                interestPayment = beginBal * periodicRate;
+                const isLastPeriod = (m + frequencyMonths > totalMonths);
+                principalRepayment = isLastPeriod
+                    ? beginBal
+                    : Math.min(beginBal, Math.max(0, periodicPmt - interestPayment));
+                currentBalance = Math.max(0, beginBal - principalRepayment);
             }
         }
 
         schedule.push({
             month: m,
-            beginningBalance: currentBalance + principalRepayment,
+            beginningBalance: beginBal,
             principalRepayment,
             interestPayment,
             debtService: principalRepayment + interestPayment,

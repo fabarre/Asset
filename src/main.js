@@ -1223,21 +1223,24 @@
         }
 
         // ═══ D4: Qualità Dati & Copertura ═══
-        window.computeDataQuality = function() {
+        function computeDataQuality() {
             const checks = [];
-            const add = (area, name, status, value, detail) => checks.push({ area, check: name, status, value, detail });
+            const add = (area, name, status, value, detail) => {
+                const normStatus = status === 'err' ? 'error' : status;
+                checks.push({ area, section: area, check: name, name, status: normStatus, value: value || '—', detail: detail || '' });
+            };
             const ZONES = ['NORD', 'CNOR', 'CSUD', 'SUD', 'SICI', 'SARD'];
             const fmtInt = (v) => (v === null || v === undefined) ? '—' : Number(v).toLocaleString('it-IT');
 
             // 1. Listini PUN zonali: copertura 8760h, NaN, negativi, ore a zero
             ZONES.forEach(z => {
                 const arr = (State.zonalPun && State.zonalPun[z]) || null;
-                if (!arr || arr.length === 0) { add('Listini PUN', `Copertura ${z}`, 'err', 'assente', 'Listino non caricato'); return; }
+                if (!arr || arr.length === 0) { add('Listini PUN', `Copertura ${z}`, 'error', 'assente', 'Listino non caricato'); return; }
                 let nan = 0, neg = 0, zero = 0;
                 for (let i = 0; i < arr.length; i++) { const v = arr[i]; if (v === null || isNaN(v)) nan++; else if (v < 0) neg++; else if (v === 0) zero++; }
                 const cov = arr.length;
-                if (cov < 8760) add('Listini PUN', `Copertura ${z}`, 'err', fmtInt(cov) + '/8760', 'Ore mancanti: ' + (8760 - cov));
-                else if (nan > 0 || neg > 0) add('Listini PUN', `Valori anomali ${z}`, 'err', nan + ' NaN, ' + neg + ' neg.', 'Correggere i valori non validi');
+                if (cov < 8760) add('Listini PUN', `Copertura ${z}`, 'error', fmtInt(cov) + '/8760', 'Ore mancanti: ' + (8760 - cov));
+                else if (nan > 0 || neg > 0) add('Listini PUN', `Valori anomali ${z}`, 'error', nan + ' NaN, ' + neg + ' neg.', 'Correggere i valori non validi');
                 else if (zero > 168) add('Listini PUN', `Ore a zero ${z}`, 'warn', fmtInt(zero) + ' ore', 'Possibile dato mancante');
                 else add('Listini PUN', `Copertura ${z}`, 'ok', fmtInt(cov) + '/8760', zero > 0 ? (zero + ' ore a zero') : 'Completo');
             });
@@ -1246,31 +1249,33 @@
             (State.plants || []).forEach(p => {
                 if (p.enabled === false) return;
                 const g = p.generation;
-                if (!g || g.length === 0) { add('Produzione', `Curva ${p.name}`, 'err', 'assente', 'Nessuna curva di generazione'); return; }
+                if (!g || g.length === 0) { add('Impianti', `Curva ${p.name}`, 'error', 'assente', 'Nessuna curva di generazione'); return; }
                 let nan = 0, neg = 0, sum = 0;
                 for (let i = 0; i < g.length; i++) { const v = g[i]; if (v === null || isNaN(v)) nan++; else { if (v < 0) neg++; else sum += v; } }
                 const mwh = sum / 1000;
                 const capMw = (p.capacity || 0) / 1000;
-                const yieldKwhKw = capMw > 0 ? (mwh / capMw) : 0; // MWh / MW = kWh/kW
-                if (g.length < 8760) add('Produzione', `Copertura ${p.name}`, 'err', fmtInt(g.length) + '/8760', 'Ore mancanti: ' + (8760 - g.length));
-                else if (nan > 0 || neg > 0) add('Produzione', `Valori anomali ${p.name}`, 'err', nan + ' NaN, ' + neg + ' neg.', 'Correggere la curva');
-                else if (mwh <= 0) add('Produzione', `Produzione ${p.name}`, 'err', '0 MWh', 'Produzione annua nulla');
-                else if (yieldKwhKw < 700 || yieldKwhKw > 2300) add('Produzione', `Resa ${p.name}`, 'warn', fmtInt(yieldKwhKw) + ' kWh/kW', 'Fuori range tipico 700-2300');
-                else add('Produzione', `Curva ${p.name}`, 'ok', fmtInt(mwh) + ' MWh', fmtInt(yieldKwhKw) + ' kWh/kW');
+                const yieldKwhKw = capMw > 0 ? (mwh / capMw) : 0;
+                const isBessOnly = (p.capacity || 0) <= 0 && (p.bessMwh || 0) > 0;
+                if (g.length < 8760) add('Impianti', `Copertura ${p.name}`, 'error', fmtInt(g.length) + '/8760', 'Ore mancanti: ' + (8760 - g.length));
+                else if (nan > 0 || neg > 0) add('Impianti', `Valori anomali ${p.name}`, 'error', nan + ' NaN, ' + neg + ' neg.', 'Correggere la curva');
+                else if (isBessOnly) add('Impianti', `Config ${p.name}`, 'ok', fmtInt(p.bessMwh) + ' MWh BESS', 'Impianto BESS Standalone');
+                else if (mwh <= 0) add('Impianti', `Produzione ${p.name}`, 'error', '0 MWh', 'Produzione annua nulla');
+                else if (yieldKwhKw < 700 || yieldKwhKw > 2300) add('Impianti', `Resa ${p.name}`, 'warn', fmtInt(Math.round(yieldKwhKw)) + ' kWh/kWp', 'Fuori range tipico 700-2300');
+                else add('Impianti', `Curva ${p.name}`, 'ok', fmtInt(Math.round(mwh)) + ' MWh', fmtInt(Math.round(yieldKwhKw)) + ' kWh/kWp');
             });
 
             // 3. Carichi stabilimenti
             (State.stabilimenti || []).forEach(s => {
                 if (s.enabled === false) return;
                 const l = s.load;
-                if (!l || l.length === 0) { add('Carichi', `Carico ${s.name}`, 'err', 'assente', 'Nessuna curva di carico'); return; }
-                let nan = 0, neg = 0, sum = 0;
-                for (let i = 0; i < l.length; i++) { const v = l[i]; if (v === null || isNaN(v)) nan++; else { if (v < 0) neg++; else sum += v; } }
+                if (!l || l.length === 0) { add('Stabilimenti', `Carico ${s.name}`, 'error', 'assente', 'Nessuna curva di carico'); return; }
+                let nan = 0, neg = 0, sum = 0, peak = 0;
+                for (let i = 0; i < l.length; i++) { const v = l[i]; if (v === null || isNaN(v)) nan++; else { if (v < 0) neg++; else { sum += v; if (v > peak) peak = v; } } }
                 const mwh = sum / 1000;
-                if (l.length < 8760) add('Carichi', `Copertura ${s.name}`, 'err', fmtInt(l.length) + '/8760', 'Ore mancanti: ' + (8760 - l.length));
-                else if (nan > 0 || neg > 0) add('Carichi', `Valori anomali ${s.name}`, 'err', nan + ' NaN, ' + neg + ' neg.', 'Correggere la curva');
-                else if (mwh <= 0) add('Carichi', `Consumo ${s.name}`, 'warn', '0 MWh', 'Consumo annuo nullo');
-                else add('Carichi', `Carico ${s.name}`, 'ok', fmtInt(mwh) + ' MWh/anno', 'Curva completa');
+                if (l.length < 8760) add('Stabilimenti', `Copertura ${s.name}`, 'error', fmtInt(l.length) + '/8760', 'Ore mancanti: ' + (8760 - l.length));
+                else if (nan > 0 || neg > 0) add('Stabilimenti', `Valori anomali ${s.name}`, 'error', nan + ' NaN, ' + neg + ' neg.', 'Correggere la curva');
+                else if (mwh <= 0) add('Stabilimenti', `Consumo ${s.name}`, 'warn', '0 MWh', 'Consumo annuo nullo');
+                else add('Stabilimenti', `Carico ${s.name}`, 'ok', fmtInt(Math.round(mwh)) + ' MWh/anno', 'Picco ' + fmtInt(Math.round(peak)) + ' kW');
             });
 
             // 4. Quadratura energetica anno 1 (se disponibili risultati)
@@ -1280,56 +1285,113 @@
                 const gen = m.qtySolarGen[idxY1] || 0;
                 const alloc = (m.qtySolarPpa[idxY1] || 0) + (m.qtySolarRid[idxY1] || 0) + (m.qtySolarToBess[idxY1] || 0);
                 const diff = gen > 0 ? Math.abs(gen - alloc) / gen : 0;
-                if (diff > 0.01) add('Quadrature', 'Bilancio energetico Y1', 'err', (diff * 100).toFixed(2) + '%', 'Gen ≠ PPA+RID+toBESS');
+                if (diff > 0.01) add('Quadrature', 'Bilancio energetico Y1', 'error', (diff * 100).toFixed(2) + '%', 'Gen ≠ PPA+RID+toBESS');
                 else add('Quadrature', 'Bilancio energetico Y1', 'ok', (diff * 100).toFixed(2) + '%', 'Generazione = allocazione');
             } else {
                 add('Quadrature', 'Bilancio energetico Y1', 'warn', 'n/d', 'Esegui un calcolo per verificare');
             }
 
-            return checks;
-        };
-
-        window.renderDataQuality = function() {
-            const summary = document.getElementById('dq-summary');
-            const rows = document.getElementById('dq-rows');
-            if (!rows) return;
-            const checks = window.computeDataQuality();
-            const nOk = checks.filter(c => c.status === 'ok').length;
-            const nWarn = checks.filter(c => c.status === 'warn').length;
-            const nErr = checks.filter(c => c.status === 'err').length;
-            if (summary) {
-                summary.innerHTML = `
-                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3 text-center"><div class="text-lg font-black text-slate-200">${checks.length}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Controlli</div></div>
-                    <div class="bg-slate-900/60 border border-emerald-500/30 rounded-xl p-3 text-center"><div class="text-lg font-black text-emerald-400">${nOk}</div><div class="text-[9px] text-emerald-400 uppercase tracking-wider font-bold">OK</div></div>
-                    <div class="bg-slate-900/60 border border-amber-500/30 rounded-xl p-3 text-center"><div class="text-lg font-black text-amber-400">${nWarn}</div><div class="text-[9px] text-amber-400 uppercase tracking-wider font-bold">Avvisi</div></div>
-                    <div class="bg-slate-900/60 border border-rose-500/30 rounded-xl p-3 text-center"><div class="text-lg font-black text-rose-400">${nErr}</div><div class="text-[9px] text-rose-400 uppercase tracking-wider font-bold">Errori</div></div>`;
+            // 5. Quadratura Stato Patrimoniale SPV & Holding
+            if (m && m.bsSpvBalanceCheck && m.bsSpvBalanceCheck.length) {
+                const maxDiffSpv = Math.max(...m.bsSpvBalanceCheck.map(v => Math.abs(v || 0)));
+                add('Quadrature', 'Stato Patrimoniale SPV', maxDiffSpv < 0.05 ? 'ok' : 'error', maxDiffSpv.toFixed(2) + ' €', 'Attivo = Passivo + PN (21 anni)');
             }
-            const badge = { ok: ['OK', 'text-emerald-400 bg-emerald-500/10'], warn: ['AVVISO', 'text-amber-400 bg-amber-500/10'], err: ['ERRORE', 'text-rose-400 bg-rose-500/10'] };
-            rows.innerHTML = checks.map(c => {
-                const b = badge[c.status] || badge.err;
-                const rowCls = c.status === 'err' ? 'bg-rose-950/10' : (c.status === 'warn' ? 'bg-amber-950/10' : '');
-                return `<tr class="${rowCls} border-t border-slate-850/60">
-                    <td class="px-3 py-1.5 text-slate-400 font-semibold">${escapeHtml(c.area)}</td>
-                    <td class="px-3 py-1.5 text-slate-200">${escapeHtml(c.check)}</td>
-                    <td class="px-3 py-1.5 text-center"><span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${b[1]}">${b[0]}</span></td>
-                    <td class="px-3 py-1.5 text-right font-mono text-slate-300">${escapeHtml(c.value)}</td>
-                    <td class="px-3 py-1.5 text-slate-400">${escapeHtml(c.detail)}</td>
-                </tr>`;
-            }).join('');
-        };
+            if (m && m.bsHcBalanceCheck && m.bsHcBalanceCheck.length) {
+                const maxDiffHc = Math.max(...m.bsHcBalanceCheck.map(v => Math.abs(v || 0)));
+                add('Quadrature', 'Stato Patrimoniale Holding', maxDiffHc < 0.05 ? 'ok' : 'error', maxDiffHc.toFixed(2) + ' €', 'Attivo = Passivo + PN (21 anni)');
+            }
+
+            // 6. Sanity configurazione
+            const p = State.inputs || {};
+            if (p.leverage !== undefined && (p.leverage < 0 || p.leverage > 0.95)) add('Config', 'Leva finanziaria', 'warn', `${fmtDec(p.leverage * 100, 0)}%`, 'Fuori range 0-95%');
+            else add('Config', 'Leva finanziaria', 'ok', p.leverage !== undefined ? `${fmtDec(p.leverage * 100, 0)}%` : 'default', 'Range 0-95% regolare');
+
+            const errors = checks.filter(c => c.status === 'error').length;
+            const warnings = checks.filter(c => c.status === 'warn').length;
+            const score = checks.length ? Math.max(0, Math.round(100 * (checks.length - errors - warnings * 0.5) / checks.length)) : 100;
+            return { checks, score, errors, warnings };
+        }
+        window.computeDataQuality = computeDataQuality;
+
+        function renderDataQuality() {
+            const dq = computeDataQuality();
+            State.lastDataQuality = dq;
+            const nOk = dq.checks.length - dq.errors - dq.warnings;
+
+            // 1. Update Dashboard widget (#dq-score, #dq-summary-dash, #dq-body)
+            const scoreEl = document.getElementById('dq-score');
+            const sumDashEl = document.getElementById('dq-summary-dash');
+            const bodyDash = document.getElementById('dq-body');
+            if (scoreEl) {
+                scoreEl.classList.remove('hidden');
+                scoreEl.textContent = `Score ${dq.score}/100`;
+                scoreEl.className = 'text-[10px] font-bold rounded-full px-2.5 py-1 border ' +
+                    (dq.errors > 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                        : dq.warnings > 0 ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30');
+            }
+            if (sumDashEl) {
+                sumDashEl.innerHTML = `
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-emerald-400">${nOk}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Check OK</div></div>
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-amber-400">${dq.warnings}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Warning</div></div>
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-rose-400">${dq.errors}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Errori</div></div>
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-sky-400">${dq.checks.length}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Totale</div></div>`;
+            }
+            if (bodyDash) {
+                const icon = { ok: '<span class="text-emerald-400">✓</span>', warn: '<span class="text-amber-400">⚠</span>', error: '<span class="text-rose-400">✗</span>' };
+                bodyDash.innerHTML = dq.checks.map(c => `
+                    <tr class="border-t border-slate-850/60 ${c.status === 'error' ? 'bg-rose-950/10' : ''}">
+                        <td class="px-2 py-1.5 text-slate-400 font-bold uppercase text-[9px] whitespace-nowrap">${escapeHtml(c.section)}</td>
+                        <td class="px-2 py-1.5 text-slate-200">${escapeHtml(c.name)}</td>
+                        <td class="px-2 py-1.5 text-center">${icon[c.status] || icon.error}</td>
+                        <td class="px-2 py-1.5 text-slate-400">${escapeHtml(c.value !== '—' ? (c.value + ' · ' + c.detail) : c.detail)}</td>
+                    </tr>`).join('');
+            }
+
+            // 2. Update dedicated Data Quality tab (#dq-summary, #dq-rows)
+            const summaryTab = document.getElementById('dq-summary');
+            const rowsTab = document.getElementById('dq-rows');
+            if (summaryTab) {
+                summaryTab.innerHTML = `
+                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-3 text-center"><div class="text-lg font-black text-slate-200">${dq.checks.length}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Controlli</div></div>
+                    <div class="bg-slate-900/60 border border-emerald-500/30 rounded-xl p-3 text-center"><div class="text-lg font-black text-emerald-400">${nOk}</div><div class="text-[9px] text-emerald-400 uppercase tracking-wider font-bold">OK</div></div>
+                    <div class="bg-slate-900/60 border border-amber-500/30 rounded-xl p-3 text-center"><div class="text-lg font-black text-amber-400">${dq.warnings}</div><div class="text-[9px] text-amber-400 uppercase tracking-wider font-bold">Avvisi</div></div>
+                    <div class="bg-slate-900/60 border border-rose-500/30 rounded-xl p-3 text-center"><div class="text-lg font-black text-rose-400">${dq.errors}</div><div class="text-[9px] text-rose-400 uppercase tracking-wider font-bold">Errori</div></div>`;
+            }
+            if (rowsTab) {
+                const badge = { ok: ['OK', 'text-emerald-400 bg-emerald-500/10'], warn: ['AVVISO', 'text-amber-400 bg-amber-500/10'], error: ['ERRORE', 'text-rose-400 bg-rose-500/10'] };
+                rowsTab.innerHTML = dq.checks.map(c => {
+                    const b = badge[c.status] || badge.error;
+                    const rowCls = c.status === 'error' ? 'bg-rose-950/10' : (c.status === 'warn' ? 'bg-amber-950/10' : '');
+                    return `<tr class="${rowCls} border-t border-slate-850/60">
+                        <td class="px-3 py-1.5 text-slate-400 font-semibold">${escapeHtml(c.area)}</td>
+                        <td class="px-3 py-1.5 text-slate-200">${escapeHtml(c.check)}</td>
+                        <td class="px-3 py-1.5 text-center"><span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${b[1]}">${b[0]}</span></td>
+                        <td class="px-3 py-1.5 text-right font-mono text-slate-300">${escapeHtml(c.value)}</td>
+                        <td class="px-3 py-1.5 text-slate-400">${escapeHtml(c.detail)}</td>
+                    </tr>`;
+                }).join('');
+            }
+        }
+        window.renderDataQuality = renderDataQuality;
 
         window.downloadDataQualityCSV = function() {
-            const checks = window.computeDataQuality();
-            const esc = (v) => '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"';
-            let csv = 'Report Qualità Dati;' + new Date().toLocaleString('it-IT') + '\n';
-            csv += 'Area;Controllo;Esito;Valore;Dettaglio\n';
-            checks.forEach(c => { csv += [esc(c.area), esc(c.check), esc(c.status), esc(c.value), esc(c.detail)].join(';') + '\n'; });
-            const blob = new Blob([String.fromCharCode(0xFEFF) + csv], { type: 'text/csv;charset=utf-8' });
+            const dq = State.lastDataQuality || computeDataQuality();
+            const esc = (v) => `"${String(v === null || v === undefined ? '' : v).replace(/"/g, '""')}"`;
+            let csv = 'Report Qualità Dati - ' + new Date().toLocaleString('it-IT') + '\n';
+            csv += `Score;${dq.score}/100;Errori;${dq.errors};Warning;${dq.warnings}\n`;
+            csv += 'Sezione;Check;Stato;Valore;Dettaglio\n';
+            dq.checks.forEach(c => { csv += [esc(c.section), esc(c.name), esc(c.status), esc(c.value), esc(c.detail)].join(';') + '\n'; });
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = 'Report_Qualita_Dati.csv';
-            document.body.appendChild(a); a.click(); a.remove();
+            a.href = url;
+            a.download = 'Report_Qualita_Dati.csv';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
             setTimeout(() => URL.revokeObjectURL(url), 2000);
+            Audit.log('dataquality.export', `score ${dq.score}`);
             if (typeof showToast === 'function') showToast('Report qualità dati esportato.', 'success');
         };
 
@@ -1944,13 +2006,23 @@
             document.getElementById('plant-grid-voltage').value = 'none';
 
             // Trader & network parameters reset
-            document.getElementById('plant-trader-contract-type').value = 'pun_orario';
-            document.getElementById('plant-trader-spread-eur-mwh').value = 0;
-            document.getElementById('plant-trader-disp-eur-mwh').value = 0;
-            document.getElementById('plant-pnrr-contribution-pct').value = 0;
-            document.getElementById('plant-degrade-rid').value = 2.0;
-            document.getElementById('plant-degrade-timeshifting').value = 2.0;
-            document.getElementById('plant-degrade-arbitrage').value = 2.0;
+            const setFieldVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+            setFieldVal('plant-market-type', 'rid');
+            setFieldVal('plant-ferx-tariff', 0);
+            setFieldVal('plant-trader-contract-type', 'pun_orario');
+            setFieldVal('plant-trader-spread-eur-mwh', 0);
+            setFieldVal('plant-trader-disp-eur-mwh', 0);
+            setFieldVal('plant-brp-fee1', 0);
+            setFieldVal('plant-brp-fee1-months', 0);
+            setFieldVal('plant-brp-fee2', 0);
+            setFieldVal('plant-brp-fee2-months', 0);
+            setFieldVal('plant-brp-fee3', 0);
+            setFieldVal('plant-pnrr-contribution-pct', 0);
+            setFieldVal('plant-degrade-rid', 2.0);
+            setFieldVal('plant-degrade-timeshifting', 2.0);
+            setFieldVal('plant-degrade-arbitrage', 2.0);
+            if (typeof togglePlantMarketFields === 'function') togglePlantMarketFields();
+            if (typeof renderCustomCostsUI === 'function') renderCustomCostsUI();
 
             // Earn-out and service contract fields
             document.getElementById('plant-earnout-type').value = 'none';
@@ -3692,7 +3764,9 @@
             p.exitEnterpriseValue = getNum('input-exit-ev', 0);
             if (p.exitMultiple <= 0 && p.exitEnterpriseValue > 0 && window.State && window.State.results && window.State.results.matrix && window.State.results.matrix.ebitda) {
                 const exitYr = parseInt(p.exitOption) || 20;
-                const ebitdaExit = window.State.results.matrix.ebitda[exitYr - 1] || 0;
+                const mRes = window.State.results.matrix;
+                const idxExit = (mRes.years && mRes.years[0] === 0) ? exitYr : (exitYr - 1);
+                const ebitdaExit = mRes.ebitda[idxExit] || 0;
                 if (ebitdaExit > 0) p.exitMultiple = parseFloat((p.exitEnterpriseValue / ebitdaExit).toFixed(2));
                 else p.exitMultiple = 8.0;
             } else if (p.exitMultiple <= 0) {
@@ -3816,6 +3890,7 @@
             setVal('slide-senior-grace-period', p.seniorGracePeriodMonths !== undefined ? p.seniorGracePeriodMonths : 6);
             setVal('slide-construction-months', p.constructionMonths !== undefined ? p.constructionMonths : 6);
             if (typeof syncConstructionMonthsAuto === 'function') syncConstructionMonthsAuto(false);
+            setVal('slide-idc-drawdown', p.idcDrawdownFactor !== undefined ? p.idcDrawdownFactor : 50);
             setVal('slide-soci-equity-pct', p.sociEquityPct !== undefined ? p.sociEquityPct : 100);
             setVal('slide-soci-pct-epc', p.sociPctEpc !== undefined ? p.sociPctEpc : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100));
             setVal('slide-soci-pct-bess', p.sociPctBess !== undefined ? p.sociPctBess : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100));
@@ -3870,9 +3945,39 @@
             setVal('input-exit-multiple', p.exitMultiple !== undefined ? p.exitMultiple : 8.0);
             setVal('input-exit-value-mwp', p.exitValuePerMwp);
             setVal('input-exit-ev', p.exitEnterpriseValue);
-            setVal('input-exit-value-mwp', p.exitValuePerMwp);
-            setVal('input-exit-ev', p.exitEnterpriseValue);
             setVal('select-price-scenario-type', p.priceScenarioType || 'base');
+
+            // CF2 / CF5 / CF10 / CF11 / CF8: lag incasso, imposte, IVA di cassa, date capitali
+            setVal('mc-lag-rid', p.collectionLagRid !== undefined ? p.collectionLagRid : 0);
+            setVal('mc-lag-brp', p.collectionLagBrp !== undefined ? p.collectionLagBrp : 0);
+            setVal('mc-lag-cer', p.collectionLagCer !== undefined ? p.collectionLagCer : 0);
+            setVal('mc-lag-ferx', p.collectionLagFerx !== undefined ? p.collectionLagFerx : 0);
+            setVal('mc-tax-pay-month', p.taxPaymentMonth !== undefined ? p.taxPaymentMonth : 6);
+            setChk('input-vat-enabled', p.vatEnabled !== undefined ? p.vatEnabled : true);
+            setVal('input-vat-settlement', p.vatSettlement || 'mensile');
+            setVal('input-vat-tr-mode', p.vatTrMode || 'ibrido');
+            setVal('input-vat-refund-lag', p.vatRefundLagMonths !== undefined ? p.vatRefundLagMonths : 0);
+            setVal('vat-rev-rid', p.vatRevRid !== undefined ? p.vatRevRid : 0);
+            setVal('vat-rev-ppa', p.vatRevPpa !== undefined ? p.vatRevPpa : 10);
+            setVal('vat-rev-brp', p.vatRevBrp !== undefined ? p.vatRevBrp : 0);
+            setVal('vat-rev-cer', p.vatRevCer !== undefined ? p.vatRevCer : 22);
+            setVal('vat-rev-ferx', p.vatRevFerx !== undefined ? p.vatRevFerx : 0);
+            setVal('vat-capex-epc-fv', p.vatCapexEpcFv !== undefined ? p.vatCapexEpcFv : 10);
+            setVal('vat-capex-epc-bess', p.vatCapexEpcBess !== undefined ? p.vatCapexEpcBess : 22);
+            setVal('vat-capex-connection', p.vatCapexConnection !== undefined ? p.vatCapexConnection : 22);
+            setVal('vat-capex-development', p.vatCapexDevelopment !== undefined ? p.vatCapexDevelopment : 22);
+            setVal('vat-capex-spv', p.vatCapexSpv !== undefined ? p.vatCapexSpv : 0);
+            setVal('vat-capex-land', p.vatCapexLand !== undefined ? p.vatCapexLand : 0);
+            setVal('vat-opex-om-fv', p.vatOpexOmFv !== undefined ? p.vatOpexOmFv : 22);
+            setVal('vat-opex-om-bess', p.vatOpexOmBess !== undefined ? p.vatOpexOmBess : 22);
+            setVal('vat-opex-insurance', p.vatOpexInsurance !== undefined ? p.vatOpexInsurance : 0);
+            setVal('vat-opex-imu', p.vatOpexImu !== undefined ? p.vatOpexImu : 0);
+            setVal('vat-opex-security', p.vatOpexSecurity !== undefined ? p.vatOpexSecurity : 22);
+            setVal('vat-opex-asset-mgmt', p.vatOpexAssetMgmt !== undefined ? p.vatOpexAssetMgmt : 22);
+            setVal('input-funding-equity-date', p.fundingEquityDate || '');
+            setVal('input-funding-soci-date', p.fundingSociDate || '');
+            setVal('input-funding-debt-date', p.fundingDebtDate || '');
+
             setVal('select-bess-optimizer', p.bessOptimizer || 'rolling');
             setVal('input-pun-discount-pct', p.punDiscountPct !== undefined ? p.punDiscountPct : 0);
             setVal('input-pun-zonal-floor', p.punZonalFloor !== undefined ? p.punZonalFloor : 60);
@@ -3926,7 +4031,7 @@
                     csvContent += `${key},${p[key]}\n`;
                 });
                 
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.setAttribute("href", url);
@@ -4950,6 +5055,7 @@
                 name: plantName,
                 capacity: plantCapacityKwp,
                 zone: plantZone,
+                codDate: (document.getElementById('plant-cod-date') || {}).value || null,
                 prodMultiplier: parseFloat((document.getElementById('plant-prod-multiplier') || {}).value) || 1.0,
                 capex: capex,
                 opex: opex,
@@ -4996,6 +5102,11 @@
                 traderContractType: traderContractType,
                 traderSpread: traderSpread,
                 traderDisp: traderDisp,
+                brpFee1: parseFloat((document.getElementById('plant-brp-fee1') || {}).value) || 0,
+                brpFee1Months: parseInt((document.getElementById('plant-brp-fee1-months') || {}).value) || 0,
+                brpFee2: parseFloat((document.getElementById('plant-brp-fee2') || {}).value) || 0,
+                brpFee2Months: parseInt((document.getElementById('plant-brp-fee2-months') || {}).value) || 0,
+                brpFee3: parseFloat((document.getElementById('plant-brp-fee3') || {}).value) || 0,
                 pnrrContributionPct: pnrrContributionPct,
                 marketType: marketType || 'rid',
                 ferxTariff: ferxTariff !== undefined ? ferxTariff : 85,
@@ -5315,12 +5426,19 @@
 
             const marketType = document.getElementById('plant-market-type').value;
             const ferxTariff = parseFloat(document.getElementById('plant-ferx-tariff').value) || 0;
+            const codDate = (document.getElementById('plant-cod-date') || {}).value || null;
+            const prodMultiplier = parseFloat((document.getElementById('plant-prod-multiplier') || {}).value) || 1.0;
+            const brpFee1 = parseFloat((document.getElementById('plant-brp-fee1') || {}).value) || 0;
+            const brpFee1Months = parseInt((document.getElementById('plant-brp-fee1-months') || {}).value) || 0;
+            const brpFee2 = parseFloat((document.getElementById('plant-brp-fee2') || {}).value) || 0;
+            const brpFee2Months = parseInt((document.getElementById('plant-brp-fee2-months') || {}).value) || 0;
+            const brpFee3 = parseFloat((document.getElementById('plant-brp-fee3') || {}).value) || 0;
 
             // ── BESS standalone (senza FV): profilo solare a zero, nessun PVGIS richiesto ──
             if (isBessOnlyCheck && fileInput.files.length === 0 && !window._pvgisApiText) {
                 const newPlant = {
                     id: "plant-" + Date.now(),
-                    name, capacity: cap || 0, zone, capex, opex,
+                    name, capacity: cap || 0, zone, codDate, prodMultiplier, capex, opex,
                     enabled: true,
                     opexOmBess, opexInsurance, opexTaxes, opexSecurity, opexAssetManagement,
                     connectionCost, landType, landCost, developmentCost, spvAcquisitionCost,
@@ -5331,7 +5449,9 @@
                     bessType, bessConnection,
                     earnoutType, earnoutVal, earnoutYears,
                     serviceType, serviceVal, serviceYears,
-                    traderContractType, traderSpread, traderDisp, pnrrContributionPct,
+                    traderContractType, traderSpread, traderDisp,
+                    brpFee1, brpFee1Months, brpFee2, brpFee2Months, brpFee3,
+                    pnrrContributionPct,
                     marketType, ferxTariff,
                     degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct,
                     pvgisLatitude: null, pvgisLongitude: null, pvgisElevation: null,
@@ -6705,8 +6825,56 @@
                     { key: 'pdBulletPayoff', label: '  (-) Payoff Private Debt (Bullet/Residuo) dalla cassa Holding (€)', type: 'minus' },
                     { key: 'exitLimitedLiability', label: '  (+) Limited Liability Holding / Debt Forgiveness PD (se cassa < saldo) (€)', type: 'plus' }
                 ] : []),
-                { key: 'holdcoFCFE', label: 'FCFE - FLUSSO NETTO INVESTITORE (€)', type: 'total-gold' },
+                        { key: 'holdcoFCFE', label: 'FCFE - FLUSSO NETTO INVESTITORE (€)', type: 'total-gold' },
                 { key: 'holdcoFCFECumulated', label: 'FCFE CUMULATO INVESTITORE (€)', type: 'total-gold' }
+            ];
+
+            // ═══ SEZIONE B-BIS: STATO PATRIMONIALE CIVILISTICO SPV (ART. 2424 C.C.) ═══
+            const pnlRowsBBis = [
+                { section: 'ATTIVO — IMPIEGHI PATRIMONIALI SPV (ART. 2424 C.C.)', type: 'title-blue' },
+                { key: 'bsSpvNetFixedAssets', label: 'B) Immobilizzazioni Netti (Impianti FV + BESS + Terreni) (€)', type: 'bold' },
+                { key: 'bsSpvGrossCapex', label: '  (+) Costo Storico Immobilizzazioni Materiali e Immateriali (€)', type: 'detail', parent: 'bsSpvNetFixedAssets' },
+                { key: 'bsSpvAccumDepr', label: '  (-) Fondo Ammortamento Cumulato (€)', type: 'detail', parent: 'bsSpvNetFixedAssets' },
+                { key: 'bsSpvCurrentAssetsTax', label: 'C) Attivo Circolante e Crediti Tributari (€)', type: 'group-header' },
+                { key: 'bsSpvVatReceivable', label: '  (+) Crediti Tributari Erario per IVA (Modello TR / Dichiarazione) (€)', type: 'detail', parent: 'bsSpvCurrentAssetsTax' },
+                { key: 'bsSpvDta', label: '  (+) Attività per Imposte Anticipate (DTA - OIC 25) (€)', type: 'detail', parent: 'bsSpvCurrentAssetsTax' },
+                { key: 'bsSpvTotalLiquidity', label: 'C.IV) Disponibilità Liquide e Conti Riserva SPV (€)', type: 'bold-teal' },
+                { key: 'bsSpvCash', label: '  (+) Disponibilità Liquide Operative / Cassa Vincolata (Cash Trap) (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
+                { key: 'bsSpvDsra', label: '  (+) Conto Riserva Servizio Debito (DSRA) (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
+                { key: 'bsSpvMra', label: '  (+) Fondo Riserva Manutenzione BESS (MRA) (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
+                { key: 'bsSpvTotalAssets', label: 'TOTALE ATTIVO SPV (€)', type: 'total' },
+                { section: 'PASSIVO & PATRIMONIO NETTO SPV (ART. 2424 C.C.)', type: 'section-title' },
+                { key: 'bsSpvTotalEquity', label: 'A) PATRIMONIO NETTO SPV (€)', type: 'bold' },
+                { key: 'bsSpvShareCapital', label: '  I - Capitale Sociale e Riserva Sovrapprezzo Sponsor (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
+                ...(p.peEnabled ? [{ key: 'bsSpvPeCapital', label: '  II - Apporto Patrimoniale Private Equity (Co-Investor) (€)', type: 'detail', parent: 'bsSpvTotalEquity' }] : []),
+                { key: 'bsSpvLegalReserve', label: '  IV - Riserva Legale Cumulata (Art. 2430 c.c.) (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
+                { key: 'bsSpvRetainedEarnings', label: '  VIII - Utili (Perdite) Portati a Nuovo (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
+                { key: 'bsSpvNetProfit', label: '  IX - Utile (Perdita) dell\'Esercizio (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
+                { key: 'bsSpvDtl', label: 'B) Fondo per Imposte Differite (DTL - OIC 25) (€)', type: 'normal' },
+                { key: 'bsSpvTotalLiabilities', label: 'D) DEBITI FINANZIARI E TRIBUTARI SPV (€)', type: 'bold-rose' },
+                { key: 'bsSpvSeniorDebt', label: '  Debito Senior Bancario Residuo (Project Finance) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
+                { key: 'bsSpvSociLoan', label: '  Finanziamento Soci Subordinato Residuo (Sponsor Loan) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
+                ...(p.afEnabled && p.afType === 'convertible' ? [{ key: 'bsSpvAfConvertible', label: '  Strumento Ibrido / Convertibile Residuo (Altra Forma) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' }] : []),
+                { key: 'bsSpvVatPayable', label: '  Debiti Tributari per IVA a Debito da Versare (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
+                { key: 'bsSpvTotalLiabilitiesAndEquity', label: 'TOTALE PASSIVO E PATRIMONIO NETTO SPV (€)', type: 'total' },
+                { key: 'bsSpvBalanceCheck', label: 'CONTROLLO QUADRATURA STATO PATRIMONIALE SPV (Attivo - Passivo & PN) (€)', type: 'bold-teal' }
+            ];
+
+            // ═══ SEZIONE D-BIS: STATO PATRIMONIALE CIVILISTICO HOLDING (ART. 2424 C.C.) ═══
+            const pnlRowsDBis = [
+                { section: 'ATTIVO — IMPIEGHI PATRIMONIALI HOLDING (ART. 2424 C.C.)', type: 'title-blue' },
+                { key: 'bsHcSpvParticipation', label: 'B.III.1) Partecipazioni in Imprese Controllate (Quota SPV) (€)', type: 'bold' },
+                { key: 'bsHcSociLoanReceivable', label: 'B.III.2) Crediti Finanziari vs Controllate (Finanziamento Soci SPV) (€)', type: 'bold' },
+                { key: 'bsHcCash', label: 'C.IV) Disponibilità Liquide Holding (Cassa Cumulata) (€)', type: 'bold-teal' },
+                { key: 'bsHcTotalAssets', label: 'TOTALE ATTIVO HOLDING (€)', type: 'total-gold' },
+                { section: 'PASSIVO & PATRIMONIO NETTO HOLDING (ART. 2424 C.C.)', type: 'section-title' },
+                { key: 'bsHcTotalEquity', label: 'A) PATRIMONIO NETTO HOLDING (€)', type: 'bold' },
+                { key: 'bsHcShareCapital', label: '  I - Capitale Sociale e Versamenti Soci Sponsor (€)', type: 'detail', parent: 'bsHcTotalEquity' },
+                { key: 'bsHcRetainedEarnings', label: '  VIII - Utili (Perdite) Portati a Nuovo (€)', type: 'detail', parent: 'bsHcTotalEquity' },
+                { key: 'bsHcNetProfit', label: '  IX - Utile (Perdita) dell\'Esercizio Holding (€)', type: 'detail', parent: 'bsHcTotalEquity' },
+                ...(p.pdEnabled ? [{ key: 'bsHcPdDebt', label: 'D) Debiti Finanziari: Private Debt / Mezzanine Residuo (€)', type: 'bold-rose' }] : []),
+                { key: 'bsHcTotalLiabilitiesAndEquity', label: 'TOTALE PASSIVO E PATRIMONIO NETTO HOLDING (€)', type: 'total-gold' },
+                { key: 'bsHcBalanceCheck', label: 'CONTROLLO QUADRATURA STATO PATRIMONIALE HOLDING (Attivo - Passivo & PN) (€)', type: 'bold-teal' }
             ];
 
             const renderTableHeader = (headerId) => {
@@ -6722,8 +6890,10 @@
 
             renderTableHeader('pl-header-a');
             renderTableHeader('pl-header-b');
+            renderTableHeader('pl-header-b-bis');
             renderTableHeader('pl-header-c');
             renderTableHeader('pl-header-d');
+            renderTableHeader('pl-header-d-bis');
 
             const renderTableBody = (tbodyId, rows) => {
                 const tbody = document.getElementById(tbodyId);
@@ -6811,8 +6981,10 @@
 
             renderTableBody('pl-body-a', pnlRowsA);
             renderTableBody('pl-body-b', pnlRowsB);
+            renderTableBody('pl-body-b-bis', pnlRowsBBis);
             renderTableBody('pl-body-c', pnlRowsC);
             renderTableBody('pl-body-d', pnlRowsD);
+            renderTableBody('pl-body-d-bis', pnlRowsDBis);
             renderTableHeader('pl-header-kpis');
             renderTableBody('pl-body-kpis', pnlRowsKPIs);
 
@@ -7043,6 +7215,39 @@
                 setCell('bessAugmentationCost', m.bessAugmentationCost ? m.bessAugmentationCost[i] : 0, true, formatMinusEuro);
                 setCell('mraRelease', m.mraRelease ? m.mraRelease[i] : 0, true, formatPlusEuro);
                 setCell('dividendsPaid', m.dividendsPaid[i]);
+
+                // ── SEZIONE B-BIS: STATO PATRIMONIALE CIVILISTICO SPV ──
+                const bsSpvVatRec = m.bsSpvVatReceivable ? m.bsSpvVatReceivable[i] : 0;
+                const bsSpvDtaVal = m.bsSpvDta ? m.bsSpvDta[i] : 0;
+                const bsSpvCashVal = m.bsSpvCash ? m.bsSpvCash[i] : 0;
+                const bsSpvDsraVal = m.bsSpvDsra ? m.bsSpvDsra[i] : 0;
+                const bsSpvMraVal = m.bsSpvMra ? m.bsSpvMra[i] : 0;
+                setCell('bsSpvNetFixedAssets', m.bsSpvNetFixedAssets ? m.bsSpvNetFixedAssets[i] : 0, true, formatEuro);
+                setCell('bsSpvGrossCapex', m.bsSpvGrossCapex ? m.bsSpvGrossCapex[i] : 0, true, formatPlusEuro);
+                setCell('bsSpvAccumDepr', m.bsSpvAccumDepr ? m.bsSpvAccumDepr[i] : 0, true, formatMinusEuro);
+                setCell('bsSpvCurrentAssetsTax', bsSpvVatRec + bsSpvDtaVal, true, formatEuro);
+                setCell('bsSpvVatReceivable', bsSpvVatRec, true, formatPlusEuro);
+                setCell('bsSpvDta', bsSpvDtaVal, true, formatPlusEuro);
+                setCell('bsSpvTotalLiquidity', bsSpvCashVal + bsSpvDsraVal + bsSpvMraVal, true, formatEuro);
+                setCell('bsSpvCash', bsSpvCashVal, true, formatPlusEuro);
+                setCell('bsSpvDsra', bsSpvDsraVal, true, formatPlusEuro);
+                setCell('bsSpvMra', bsSpvMraVal, true, formatPlusEuro);
+                setCell('bsSpvTotalAssets', m.bsSpvTotalAssets ? m.bsSpvTotalAssets[i] : 0, true, formatEuro);
+                setCell('bsSpvTotalEquity', m.bsSpvTotalEquity ? m.bsSpvTotalEquity[i] : 0, true, formatEuro);
+                setCell('bsSpvShareCapital', m.bsSpvShareCapital ? m.bsSpvShareCapital[i] : 0, true, formatEuro);
+                if (m.bsSpvPeCapital) setCell('bsSpvPeCapital', m.bsSpvPeCapital[i], true, formatEuro);
+                setCell('bsSpvLegalReserve', m.bsSpvLegalReserve ? m.bsSpvLegalReserve[i] : 0, true, formatEuro);
+                setCell('bsSpvRetainedEarnings', m.bsSpvRetainedEarnings ? m.bsSpvRetainedEarnings[i] : 0, true, formatEuro);
+                setCell('bsSpvNetProfit', m.bsSpvNetProfit ? m.bsSpvNetProfit[i] : 0, true, formatEuro);
+                setCell('bsSpvDtl', m.bsSpvDtl ? m.bsSpvDtl[i] : 0, true, formatEuro);
+                setCell('bsSpvTotalLiabilities', m.bsSpvTotalLiabilities ? m.bsSpvTotalLiabilities[i] : 0, true, formatEuro);
+                setCell('bsSpvSeniorDebt', m.bsSpvSeniorDebt ? m.bsSpvSeniorDebt[i] : 0, true, formatEuro);
+                setCell('bsSpvSociLoan', m.bsSpvSociLoan ? m.bsSpvSociLoan[i] : 0, true, formatEuro);
+                if (m.bsSpvAfConvertible) setCell('bsSpvAfConvertible', m.bsSpvAfConvertible[i], true, formatEuro);
+                setCell('bsSpvVatPayable', m.bsSpvVatPayable ? m.bsSpvVatPayable[i] : 0, true, formatEuro);
+                setCell('bsSpvTotalLiabilitiesAndEquity', m.bsSpvTotalLiabilitiesAndEquity ? m.bsSpvTotalLiabilitiesAndEquity[i] : 0, true, formatEuro);
+                setCell('bsSpvBalanceCheck', m.bsSpvBalanceCheck ? m.bsSpvBalanceCheck[i] : 0, true, v => Math.abs(v) < 0.05 ? '0 € (OK)' : formatEuro(v));
+
                 // ── SEZIONE C: CONTO ECONOMICO CIVILISTICO HOLDING (HOLDCO LEVEL) ──
                 setCell('ce_holdcoProductionValue', m.holdcoProductionValue ? m.holdcoProductionValue[i] : (m.opexAssetManagement ? m.opexAssetManagement[i] : 0), true, formatEuro);
                 setCell('ce_holdcoAssetManagementReceived', m.opexAssetManagement ? m.opexAssetManagement[i] : 0, true, formatPlusEuro);
@@ -7102,6 +7307,19 @@
                 setCell('exitNetProceedsRow', m.exitNetProceedsRow[i], true, formatPlusEuro);
                 setCell('holdcoFCFE', m.holdcoFCFE[i]);
                 setCell('holdcoFCFECumulated', m.holdcoFCFECumulated[i]);
+
+                // ── SEZIONE D-BIS: STATO PATRIMONIALE CIVILISTICO HOLDING ──
+                setCell('bsHcSpvParticipation', m.bsHcSpvParticipation ? m.bsHcSpvParticipation[i] : 0, true, formatEuro);
+                setCell('bsHcSociLoanReceivable', m.bsHcSociLoanReceivable ? m.bsHcSociLoanReceivable[i] : 0, true, formatEuro);
+                setCell('bsHcCash', m.bsHcCash ? m.bsHcCash[i] : 0, true, formatEuro);
+                setCell('bsHcTotalAssets', m.bsHcTotalAssets ? m.bsHcTotalAssets[i] : 0, true, formatEuro);
+                setCell('bsHcTotalEquity', m.bsHcTotalEquity ? m.bsHcTotalEquity[i] : 0, true, formatEuro);
+                setCell('bsHcShareCapital', m.bsHcShareCapital ? m.bsHcShareCapital[i] : 0, true, formatEuro);
+                setCell('bsHcRetainedEarnings', m.bsHcRetainedEarnings ? m.bsHcRetainedEarnings[i] : 0, true, formatEuro);
+                setCell('bsHcNetProfit', m.bsHcNetProfit ? m.bsHcNetProfit[i] : 0, true, formatEuro);
+                if (m.bsHcPdDebt) setCell('bsHcPdDebt', m.bsHcPdDebt[i], true, formatEuro);
+                setCell('bsHcTotalLiabilitiesAndEquity', m.bsHcTotalLiabilitiesAndEquity ? m.bsHcTotalLiabilitiesAndEquity[i] : 0, true, formatEuro);
+                setCell('bsHcBalanceCheck', m.bsHcBalanceCheck ? m.bsHcBalanceCheck[i] : 0, true, v => Math.abs(v) < 0.05 ? '0 € (OK)' : formatEuro(v));
 
                 setCell('beginningBalance', d.beginningBalance[i], false);
                 setCell('interestAccrued', d.interestAccrued[i], false, formatMinusEuro);
@@ -7293,7 +7511,6 @@
             setTxt('sources-sponsor-equity', formatEuro(sponsorEquity));
             setTxt('sources-total', formatEuro(totalSources));
 
-            // Calculate percentages for the bar
             const seniorDebtPct = totalSources > 0 ? (seniorDebt / totalSources * 100) : 0;
             const pdPct = totalSources > 0 ? (privateDebt / totalSources * 100) : 0;
             const pePct = totalSources > 0 ? (privateEquity / totalSources * 100) : 0;
@@ -7340,124 +7557,6 @@
             renderGmeDashboard();
             renderDataQuality();
         }
-
-        // Render main 20-year charts (operational revenues composition & cashflow/DSCR)
-        // ── D4: Qualità Dati & Copertura ──
-        function computeDataQuality() {
-            const checks = [];
-            const add = (section, name, status, detail) => checks.push({ section, name, status, detail });
-
-            // 1. Listini PUN zonali: copertura 8760, NaN/negativi/zeri
-            ['NORD', 'CNOR', 'CSUD', 'SUD', 'SICI', 'SARD'].forEach(z => {
-                const arr = State.zonalPun && State.zonalPun[z];
-                if (!arr || arr.length !== 8760) { add('Listini PUN', `Copertura oraria ${z}`, 'error', arr ? `${arr.length}/8760 ore` : 'listino assente'); return; }
-                let zero = 0, neg = 0, nan = 0;
-                for (let t = 0; t < 8760; t++) { const v = arr[t]; if (Number.isNaN(v)) nan++; else if (v < 0) neg++; else if (v === 0) zero++; }
-                if (nan > 0 || neg > 0) add('Listini PUN', `Valori anomali ${z}`, 'error', `${nan} NaN, ${neg} negativi`);
-                else if (zero > 24) add('Listini PUN', `Ore a prezzo zero ${z}`, 'warn', `${zero} ore > soglia 24`);
-                else add('Listini PUN', `Copertura ${z}`, 'ok', `8760/8760 ore, ${zero} zeri`);
-            });
-
-            // 2. Curve di produzione impianti attivi
-            (State.plants || []).filter(p => p.enabled !== false).forEach(p => {
-                const g = p.generation;
-                if (!g || g.length !== 8760) { add('Impianti', `Curva ${p.name}`, 'error', g ? `${g.length}/8760 ore` : 'curva assente'); return; }
-                let nan = 0, neg = 0, tot = 0;
-                for (let t = 0; t < 8760; t++) { const v = g[t]; if (Number.isNaN(v)) nan++; else { if (v < 0) neg++; tot += v; } }
-                if (nan > 0 || neg > 0) { add('Impianti', `Curva ${p.name}`, 'error', `${nan} NaN, ${neg} negativi`); return; }
-                const yieldKwhKwp = p.capacity > 0 ? tot / p.capacity : 0;
-                if (tot <= 0) add('Impianti', `Produzione ${p.name}`, 'error', 'produzione annua nulla');
-                else if (yieldKwhKwp < 700 || yieldKwhKwp > 2300) add('Impianti', `Yield ${p.name}`, 'warn', `${Math.round(yieldKwhKwp)} kWh/kWp fuori range 700-2300`);
-                else add('Impianti', `Curva ${p.name}`, 'ok', `${Math.round(tot / 1000).toLocaleString('it-IT')} MWh/a · ${Math.round(yieldKwhKwp)} kWh/kWp`);
-            });
-
-            // 3. Carichi stabilimenti
-            (State.stabilimenti || []).forEach(s => {
-                const l = s.load;
-                if (!l || l.length !== 8760) { add('Stabilimenti', `Carico ${s.name}`, 'error', l ? `${l.length}/8760 ore` : 'curva assente'); return; }
-                let nan = 0, neg = 0, tot = 0, peak = 0;
-                for (let t = 0; t < 8760; t++) { const v = l[t]; if (Number.isNaN(v)) nan++; else { if (v < 0) neg++; tot += v; if (v > peak) peak = v; } }
-                if (nan > 0 || neg > 0) add('Stabilimenti', `Carico ${s.name}`, 'error', `${nan} NaN, ${neg} negativi`);
-                else if (tot <= 0) add('Stabilimenti', `Carico ${s.name}`, 'warn', 'consumo annuo nullo');
-                else add('Stabilimenti', `Carico ${s.name}`, 'ok', `${Math.round(tot / 1000).toLocaleString('it-IT')} MWh/a · picco ${Math.round(peak)} kW`);
-            });
-
-            // 4. Quadratura energetica anno 1 (se disponibili risultati)
-            const m = State.results && State.results.matrix;
-            if (m && m.qtySolarGen && m.qtySolarGen.length) {
-                const idxY1 = (m.years && m.years[0] === 0) ? 1 : 0;
-                const gen = m.qtySolarGen[idxY1] || 0;
-                const bal = (m.qtySolarPpa[idxY1] || 0) + (m.qtySolarRid[idxY1] || 0) + (m.qtySolarToBess[idxY1] || 0);
-                const dev = gen > 0 ? Math.abs(gen - bal) / gen : 0;
-                add('Quadrature', 'Gen = PPA+RID+toBESS (Y1)', dev < 0.01 ? 'ok' : 'error', `${fmtDec(gen, 0)} vs ${fmtDec(bal, 0)} MWh (Δ ${fmtDec(dev * 100, 2)}%)`);
-            } else {
-                add('Quadrature', 'Gen = PPA+RID+toBESS (Y1)', 'warn', 'nessun risultato di calcolo disponibile');
-            }
-
-            // 5. Sanity configurazione
-            const p = State.inputs || {};
-            if (p.leverage !== undefined && (p.leverage < 0 || p.leverage > 0.95)) add('Config', 'Leva finanziaria', 'warn', `${fmtDec(p.leverage * 100, 0)}% fuori range 0-95%`);
-            else add('Config', 'Leva finanziaria', 'ok', p.leverage !== undefined ? `${fmtDec(p.leverage * 100, 0)}%` : 'default');
-
-            const errors = checks.filter(c => c.status === 'error').length;
-            const warnings = checks.filter(c => c.status === 'warn').length;
-            const score = checks.length ? Math.max(0, Math.round(100 * (checks.length - errors - warnings * 0.5) / checks.length)) : 100;
-            return { checks, score, errors, warnings };
-        }
-
-        function renderDataQuality() {
-            const scoreEl = document.getElementById('dq-score');
-            const sumEl = document.getElementById('dq-summary');
-            const body = document.getElementById('dq-body');
-            const dq = computeDataQuality();
-            State.lastDataQuality = dq;
-            if (scoreEl) {
-                scoreEl.classList.remove('hidden');
-                scoreEl.textContent = `Score ${dq.score}/100`;
-                scoreEl.className = 'text-[10px] font-bold rounded-full px-2.5 py-1 border ' +
-                    (dq.errors > 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        : dq.warnings > 0 ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30');
-            }
-            if (sumEl) {
-                const ok = dq.checks.length - dq.errors - dq.warnings;
-                sumEl.innerHTML = `
-                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-emerald-400">${ok}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Check OK</div></div>
-                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-amber-400">${dq.warnings}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Warning</div></div>
-                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-rose-400">${dq.errors}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Errori</div></div>
-                    <div class="bg-slate-900/60 border border-slate-850 rounded-xl p-2.5 text-center"><div class="text-sm font-black text-sky-400">${dq.checks.length}</div><div class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Totale</div></div>`;
-            }
-            if (body) {
-                const icon = { ok: '<span class="text-emerald-400">✓</span>', warn: '<span class="text-amber-400">⚠</span>', error: '<span class="text-rose-400">✗</span>' };
-                body.innerHTML = dq.checks.map(c => `
-                    <tr class="border-t border-slate-850/60 ${c.status === 'error' ? 'bg-rose-950/10' : ''}">
-                        <td class="px-2 py-1.5 text-slate-400 font-bold uppercase text-[9px] whitespace-nowrap">${escapeHtml(c.section)}</td>
-                        <td class="px-2 py-1.5 text-slate-200">${escapeHtml(c.name)}</td>
-                        <td class="px-2 py-1.5 text-center">${icon[c.status]}</td>
-                        <td class="px-2 py-1.5 text-slate-400">${escapeHtml(c.detail)}</td>
-                    </tr>`).join('');
-            }
-        }
-
-        window.downloadDataQualityCSV = function() {
-            const dq = State.lastDataQuality || computeDataQuality();
-            const esc = (v) => `"${String(v === null || v === undefined ? '' : v).replace(/"/g, '""')}"`;
-            let csv = 'Report Qualità Dati - ' + new Date().toLocaleString('it-IT') + '\n';
-            csv += `Score;${dq.score}/100;Errori;${dq.errors};Warning;${dq.warnings}\n`;
-            csv += 'Sezione;Check;Stato;Dettaglio\n';
-            dq.checks.forEach(c => { csv += [esc(c.section), esc(c.name), esc(c.status), esc(c.detail)].join(';') + '\n'; });
-            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'Report_Qualita_Dati.csv';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 2000);
-            Audit.log('dataquality.export', `score ${dq.score}`);
-            showToast('Report qualità dati esportato.', 'success');
-        };
 
         // D2/CF6: tabella + grafico cash flow mensile con vista SPV/Holding,
         // banner fabbisogno, linea zero e export CSV
@@ -11088,12 +11187,12 @@
             const { xVals, kpiVals, targetKpi, config } = results;
             const xLabel = getVarLabel(config.xVar) + (['wacc','inflation','euribor'].includes(config.xVar) ? ' (Abs %)' : ' (Rel %)');
             
-            safeDestroyChart('sens-chart', null);
+            safeDestroyChart('sens-chart', State.sensChartInstance);
             let html = '<div class="w-full h-full relative" style="min-height:300px"><canvas id="sens-chart"></canvas></div>';
             container.innerHTML = html;
 
             const ctx = document.getElementById('sens-chart').getContext('2d');
-            new Chart(ctx, {
+            State.sensChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: xVals.map(v => v > 0 ? '+'+v+'%' : v+'%'),
@@ -11387,7 +11486,9 @@ window.syncExitFields = function(source, isTyping) {
     
     if (window.State.results && window.State.results.matrix && window.State.results.matrix.ebitda) {
         if(exitYear > 0 && exitYear <= 20) {
-            ebitdaExit = window.State.results.matrix.ebitda[exitYear - 1] || 0;
+            const mRes = window.State.results.matrix;
+            const idxExit = (mRes.years && mRes.years[0] === 0) ? exitYear : (exitYear - 1);
+            ebitdaExit = mRes.ebitda[idxExit] || 0;
         }
     }
     
@@ -11503,12 +11604,13 @@ window.REPORT_DESCRIPTIONS = {
     relazione_tecnica: 'Descrizione fisica e tecnica degli impianti (FV e Storage BESS), dettaglio inverter e consumi/utenze sottese (PPA/CER).',
     conto_economico: 'Conto Economico SPV completo a 20 anni: ricavi, OPEX, EBITDA, ammortamenti, interessi (senior/soci/PD/AF), EBT, imposte (IRES+IRAP, Art.96 TUIR), utile netto. Formato landscape tabellare.',
     rendiconto_finanziario: 'Bridge CFADS (da utile netto a cassa disponibile ante debito), servizio debito senior, cascata distribuzione SPV->HoldCo (waterfall) con Private Debt e Private Equity. Formato landscape.',
-    bilancio_holding: 'Bilancio civilistico e rendiconto finanziario della Holding (HoldCo Level): conto economico con proventi da partecipazioni, proventi finanziari, ricavi per servizi, OPEX, imposte e rendiconto con raccordo utile, incassi patrimoniali, debito e FCFE. Formato landscape.',
+    stato_patrimoniale: 'Stato Patrimoniale civilistico (Art. 2424 c.c. / OIC 12) di SPV e Holding: immobilizzazioni nette, crediti/debiti commerciali e finanziari, cassa libera/vincolata, patrimonio netto e quadratura Attivo = Passivo + PN. Formato landscape.',
+    bilancio_holding: 'Bilancio civilistico, stato patrimoniale e rendiconto finanziario della Holding (HoldCo Level): conto economico con proventi da partecipazioni, proventi finanziari, ricavi per servizi, OPEX, imposte, stato patrimoniale e rendiconto con raccordo utile, incassi patrimoniali, debito e FCFE. Formato landscape.',
     piano_ammortamento: 'Piano ammortamento dettagliato: Senior Debt bancario, Finanziamento Soci, Private Debt (con modalità bullet PIK / ammortamento / interessi annuali). DSCR annuo. Formato landscape.',
     struttura_finanziaria: 'Struttura del capitale: fonti/impieghi, breakdown CAPEX (EPC, BESS, connessione, land, sviluppo, SPV), stratificazione equity (Senior/PD/PE/Soci/Sponsor Equity), leverage ratio.',
     exit_valutazione: 'Analisi exit: Enterprise Value (multiplo EBITDA), payoff debito senior + PD bullet, quota Private Equity, costi Altra Forma, PEX tax, net proceeds Sponsor, MOIC e multiplo realizzato.',
     sensibilita: 'Analisi di sensibilità 1D/2D (tornado) su IRR / NPV / DSCR al variare di CAPEX, OPEX, WACC, inflazione, EURIBOR, PUN, importo PD/PE. Evidenzia variabili critiche.',
-    full_due_diligence: 'Report completo di due diligence bancaria: executive summary + CE + RF + ammortamento + struttura + exit. Documento multi-pagina per investment committee.'
+    full_due_diligence: 'Report completo di due diligence bancaria: executive summary + CE + RF + Stato Patrimoniale + ammortamento + struttura + exit. Documento multi-pagina per investment committee.'
 };
 
 // Aggiorna la descrizione del report al cambio del menu a tendina
@@ -11714,7 +11816,7 @@ window.saveBranding = async function() {
     b.tagline = (tEl ? tEl.value : '').trim().substring(0, 250);
     if (!supabaseClient) { showToast('Database non connesso: branding non persistito.', 'warning'); return; }
     try {
-        await supabaseClient.from('simulation_config').delete().like('parameter_key', 'brand::logo::%');
+        await supabaseClient.from('simulation_config').delete().like('parameter_key', 'brand::logo::%').eq('user_id', currentUserId());
         const rows = [
             { parameter_key: 'brand::company', parameter_value: b.company, user_id: currentUserId() },
             { parameter_key: 'brand::tagline', parameter_value: b.tagline, user_id: currentUserId() },
@@ -12126,7 +12228,7 @@ window.addCapexPayment = async function() {
 
 // Persistenza su simulation_config (chiavi chunkate capexpay::<pid>::<i>)
 async function persistCapexPaymentsToDb(payments) {
-    await supabaseClient.from('simulation_config').delete().like('parameter_key', 'capexpay::%');
+    await supabaseClient.from('simulation_config').delete().like('parameter_key', 'capexpay::%').eq('user_id', currentUserId());
     const rows = [];
     Object.keys(payments || {}).forEach(pid => {
         const json = JSON.stringify(payments[pid] || []);
@@ -12382,7 +12484,7 @@ window.addOpexEvent = async function() {
 
 // Persistenza su simulation_config (chiavi chunkate opexev::<pid>::<i>)
 async function persistOpexEventsToDb(events) {
-    await supabaseClient.from('simulation_config').delete().like('parameter_key', 'opexev::%');
+    await supabaseClient.from('simulation_config').delete().like('parameter_key', 'opexev::%').eq('user_id', currentUserId());
     const rows = [];
     Object.keys(events || {}).forEach(pid => {
         const json = JSON.stringify(events[pid] || []);
@@ -12658,6 +12760,7 @@ window.generateReport = async function(reportType) {
             case 'relazione_tecnica':       _repRelazioneTecnica(doc); filename = 'Relazione_Tecnica.pdf'; break;
             case 'conto_economico':         doc = _repContoEconomico(doc); filename = 'Conto_Economico_SPV.pdf'; break;
             case 'rendiconto_finanziario':  doc = _repRendicontoFinanziario(doc); filename = 'Rendiconto_Finanziario_SPV.pdf'; break;
+            case 'stato_patrimoniale':      doc = _repStatoPatrimoniale(doc); filename = 'Stato_Patrimoniale_SPV_Holding.pdf'; break;
             case 'bilancio_holding':        doc = _repBilancioHolding(doc); filename = 'Bilancio_Rendiconto_Holding.pdf'; break;
             case 'piano_ammortamento':      doc = _repPianoAmmortamento(doc); filename = 'Piano_Ammortamento_Debito.pdf'; break;
             case 'struttura_finanziaria':   _repStrutturaFinanziaria(doc); filename = 'Struttura_Finanziaria.pdf'; break;
@@ -13030,6 +13133,20 @@ function _repRendicontoFinanziario(doc) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// REPORT 3.2: STATO PATRIMONIALE SPV & HOLDING
+// ═══════════════════════════════════════════════════════════════════
+function _repStatoPatrimoniale(doc) {
+    doc = _landscapeDoc();
+    _pdfHeader(doc, 'Stato Patrimoniale SPV - Art. 2424 c.c. / OIC 12', 'Report N. 03-bis');
+    _repStatoPatrimonialeSpvInline(doc, 30);
+
+    doc.addPage('a4', 'landscape');
+    _pdfHeader(doc, 'Stato Patrimoniale Holding - Art. 2424 c.c. / OIC 12', 'Report N. 03-bis');
+    _repStatoPatrimonialeHoldingInline(doc, 30);
+    return doc;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // REPORT 3.5: BILANCIO & RENDICONTO FINANZIARIO HOLDING
 // ═══════════════════════════════════════════════════════════════════
 function _repBilancioHolding(doc) {
@@ -13041,6 +13158,10 @@ function _repBilancioHolding(doc) {
     doc.addPage('a4', 'landscape');
     _pdfHeader(doc, 'Rendiconto Finanziario Holding & Flusso Netto Investitore', 'Report N. 04');
     _repRendicontoFinanziarioHoldingInline(doc, 30);
+
+    doc.addPage('a4', 'landscape');
+    _pdfHeader(doc, 'Stato Patrimoniale Civilistico Holding - HoldCo Level', 'Report N. 04');
+    _repStatoPatrimonialeHoldingInline(doc, 30);
     return doc;
 }
 
@@ -13055,7 +13176,7 @@ function _repPianoAmmortamento(doc) {
     const exitOption = p && p.exitOption ? p.exitOption : (document.getElementById('input-exit-option') ? document.getElementById('input-exit-option').value : null);
     let exitYear = (exitOption && exitOption !== 'none') ? parseInt(exitOption) : 20;
     if (isNaN(exitYear) || exitYear < 1) exitYear = 20;
-    const years = (d.years || []).slice(0, exitYear);
+    const years = (d.years || []).slice(0, exitYear + 1);
     const fmt = _fmtEFull;
     // Sezione 1: Senior
     y = _sectionTitleLS(doc, '1. DEBITO BANCARIO SPV - Project Finance (Senior Debt)', y);
@@ -13257,14 +13378,15 @@ function _repExitValutazione(doc) {
     _pdfHeader(doc, 'Report Exit & Valutazione', 'Report N. 06');
     let y = 32;
     const exitYear = (p.exitOption && p.exitOption !== 'none') ? parseInt(p.exitOption) : 20;
-    const ev = (m.exitEnterpriseValue || [])[exitYear - 1] || 0;
-    const debtPayoff = (m.exitDebtPayoff || [])[exitYear - 1] || 0;
-    const pdPayoff = (m.pdBulletPayoff || [])[exitYear - 1] || 0;
-    const peShare = (m.peExitShare || [])[exitYear - 1] || 0;
-    const afCost = (m.afExitCost || [])[exitYear - 1] || 0;
-    const pexTax = (m.exitPexTaxRow || [])[exitYear - 1] || 0;
-    const netProceeds = (m.exitNetProceedsRow || [])[exitYear - 1] || 0;
-    const ebitdaExit = (m.ebitda || [])[exitYear - 1] || 0;
+    const idxExit = (m.years && m.years[0] === 0) ? exitYear : (exitYear - 1);
+    const ev = (m.exitEnterpriseValue || [])[idxExit] || 0;
+    const debtPayoff = (m.exitDebtPayoff || [])[idxExit] || 0;
+    const pdPayoff = (m.pdBulletPayoff || [])[idxExit] || 0;
+    const peShare = (m.peExitShare || [])[idxExit] || 0;
+    const afCost = (m.afExitCost || [])[idxExit] || 0;
+    const pexTax = (m.exitPexTaxRow || [])[idxExit] || 0;
+    const netProceeds = (m.exitNetProceedsRow || [])[idxExit] || 0;
+    const ebitdaExit = (m.ebitda || [])[idxExit] || 0;
 
     y = _sectionTitle(doc, '1. Valutazione Exit (Anno ' + exitYear + ')', y);
     doc.autoTable({
@@ -13305,7 +13427,7 @@ function _repExitValutazione(doc) {
             ['Mezzi Propri investiti Sponsor (Equity + Fin. Soci)', _fmtEFull(totalSponsorFunds)],
             ...((r.initialShareholderLoan || 0) > 0 ? [['  di cui: Finanziamento Soci', _fmtEFull(r.initialShareholderLoan || 0)]] : []),
             ...((r.equityAmount || 0) > 0 ? [['  di cui: Capitale Sociale (Pure Equity)', _fmtEFull(r.equityAmount || 0)]] : []),
-            ['Totale FCFE HoldCo cumulato (fino a exit)', _fmtEFull((m.holdcoFCFE || []).slice(0, exitYear).reduce((a, b) => a + (b || 0), 0))],
+            ['Totale FCFE HoldCo cumulato (fino a exit)', _fmtEFull((m.holdcoFCFE || []).slice(0, idxExit + 1).reduce((a, b) => a + (b || 0), 0))],
             ['Net Proceeds Exit', _fmtEFull(netProceeds)],
             ['MOIC (Multiplo su investito)', _fmtX(moic)],
             ['IRR Equity HoldCo', _fmtPct(r.calculatedIrr)],
@@ -13462,7 +13584,7 @@ function _repFullDueDiligence(doc) {
     doc.text(window._currentProjectName || 'Progetto New Green Deal', 14, y);
     y += 14;
     doc.setFontSize(9);
-    const intro = 'Documento di due diligence integrato per valutazione di operazioni M&A nel settore rinnovabili (FV + BESS) in struttura di project finance. Include: executive summary, struttura finanziaria, conto economico SPV, rendiconto finanziario con waterfall, piano di ammortamento (senior + soci + private debt), analisi exit e valutazione. I parametri finanziari esterni (Private Debt, Private Equity, Altra Forma) sono integrati nel modello waterfall e fiscale.';
+    const intro = 'Documento di due diligence integrato per valutazione di operazioni M&A nel settore rinnovabili (FV + BESS) in struttura di project finance. Include: executive summary, struttura finanziaria, conto economico SPV, rendiconto finanziario con waterfall, stato patrimoniale SPV e Holding, piano di ammortamento (senior + soci + private debt), analisi exit e valutazione. I parametri finanziari esterni (Private Debt, Private Equity, Altra Forma) sono integrati nel modello waterfall e fiscale.';
     doc.text(doc.splitTextToSize(intro, W - 28), 14, y);
     y += 24;
     doc.setFont('helvetica', 'bold');
@@ -13475,8 +13597,10 @@ function _repFullDueDiligence(doc) {
         'Sezione 3 - Struttura Finanziaria & Fonti/Impieghi',
         'Sezione 4 - Conto Economico SPV (20 anni, landscape)',
         'Sezione 5 - Rendiconto Finanziario SPV (landscape)',
+        'Sezione 5-bis - Stato Patrimoniale SPV (landscape)',
         'Sezione 6 - Conto Economico Holding (HoldCo Level, landscape)',
         'Sezione 7 - Rendiconto Finanziario Holding (HoldCo Level, landscape)',
+        'Sezione 7-bis - Stato Patrimoniale Holding (HoldCo Level, landscape)',
         'Sezione 8 - Piano di Ammortamento (landscape)',
         'Sezione 9 - Exit & Valutazione (portrait)',
         'Sezione 10 - Cash Flow Mensile & Fabbisogno di Cassa (landscape)'
@@ -13497,8 +13621,7 @@ function _repFullDueDiligence(doc) {
     doc.addPage();
     _repStrutturaFinanziaria(doc);
 
-    // Sezioni 4, 5, 6, 7, 8 (landscape): aggiungiamo pagine in orientation landscape
-    // jsPDF: addPage accetta formato/orientamento; cambiamo poi il layout page corrente.
+    // Sezioni 4, 5, 5-bis, 6, 7, 7-bis, 8 (landscape)
     doc.addPage('a4', 'landscape');
     _pdfHeader(doc, 'Sezione 4 - Conto Economico SPV', 'Due Diligence N. 08');
     _repContoEconomicoInline(doc, 30);
@@ -13508,12 +13631,20 @@ function _repFullDueDiligence(doc) {
     _repRendicontoFinanziarioInline(doc, 30);
 
     doc.addPage('a4', 'landscape');
+    _pdfHeader(doc, 'Sezione 5-bis - Stato Patrimoniale SPV', 'Due Diligence N. 08');
+    _repStatoPatrimonialeSpvInline(doc, 30);
+
+    doc.addPage('a4', 'landscape');
     _pdfHeader(doc, 'Sezione 6 - Conto Economico Holding', 'Due Diligence N. 08');
     _repContoEconomicoHoldingInline(doc, 30);
 
     doc.addPage('a4', 'landscape');
     _pdfHeader(doc, 'Sezione 7 - Rendiconto Finanziario Holding', 'Due Diligence N. 08');
     _repRendicontoFinanziarioHoldingInline(doc, 30);
+
+    doc.addPage('a4', 'landscape');
+    _pdfHeader(doc, 'Sezione 7-bis - Stato Patrimoniale Holding', 'Due Diligence N. 08');
+    _repStatoPatrimonialeHoldingInline(doc, 30);
 
     doc.addPage('a4', 'landscape');
     _pdfHeader(doc, 'Sezione 8 - Piano di Ammortamento', 'Due Diligence N. 08');
@@ -13534,6 +13665,52 @@ function _repFullDueDiligence(doc) {
 }
 
 // ── Versioni inline (rendering sul doc corrente senza ricreare header/copertina) ──
+function _repStatoPatrimonialeSpvInline(doc, startY) {
+    const rows = [
+        { key: 'bsSpvGrossFixedAssets', label: 'Immobilizzazioni Lorde (CAPEX + Augmentation BESS)' },
+        { key: 'bsSpvAccumDepr', label: '(-) Fondo Ammortamento Cumulato', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'bsSpvNetFixedAssets', label: '(=) IMMOBILIZZAZIONI NETTE (B)' },
+        { key: 'bsSpvTradeReceivables', label: 'Crediti Commerciali verso Clienti / GSE (DSO)' },
+        { key: 'bsSpvVatReceivable', label: 'Crediti verso Erario per IVA' },
+        { key: 'bsSpvDeferredTaxAssets', label: 'Attività per Imposte Anticipate (DTA)' },
+        { key: 'bsSpvCashFree', label: 'Disponibilità Liquide Libere / DSRA' },
+        { key: 'bsSpvCashMra', label: 'Disponibilità Liquide Vincolate MRA (BESS)' },
+        { key: 'bsSpvCashTrap', label: 'Disponibilità Liquide Vincolate (Cash Trap SPV)' },
+        { key: 'bsSpvCurrentAssets', label: '(=) TOTALE ATTIVO CIRCOLANTE (C)' },
+        { key: 'bsSpvTotalAssets', label: 'TOTALE ATTIVO SPV' },
+        { key: 'bsSpvShareCapital', label: 'Capitale Sociale e Riserve di Capitale SPV' },
+        { key: 'bsSpvRetainedEarnings', label: 'Utili (Perdite) Portati a Nuovo' },
+        { key: 'bsSpvNetProfit', label: 'Utile (Perdita) dell\'Esercizio SPV' },
+        { key: 'bsSpvTotalEquity', label: '(=) TOTALE PATRIMONIO NETTO SPV (A)' },
+        { key: 'bsSpvDeferredTaxLiab', label: 'Fondo Imposte Differite (DTL - OIC 25)' },
+        { key: 'bsSpvSeniorDebt', label: 'Debito Bancario Senior Residuo' },
+        { key: 'bsSpvSociLoan', label: 'Finanziamento Soci Subordinato Residuo (Cap. + Int.)' },
+        { key: 'bsSpvAfDebt', label: 'Strumento Convertibile / Altra Forma (AF)' },
+        { key: 'bsSpvTradePayables', label: 'Debiti verso Fornitori OPEX (DPO)' },
+        { key: 'bsSpvTotalLiabilities', label: '(=) TOTALE PASSIVITÀ E FONDI SPV (B + D)' },
+        { key: 'bsSpvTotalLiabAndEquity', label: 'TOTALE PASSIVO E PATRIMONIO NETTO SPV' },
+        { key: 'bsSpvBalanceCheck', label: 'Check Quadratura SPV (Attivo - Passivo - PN = 0)' }
+    ];
+    return _yearTable(doc, 'Stato Patrimoniale SPV', '', rows, startY, { styles: { cellPadding: 0.65 } });
+}
+function _repStatoPatrimonialeHoldingInline(doc, startY) {
+    const rows = [
+        { key: 'bsHcParticipationSpv', label: 'Partecipazioni in Imprese Controllate (SPV)' },
+        { key: 'bsHcSociLoanReceivable', label: 'Crediti Finanziari vs SPV per Finanziamento Soci' },
+        { key: 'bsHcFixedAssets', label: '(=) TOTALE IMMOBILIZZAZIONI FINANZIARIE (B.III)' },
+        { key: 'bsHcCash', label: 'Disponibilità Liquide Holding' },
+        { key: 'bsHcTotalAssets', label: 'TOTALE ATTIVO HOLDING' },
+        { key: 'bsHcShareCapital', label: 'Capitale Sociale e Conferimenti Soci / PE' },
+        { key: 'bsHcRetainedEarnings', label: 'Utili (Perdite) Portati a Nuovo e Distr. Cumulate' },
+        { key: 'bsHcNetProfit', label: 'Utile (Perdita) dell\'Esercizio Holding' },
+        { key: 'bsHcTotalEquity', label: '(=) TOTALE PATRIMONIO NETTO HOLDING (A)' },
+        { key: 'bsHcPdDebt', label: 'Debiti verso Finanziatori Private Debt (Mezzanine)' },
+        { key: 'bsHcTotalLiabilities', label: '(=) TOTALE PASSIVITÀ HOLDING (D)' },
+        { key: 'bsHcTotalLiabAndEquity', label: 'TOTALE PASSIVO E PATRIMONIO NETTO HOLDING' },
+        { key: 'bsHcBalanceCheck', label: 'Check Quadratura Holding (Attivo - Passivo - PN = 0)' }
+    ];
+    return _yearTable(doc, 'Stato Patrimoniale Holding', '', rows, startY, { styles: { cellPadding: 0.85 } });
+}
 function _repContoEconomicoInline(doc, startY) {
     const rows = [
         { key: 'revenueTotal', label: 'RICAVI TOTALI SPV' },
@@ -13649,7 +13826,7 @@ function _repPianoAmmortamentoInline(doc, startY) {
     const exitOption = p && p.exitOption ? p.exitOption : (document.getElementById('input-exit-option') ? document.getElementById('input-exit-option').value : null);
     let exitYear = (exitOption && exitOption !== 'none') ? parseInt(exitOption) : 20;
     if (isNaN(exitYear) || exitYear < 1) exitYear = 20;
-    const years = (d.years || []).slice(0, exitYear);
+    const years = (d.years || []).slice(0, exitYear + 1);
     const fmt = _fmtEFull;
     y = _sectionTitleLS(doc, '1. DEBITO BANCARIO SPV - Project Finance (Senior Debt)', y);
     doc.autoTable({

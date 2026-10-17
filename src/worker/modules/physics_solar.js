@@ -43,27 +43,29 @@ export function getPlantActiveHourRange(cod, calYear) {
     };
 }
 
-export function generateDefaultSolarProfile(capacityMwp = 1, yieldKwhPerKwp = 1300) {
+export function generateDefaultSolarProfile(capacityMw = 1, yieldKwhKwp = 1300) {
     const profile = new Float64Array(8760);
-    const totalTarget = capacityMwp * 1000 * yieldKwhPerKwp;
-    let sum = 0;
-    for (let d = 0; d < 365; d++) {
-        const seasonal = 0.5 + 0.5 * Math.sin((d - 80) * (2 * Math.PI / 365));
-        for (let h = 0; h < 24; h++) {
-            const idx = d * 24 + h;
-            if (h >= 6 && h <= 20) {
-                const daily = Math.sin((h - 6) * Math.PI / 14);
-                const val = seasonal * daily;
-                profile[idx] = Math.max(0, val);
-                sum += profile[idx];
-            } else {
-                profile[idx] = 0;
-            }
+    let totalUnitGen = 0;
+    for (let hourIndex = 0; hourIndex < 8760; hourIndex++) {
+        const dayOfYear = Math.floor(hourIndex / 24);
+        const hourOfDay = hourIndex % 24;
+        const seasonFactor = 1.0 + 0.35 * Math.sin(2 * Math.PI * (dayOfYear - 81) / 365);
+        const sunrise = 6 - Math.sin(2 * Math.PI * (dayOfYear - 81) / 365);
+        const sunset = 18 + Math.sin(2 * Math.PI * (dayOfYear - 81) / 365);
+
+        if (hourOfDay >= sunrise && hourOfDay <= sunset) {
+            const peakFactor = Math.sin(Math.PI * (hourOfDay - sunrise) / (sunset - sunrise));
+            const gen = peakFactor * seasonFactor;
+            profile[hourIndex] = gen;
+            totalUnitGen += gen;
+        } else {
+            profile[hourIndex] = 0;
         }
     }
-    const factor = sum > 0 ? totalTarget / sum : 0;
+    const targetTotalGenKwh = capacityMw * 1000 * yieldKwhKwp;
+    const scaleFactor = totalUnitGen > 0 ? (targetTotalGenKwh / totalUnitGen) : 0;
     for (let i = 0; i < 8760; i++) {
-        profile[i] *= factor;
+        profile[i] *= scaleFactor;
     }
     return profile;
 }

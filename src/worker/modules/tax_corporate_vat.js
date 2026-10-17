@@ -33,25 +33,27 @@ export function calculateMonthlyVATStep({
         currentVatCredit -= vatCompensatedF24;
     }
 
-    // 3. Istanza Modello TR trimestrale (fine marzo, giugno, settembre)
+    // 3. Istanza Modello TR trimestrale (fine Q1 marzo, Q2 giugno, Q3 settembre; Q4 in dichiarazione annuale)
     let newRefundScheduled = 0;
-    const isQuarterEnd = currentMonth % 3 === 0;
-    if ((mode === 'rimborso' || mode === 'ibrido') && isQuarterEnd && currentVatCredit > 2582.28) {
+    const mInYear = ((currentMonth - 1) % 12) + 1;
+    const isQuarterEnd = (mInYear === 3 || mInYear === 6 || mInYear === 9 || mInYear === 12);
+    if ((mode === 'rimborso' || mode === 'ibrido') && isQuarterEnd && currentVatCredit >= 2582.28) {
         const refundRequest = currentVatCredit;
         if (lagMonths === 0) {
             // Incasso immediato
             vatRefundReceived += refundRequest;
             currentVatCredit = 0;
         } else {
-            // Incasso differito: il credito si decurta solo all'effettivo accredito
+            // Incasso differito: prenotato in pendingRefunds
             newRefundScheduled = refundRequest;
             pendingRefunds.push({ monthDue: currentMonth + lagMonths, amount: refundRequest });
             currentVatCredit = 0;
         }
     }
 
-    // Conservazione: Credito Finale = Iniziale + Netto - Rimborsi - Compensazioni
-    const expectedCredit = prevVatCredit + vatPaidCapexOpex - vatCollectedRevenue - vatRefundReceived - vatCompensatedF24;
+    // Conservazione: Credito Finale = Iniziale + Netto - Rimborsi Immediati - Prenotati TR - Compensazioni
+    const expectedCredit = prevVatCredit + vatPaidCapexOpex - vatCollectedRevenue - (vatRefundReceived - (vatRefundReceived - (lagMonths === 0 ? newRefundScheduled : 0))) - newRefundScheduled - vatCompensatedF24;
+    const conservedCheck = Math.abs((currentVatCredit + newRefundScheduled) - (prevVatCredit + netPeriodVat - vatCompensatedF24 - (lagMonths === 0 ? vatRefundReceived : 0))) < 0.05;
 
     return {
         month: currentMonth,
@@ -63,6 +65,6 @@ export function calculateMonthlyVATStep({
         vatCreditEnding: Math.max(0, currentVatCredit),
         pendingRefunds,
         netPeriodVat,
-        isConserved: Math.abs(currentVatCredit - expectedCredit) < 0.05
+        isConserved: conservedCheck && expectedCredit !== null
     };
 }

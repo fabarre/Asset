@@ -19,10 +19,13 @@ const Audit = {
         if (this._loaded || typeof supabaseClient === 'undefined' || !supabaseClient) return;
         this._loaded = true;
         try {
-            const { data, error } = await supabaseClient
+            const uid = (typeof currentUserId === 'function') ? currentUserId() : null;
+            let q = supabaseClient
                 .from('simulation_config')
                 .select('parameter_key, parameter_value')
-                .like('parameter_key', 'audit::%')
+                .like('parameter_key', 'audit::%');
+            if (uid) q = q.eq('user_id', uid);
+            const { data, error } = await q
                 .order('parameter_key', { ascending: false })
                 .limit(this.MAX_ENTRIES);
             if (error) throw error;
@@ -60,15 +63,20 @@ const Audit = {
 
     async _prune() {
         try {
-            const { data } = await supabaseClient
+            const uid = (typeof currentUserId === 'function') ? currentUserId() : null;
+            let q = supabaseClient
                 .from('simulation_config')
                 .select('parameter_key')
-                .like('parameter_key', 'audit::%')
+                .like('parameter_key', 'audit::%');
+            if (uid) q = q.eq('user_id', uid);
+            const { data } = await q
                 .order('parameter_key', { ascending: false })
                 .range(this.MAX_ENTRIES, this.MAX_ENTRIES + 500);
             if (data && data.length > 0) {
-                await supabaseClient.from('simulation_config').delete()
+                let delQ = supabaseClient.from('simulation_config').delete()
                     .in('parameter_key', data.map(r => r.parameter_key));
+                if (uid) delQ = delQ.eq('user_id', uid);
+                await delQ;
             }
         } catch (e) { /* pruning best-effort */ }
     },
@@ -76,7 +84,10 @@ const Audit = {
     async clear() {
         if (typeof supabaseClient !== 'undefined' && supabaseClient) {
             try {
-                await supabaseClient.from('simulation_config').delete().like('parameter_key', 'audit::%');
+                const uid = (typeof currentUserId === 'function') ? currentUserId() : null;
+                let delQ = supabaseClient.from('simulation_config').delete().like('parameter_key', 'audit::%');
+                if (uid) delQ = delQ.eq('user_id', uid);
+                await delQ;
             } catch (e) { /* best-effort */ }
         }
         this.entries = [];

@@ -206,6 +206,32 @@ function verifyScenarioInvariants(scenarioName, state, capexPayments = null, ope
     // INV-10: Cassa Finale a fine orizzonte finita e priva di NaN
     const inv10Ok = mc.cashClosing.every(v => Number.isFinite(v)) && mc.fundedCashClosing.every(v => Number.isFinite(v));
     assertInvariant('INV-10: Determinismo e Assenza di NaN/Infinity su tutte le serie temporali', inv10Ok);
+
+    // INV-11: Quadratura Stato Patrimoniale SPV (Attivo = Passivo + Patrimonio Netto su tutti i 21 anni)
+    const inv11Ok = Array.isArray(mtx.bsSpvBalanceCheck) && mtx.bsSpvBalanceCheck.length === 21 && mtx.bsSpvBalanceCheck.every(v => Math.abs(v) < 1e-2);
+    assertInvariant('INV-11: Quadratura Partita Doppia Stato Patrimoniale SPV (Attivo = Passivo + PN, Anni 0..20)', inv11Ok,
+        `maxDiff=${mtx.bsSpvBalanceCheck ? Math.max(...mtx.bsSpvBalanceCheck.map(Math.abs)).toFixed(4) : 'N/A'}`);
+
+    // INV-12: Quadratura Stato Patrimoniale Holding (Attivo = Passivo + Patrimonio Netto su tutti i 21 anni)
+    const inv12Ok = Array.isArray(mtx.bsHcBalanceCheck) && mtx.bsHcBalanceCheck.length === 21 && mtx.bsHcBalanceCheck.every(v => Math.abs(v) < 1e-2);
+    assertInvariant('INV-12: Quadratura Partita Doppia Stato Patrimoniale Holding (Attivo = Passivo + PN, Anni 0..20)', inv12Ok,
+        `maxDiff=${mtx.bsHcBalanceCheck ? Math.max(...mtx.bsHcBalanceCheck.map(Math.abs)).toFixed(4) : 'N/A'}`);
+
+    // INV-13: Simmetria e Riassorbimento OIC 25 DTA/DTL (Fondo = CumDeltaDepr * Aliquota in ogni anno, e Base Fiscale residua = 0 a fine vita)
+    const taxRateSum = (state.inputs.iresRate || 0.24) + (state.inputs.irapRate || 0.039);
+    let cumDiffDepr = 0;
+    let inv13Ok = true;
+    for (let y = 0; y < mtx.years.length; y++) {
+        cumDiffDepr += (mtx.taxFiscalDepr[y] - mtx.depreciationCivil[y]);
+        const expectedFund = cumDiffDepr * taxRateSum;
+        if (Math.abs(mtx.taxDeferredFund[y] - expectedFund) > 1e-2) {
+            inv13Ok = false;
+            break;
+        }
+    }
+    const baseRemainingEnd = mtx.taxFiscalRemaining[mtx.taxFiscalRemaining.length - 1];
+    assertInvariant('INV-13: Simmetria OIC 25 DTA/DTL e riassorbimento integrale ammortamento base (Base Residua = 0)', inv13Ok && Math.abs(baseRemainingEnd) < 1e-2,
+        `baseRemainingEnd=${baseRemainingEnd.toFixed(4)}`);
 }
 
 function runAllScenarios() {

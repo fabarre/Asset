@@ -199,6 +199,8 @@ const expectedSheets = [
     'RENDICONTO FINANZIARIO SPV',
     'CONTO ECONOMICO HOLDING',
     'RENDICONTO FINANZIARIO HOLDING',
+    'STATO PATRIMONIALE SPV',
+    'STATO PATRIMONIALE HOLDING',
     'CASH FLOW MENSILE'
 ];
 
@@ -211,7 +213,7 @@ expectedSheets.forEach(es => {
         throw new Error(`❌ Foglio atteso mancante nel Workbook: "${es}"`);
     }
 });
-console.log("✓ Tutti gli 11 fogli modello FAST sono presenti nel Workbook.");
+console.log("✓ Tutti i 13 fogli modello FAST sono presenti nel Workbook.");
 
 let totalCellsScanned = 0;
 let totalFormulasScanned = 0;
@@ -693,6 +695,29 @@ if (Math.abs(exitEvMultiple - (ebitdaY20 * 10)) > 100) {
 }
 console.log("   ✓ Test 8 Superato: Tendina exitOption reattiva su Enterprise Value Holding (EBITDA, MWp, EV Fissa) al 100%.\n");
 
+// -------------------------------------------------------------
+// TEST SENSITIVITY 9: Quadratura Partita Doppia Stato Patrimoniale SPV & Holding (Anni 0..20)
+// -------------------------------------------------------------
+console.log("▶ [Test 9/9] Verifica Quadratura Partita Doppia STATO PATRIMONIALE SPV & HOLDING in HyperFormula (Anni 0..20)...");
+const bsSpvSheetId = hf.getSheetId('STATO PATRIMONIALE SPV');
+const bsHcSheetId = hf.getSheetId('STATO PATRIMONIALE HOLDING');
+const rowBsSpvCheck = findRowInSheet('STATO PATRIMONIALE SPV', 'CONTROLLO QUADRATURA');
+const rowBsHcCheck = findRowInSheet('STATO PATRIMONIALE HOLDING', 'CONTROLLO QUADRATURA');
+if (rowBsSpvCheck === -1 || rowBsHcCheck === -1) {
+    throw new Error(`Riga CONTROLLO QUADRATURA non trovata: spv=${rowBsSpvCheck}, hc=${rowBsHcCheck}`);
+}
+for (let c = 1; c <= 21; c++) {
+    const spvChk = hf.getCellValue({ col: c, row: rowBsSpvCheck, sheet: bsSpvSheetId });
+    const hcChk = hf.getCellValue({ col: c, row: rowBsHcCheck, sheet: bsHcSheetId });
+    if (typeof spvChk !== 'number' || Math.abs(spvChk) > 0.05) {
+        throw new Error(`Squadratura Stato Patrimoniale SPV all'Anno ${c - 1}: ${spvChk}`);
+    }
+    if (typeof hcChk !== 'number' || Math.abs(hcChk) > 0.05) {
+        throw new Error(`Squadratura Stato Patrimoniale Holding all'Anno ${c - 1}: ${hcChk}`);
+    }
+}
+console.log("   ✓ Test 9 Superato: Quadratura Attivo = Passivo + PN (0.00 €) verificata dinamicamente su tutti i 21 anni per SPV e Holding!\n");
+
 console.log("========================================================");
-console.log("🎉 TUTTI GLI 8 STRESS TEST DI REATTIVITÀ DINAMICA & TENDINE SUPERATI AL 100%!");
+console.log("🎉 TUTTI I 9 STRESS TEST DI REATTIVITÀ DINAMICA & BILANCIO SUPERATI AL 100%!");
 console.log("========================================================\n");
