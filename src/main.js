@@ -2210,7 +2210,7 @@
         
         function initWorker() {
             if (!simWorker) {
-                simWorker = new Worker('./src/worker/simulation.worker.js?v=141');
+                simWorker = new Worker('./src/worker/simulation.worker.js?v=148');
                 simWorker.onmessage = function(e) {
                     const data = e.data;
                     try {
@@ -6832,29 +6832,29 @@
             // ═══ SEZIONE B-BIS: STATO PATRIMONIALE CIVILISTICO SPV (ART. 2424 C.C.) ═══
             const pnlRowsBBis = [
                 { section: 'ATTIVO — IMPIEGHI PATRIMONIALI SPV (ART. 2424 C.C.)', type: 'title-blue' },
-                { key: 'bsSpvNetFixedAssets', label: 'B) Immobilizzazioni Netti (Impianti FV + BESS + Terreni) (€)', type: 'bold' },
+                { key: 'bsSpvNetFixedAssets', label: 'B) Immobilizzazioni Nette (Impianti FV + BESS + Terreni) (€)', type: 'bold' },
                 { key: 'bsSpvGrossCapex', label: '  (+) Costo Storico Immobilizzazioni Materiali e Immateriali (€)', type: 'detail', parent: 'bsSpvNetFixedAssets' },
-                { key: 'bsSpvAccumDepr', label: '  (-) Fondo Ammortamento Cumulato (€)', type: 'detail', parent: 'bsSpvNetFixedAssets' },
-                { key: 'bsSpvCurrentAssetsTax', label: 'C) Attivo Circolante e Crediti Tributari (€)', type: 'group-header' },
+                { key: 'bsSpvAccumDepr', label: '  (-) Fondo Ammortamento Cumulato (OIC 16) (€)', type: 'detail', parent: 'bsSpvNetFixedAssets' },
+                { key: 'bsSpvCurrentAssetsTax', label: 'C.II) Attivo Circolante - Crediti Tributari e DTA (€)', type: 'group-header' },
                 { key: 'bsSpvVatReceivable', label: '  (+) Crediti Tributari Erario per IVA (Modello TR / Dichiarazione) (€)', type: 'detail', parent: 'bsSpvCurrentAssetsTax' },
                 { key: 'bsSpvDta', label: '  (+) Attività per Imposte Anticipate (DTA - OIC 25) (€)', type: 'detail', parent: 'bsSpvCurrentAssetsTax' },
                 { key: 'bsSpvTotalLiquidity', label: 'C.IV) Disponibilità Liquide e Conti Riserva SPV (€)', type: 'bold-teal' },
-                { key: 'bsSpvCash', label: '  (+) Disponibilità Liquide Operative / Cassa Vincolata (Cash Trap) (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
-                { key: 'bsSpvDsra', label: '  (+) Conto Riserva Servizio Debito (DSRA) (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
-                { key: 'bsSpvMra', label: '  (+) Fondo Riserva Manutenzione BESS (MRA) (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
+                { key: 'bsSpvCash', label: '  (+) Disponibilità Liquide Ordinarie / Cassa Libera (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
+                { key: 'bsSpvDsra', label: '  (+) Conto Riserva Servizio Debito (DSRA vincolata) (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
+                { key: 'bsSpvMra', label: '  (+) Fondo Riserva Manutenzione BESS (MRA vincolata) (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
                 { key: 'bsSpvTotalAssets', label: 'TOTALE ATTIVO SPV (€)', type: 'total' },
                 { section: 'PASSIVO & PATRIMONIO NETTO SPV (ART. 2424 C.C.)', type: 'section-title' },
                 { key: 'bsSpvTotalEquity', label: 'A) PATRIMONIO NETTO SPV (€)', type: 'bold' },
-                { key: 'bsSpvShareCapital', label: '  I - Capitale Sociale e Riserva Sovrapprezzo Sponsor (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
-                ...(p.peEnabled ? [{ key: 'bsSpvPeCapital', label: '  II - Apporto Patrimoniale Private Equity (Co-Investor) (€)', type: 'detail', parent: 'bsSpvTotalEquity' }] : []),
+                { key: 'bsSpvShareCapital', label: '  I - Capitale Sociale e Riserve di Capitale (A.I - A.VII) (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
+                ...(p.peEnabled ? [{ key: 'bsSpvPeCapital', label: '  di cui: Apporto Patrimoniale Private Equity (Co-Investor) (€)', type: 'detail', parent: 'bsSpvTotalEquity' }] : []),
                 { key: 'bsSpvLegalReserve', label: '  IV - Riserva Legale Cumulata (Art. 2430 c.c.) (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
                 { key: 'bsSpvRetainedEarnings', label: '  VIII - Utili (Perdite) Portati a Nuovo (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
                 { key: 'bsSpvNetProfit', label: '  IX - Utile (Perdita) dell\'Esercizio (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
-                { key: 'bsSpvDtl', label: 'B) Fondo per Imposte Differite (DTL - OIC 25) (€)', type: 'normal' },
-                { key: 'bsSpvTotalLiabilities', label: 'D) DEBITI FINANZIARI E TRIBUTARI SPV (€)', type: 'bold-rose' },
-                { key: 'bsSpvSeniorDebt', label: '  Debito Senior Bancario Residuo (Project Finance) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
-                { key: 'bsSpvSociLoan', label: '  Finanziamento Soci Subordinato Residuo (Sponsor Loan) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
-                ...(p.afEnabled && p.afType === 'convertible' ? [{ key: 'bsSpvAfConvertible', label: '  Strumento Ibrido / Convertibile Residuo (Altra Forma) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' }] : []),
+                { key: 'bsSpvDtl', label: 'B.2) Fondo per Imposte Differite (DTL - OIC 25) (€)', type: 'normal' },
+                { key: 'bsSpvTotalLiabilities', label: 'D) DEBITI FINANZIARI E PASSIVITÀ SPV (€)', type: 'bold-rose' },
+                { key: 'bsSpvSeniorDebt', label: '  D.4 - Debito Senior Bancario Residuo (Project Finance) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
+                { key: 'bsSpvSociLoan', label: '  D.3 - Finanziamento Soci Subordinato Residuo (Sponsor Loan) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
+                ...(p.afEnabled && p.afType === 'convertible_note' ? [{ key: 'bsSpvAfConvertible', label: '  D.5 - Strumento Ibrido / Convertibile Residuo (Altra Forma) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' }] : []),
                 { key: 'bsSpvVatPayable', label: '  Debiti Tributari per IVA a Debito da Versare (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
                 { key: 'bsSpvTotalLiabilitiesAndEquity', label: 'TOTALE PASSIVO E PATRIMONIO NETTO SPV (€)', type: 'total' },
                 { key: 'bsSpvBalanceCheck', label: 'CONTROLLO QUADRATURA STATO PATRIMONIALE SPV (Attivo - Passivo & PN) (€)', type: 'bold-teal' }
@@ -6863,16 +6863,17 @@
             // ═══ SEZIONE D-BIS: STATO PATRIMONIALE CIVILISTICO HOLDING (ART. 2424 C.C.) ═══
             const pnlRowsDBis = [
                 { section: 'ATTIVO — IMPIEGHI PATRIMONIALI HOLDING (ART. 2424 C.C.)', type: 'title-blue' },
-                { key: 'bsHcSpvParticipation', label: 'B.III.1) Partecipazioni in Imprese Controllate (Quota SPV) (€)', type: 'bold' },
-                { key: 'bsHcSociLoanReceivable', label: 'B.III.2) Crediti Finanziari vs Controllate (Finanziamento Soci SPV) (€)', type: 'bold' },
-                { key: 'bsHcCash', label: 'C.IV) Disponibilità Liquide Holding (Cassa Cumulata) (€)', type: 'bold-teal' },
+                { key: 'bsHcSpvParticipation', label: 'B.III.1.a) Partecipazioni in Imprese Controllate (Quota SPV) (€)', type: 'bold' },
+                { key: 'bsHcSociLoanReceivable', label: 'B.III.2.a) Crediti Finanziari vs Controllate (Finanziamento Soci SPV) (€)', type: 'bold' },
+                { key: 'bsHcCash', label: 'C.IV.1) Disponibilità Liquide Holding (Cassa Cumulata Ordinaria) (€)', type: 'bold-teal' },
                 { key: 'bsHcTotalAssets', label: 'TOTALE ATTIVO HOLDING (€)', type: 'total-gold' },
                 { section: 'PASSIVO & PATRIMONIO NETTO HOLDING (ART. 2424 C.C.)', type: 'section-title' },
                 { key: 'bsHcTotalEquity', label: 'A) PATRIMONIO NETTO HOLDING (€)', type: 'bold' },
-                { key: 'bsHcShareCapital', label: '  I - Capitale Sociale e Versamenti Soci Sponsor (€)', type: 'detail', parent: 'bsHcTotalEquity' },
-                { key: 'bsHcRetainedEarnings', label: '  VIII - Utili (Perdite) Portati a Nuovo (€)', type: 'detail', parent: 'bsHcTotalEquity' },
+                { key: 'bsHcShareCapital', label: '  I - Capitale Sociale e Versamenti Soci Sponsor (A.I - A.VII) (€)', type: 'detail', parent: 'bsHcTotalEquity' },
+                { key: 'bsHcRetainedEarnings', label: '  VIII - Utili (Perdite) Portati a Nuovo e Riserve di Competenza (€)', type: 'detail', parent: 'bsHcTotalEquity' },
                 { key: 'bsHcNetProfit', label: '  IX - Utile (Perdita) dell\'Esercizio Holding (€)', type: 'detail', parent: 'bsHcTotalEquity' },
-                ...(p.pdEnabled ? [{ key: 'bsHcPdDebt', label: 'D) Debiti Finanziari: Private Debt / Mezzanine Residuo (€)', type: 'bold-rose' }] : []),
+                { key: 'bsHcTotalLiabilities', label: 'D) TOTALE PASSIVITÀ E DEBITI FINANZIARI HOLDING (€)', type: 'bold-rose' },
+                ...(p.pdEnabled ? [{ key: 'bsHcPdDebt', label: '  di cui: D.4 - Debiti Finanziari Private Debt / Mezzanine Residuo (€)', type: 'detail', parent: 'bsHcTotalLiabilities' }] : []),
                 { key: 'bsHcTotalLiabilitiesAndEquity', label: 'TOTALE PASSIVO E PATRIMONIO NETTO HOLDING (€)', type: 'total-gold' },
                 { key: 'bsHcBalanceCheck', label: 'CONTROLLO QUADRATURA STATO PATRIMONIALE HOLDING (Attivo - Passivo & PN) (€)', type: 'bold-teal' }
             ];
@@ -7069,6 +7070,7 @@
 
         // Populate table cells dynamically
         function updateTableData(m, d) {
+            const p = State.inputs || {};
             for (let i = 0; i < m.years.length; i++) {
                 const yr = m.years[i];
                 const setCell = (key, val, isPnl = true, formatFn = formatEuro) => {
@@ -7100,6 +7102,13 @@
                                 el.classList.add('text-red-400');
                             } else {
                                 el.classList.add('text-slate-500');
+                            }
+                        } else if (key === 'bsSpvBalanceCheck' || key === 'bsHcBalanceCheck') {
+                            el.classList.remove('text-emerald-300', 'text-emerald-400', 'text-red-400', 'font-black');
+                            if (Math.abs(val) > 0.05) {
+                                el.classList.add('text-red-400', 'font-black');
+                            } else {
+                                el.classList.add('text-emerald-400', 'font-bold');
                             }
                         }
                     }
@@ -7217,35 +7226,44 @@
                 setCell('dividendsPaid', m.dividendsPaid[i]);
 
                 // ── SEZIONE B-BIS: STATO PATRIMONIALE CIVILISTICO SPV ──
+                const bsSpvGrossVal = m.bsSpvGrossFixedAssets ? m.bsSpvGrossFixedAssets[i] : (m.bsSpvGrossCapex ? m.bsSpvGrossCapex[i] : 0);
+                const bsSpvAccumVal = m.bsSpvAccumDepreciation ? m.bsSpvAccumDepreciation[i] : (m.bsSpvAccumDepr ? m.bsSpvAccumDepr[i] : 0);
+                const bsSpvNetFixedVal = m.bsSpvNetFixedAssets ? m.bsSpvNetFixedAssets[i] : (bsSpvGrossVal - bsSpvAccumVal);
                 const bsSpvVatRec = m.bsSpvVatReceivable ? m.bsSpvVatReceivable[i] : 0;
                 const bsSpvDtaVal = m.bsSpvDta ? m.bsSpvDta[i] : 0;
-                const bsSpvCashVal = m.bsSpvCash ? m.bsSpvCash[i] : 0;
-                const bsSpvDsraVal = m.bsSpvDsra ? m.bsSpvDsra[i] : 0;
-                const bsSpvMraVal = m.bsSpvMra ? m.bsSpvMra[i] : 0;
-                setCell('bsSpvNetFixedAssets', m.bsSpvNetFixedAssets ? m.bsSpvNetFixedAssets[i] : 0, true, formatEuro);
-                setCell('bsSpvGrossCapex', m.bsSpvGrossCapex ? m.bsSpvGrossCapex[i] : 0, true, formatPlusEuro);
-                setCell('bsSpvAccumDepr', m.bsSpvAccumDepr ? m.bsSpvAccumDepr[i] : 0, true, formatMinusEuro);
+                const bsSpvCashVal = m.bsSpvCashBalance ? m.bsSpvCashBalance[i] : (m.bsSpvCash ? m.bsSpvCash[i] : 0);
+                const bsSpvDsraVal = m.bsSpvDsraCash ? m.bsSpvDsraCash[i] : (m.bsSpvDsra ? m.bsSpvDsra[i] : 0);
+                const bsSpvMraVal = m.bsSpvMraCash ? m.bsSpvMraCash[i] : (m.bsSpvMra ? m.bsSpvMra[i] : 0);
+                const bsSpvTotLiqVal = (m.bsSpvRestrictedCash ? m.bsSpvRestrictedCash[i] : (bsSpvDsraVal + bsSpvMraVal)) + bsSpvCashVal;
+
+                setCell('bsSpvNetFixedAssets', bsSpvNetFixedVal, true, formatEuro);
+                setCell('bsSpvGrossCapex', bsSpvGrossVal, true, formatEuro);
+                setCell('bsSpvAccumDepr', bsSpvAccumVal, true, formatMinusEuro);
                 setCell('bsSpvCurrentAssetsTax', bsSpvVatRec + bsSpvDtaVal, true, formatEuro);
                 setCell('bsSpvVatReceivable', bsSpvVatRec, true, formatPlusEuro);
-                setCell('bsSpvDta', bsSpvDtaVal, true, formatPlusEuro);
-                setCell('bsSpvTotalLiquidity', bsSpvCashVal + bsSpvDsraVal + bsSpvMraVal, true, formatEuro);
-                setCell('bsSpvCash', bsSpvCashVal, true, formatPlusEuro);
-                setCell('bsSpvDsra', bsSpvDsraVal, true, formatPlusEuro);
-                setCell('bsSpvMra', bsSpvMraVal, true, formatPlusEuro);
-                setCell('bsSpvTotalAssets', m.bsSpvTotalAssets ? m.bsSpvTotalAssets[i] : 0, true, formatEuro);
+                setCell('bsSpvDta', bsSpvDtaVal, true, formatEuro);
+                setCell('bsSpvTotalLiquidity', bsSpvTotLiqVal, true, formatEuro);
+                setCell('bsSpvCash', bsSpvCashVal, true, formatEuro);
+                setCell('bsSpvDsra', bsSpvDsraVal, true, formatEuro);
+                setCell('bsSpvMra', bsSpvMraVal, true, formatEuro);
+                setCell('bsSpvTotalAssets', m.bsSpvTotalAssets ? m.bsSpvTotalAssets[i] : (bsSpvNetFixedVal + bsSpvDtaVal + bsSpvTotLiqVal), true, formatEuro);
                 setCell('bsSpvTotalEquity', m.bsSpvTotalEquity ? m.bsSpvTotalEquity[i] : 0, true, formatEuro);
                 setCell('bsSpvShareCapital', m.bsSpvShareCapital ? m.bsSpvShareCapital[i] : 0, true, formatEuro);
-                if (m.bsSpvPeCapital) setCell('bsSpvPeCapital', m.bsSpvPeCapital[i], true, formatEuro);
+                if (m.bsSpvPeCapital || (p.peEnabled && m.peAmount)) {
+                    setCell('bsSpvPeCapital', m.bsSpvPeCapital ? m.bsSpvPeCapital[i] : (m.peAmount || 0), true, formatEuro);
+                }
                 setCell('bsSpvLegalReserve', m.bsSpvLegalReserve ? m.bsSpvLegalReserve[i] : 0, true, formatEuro);
                 setCell('bsSpvRetainedEarnings', m.bsSpvRetainedEarnings ? m.bsSpvRetainedEarnings[i] : 0, true, formatEuro);
                 setCell('bsSpvNetProfit', m.bsSpvNetProfit ? m.bsSpvNetProfit[i] : 0, true, formatEuro);
                 setCell('bsSpvDtl', m.bsSpvDtl ? m.bsSpvDtl[i] : 0, true, formatEuro);
                 setCell('bsSpvTotalLiabilities', m.bsSpvTotalLiabilities ? m.bsSpvTotalLiabilities[i] : 0, true, formatEuro);
                 setCell('bsSpvSeniorDebt', m.bsSpvSeniorDebt ? m.bsSpvSeniorDebt[i] : 0, true, formatEuro);
-                setCell('bsSpvSociLoan', m.bsSpvSociLoan ? m.bsSpvSociLoan[i] : 0, true, formatEuro);
-                if (m.bsSpvAfConvertible) setCell('bsSpvAfConvertible', m.bsSpvAfConvertible[i], true, formatEuro);
+                setCell('bsSpvSociLoan', m.bsSpvShareholderLoan ? m.bsSpvShareholderLoan[i] : (m.bsSpvSociLoan ? m.bsSpvSociLoan[i] : 0), true, formatEuro);
+                if (m.bsSpvAfLiability || m.bsSpvAfConvertible) {
+                    setCell('bsSpvAfConvertible', m.bsSpvAfLiability ? m.bsSpvAfLiability[i] : (m.bsSpvAfConvertible ? m.bsSpvAfConvertible[i] : 0), true, formatEuro);
+                }
                 setCell('bsSpvVatPayable', m.bsSpvVatPayable ? m.bsSpvVatPayable[i] : 0, true, formatEuro);
-                setCell('bsSpvTotalLiabilitiesAndEquity', m.bsSpvTotalLiabilitiesAndEquity ? m.bsSpvTotalLiabilitiesAndEquity[i] : 0, true, formatEuro);
+                setCell('bsSpvTotalLiabilitiesAndEquity', m.bsSpvTotalLiabAndEquity ? m.bsSpvTotalLiabAndEquity[i] : (m.bsSpvTotalLiabilitiesAndEquity ? m.bsSpvTotalLiabilitiesAndEquity[i] : 0), true, formatEuro);
                 setCell('bsSpvBalanceCheck', m.bsSpvBalanceCheck ? m.bsSpvBalanceCheck[i] : 0, true, v => Math.abs(v) < 0.05 ? '0 € (OK)' : formatEuro(v));
 
                 // ── SEZIONE C: CONTO ECONOMICO CIVILISTICO HOLDING (HOLDCO LEVEL) ──
@@ -7309,16 +7327,17 @@
                 setCell('holdcoFCFECumulated', m.holdcoFCFECumulated[i]);
 
                 // ── SEZIONE D-BIS: STATO PATRIMONIALE CIVILISTICO HOLDING ──
-                setCell('bsHcSpvParticipation', m.bsHcSpvParticipation ? m.bsHcSpvParticipation[i] : 0, true, formatEuro);
+                setCell('bsHcSpvParticipation', m.bsHcSpvEquityInv ? m.bsHcSpvEquityInv[i] : (m.bsHcSpvParticipation ? m.bsHcSpvParticipation[i] : 0), true, formatEuro);
                 setCell('bsHcSociLoanReceivable', m.bsHcSociLoanReceivable ? m.bsHcSociLoanReceivable[i] : 0, true, formatEuro);
-                setCell('bsHcCash', m.bsHcCash ? m.bsHcCash[i] : 0, true, formatEuro);
+                setCell('bsHcCash', m.bsHcCashBalance ? m.bsHcCashBalance[i] : (m.bsHcCash ? m.bsHcCash[i] : 0), true, formatEuro);
                 setCell('bsHcTotalAssets', m.bsHcTotalAssets ? m.bsHcTotalAssets[i] : 0, true, formatEuro);
                 setCell('bsHcTotalEquity', m.bsHcTotalEquity ? m.bsHcTotalEquity[i] : 0, true, formatEuro);
                 setCell('bsHcShareCapital', m.bsHcShareCapital ? m.bsHcShareCapital[i] : 0, true, formatEuro);
                 setCell('bsHcRetainedEarnings', m.bsHcRetainedEarnings ? m.bsHcRetainedEarnings[i] : 0, true, formatEuro);
                 setCell('bsHcNetProfit', m.bsHcNetProfit ? m.bsHcNetProfit[i] : 0, true, formatEuro);
                 if (m.bsHcPdDebt) setCell('bsHcPdDebt', m.bsHcPdDebt[i], true, formatEuro);
-                setCell('bsHcTotalLiabilitiesAndEquity', m.bsHcTotalLiabilitiesAndEquity ? m.bsHcTotalLiabilitiesAndEquity[i] : 0, true, formatEuro);
+                setCell('bsHcTotalLiabilities', m.bsHcTotalLiabilities ? m.bsHcTotalLiabilities[i] : (m.bsHcPdDebt ? m.bsHcPdDebt[i] : 0), true, formatEuro);
+                setCell('bsHcTotalLiabilitiesAndEquity', m.bsHcTotalLiabAndEquity ? m.bsHcTotalLiabAndEquity[i] : (m.bsHcTotalLiabilitiesAndEquity ? m.bsHcTotalLiabilitiesAndEquity[i] : 0), true, formatEuro);
                 setCell('bsHcBalanceCheck', m.bsHcBalanceCheck ? m.bsHcBalanceCheck[i] : 0, true, v => Math.abs(v) < 0.05 ? '0 € (OK)' : formatEuro(v));
 
                 setCell('beginningBalance', d.beginningBalance[i], false);
@@ -13667,26 +13686,22 @@ function _repFullDueDiligence(doc) {
 // ── Versioni inline (rendering sul doc corrente senza ricreare header/copertina) ──
 function _repStatoPatrimonialeSpvInline(doc, startY) {
     const rows = [
-        { key: 'bsSpvGrossFixedAssets', label: 'Immobilizzazioni Lorde (CAPEX + Augmentation BESS)' },
-        { key: 'bsSpvAccumDepr', label: '(-) Fondo Ammortamento Cumulato', fmt: v => _fmtEFull(-Math.abs(v)) },
-        { key: 'bsSpvNetFixedAssets', label: '(=) IMMOBILIZZAZIONI NETTE (B)' },
-        { key: 'bsSpvTradeReceivables', label: 'Crediti Commerciali verso Clienti / GSE (DSO)' },
-        { key: 'bsSpvVatReceivable', label: 'Crediti verso Erario per IVA' },
-        { key: 'bsSpvDeferredTaxAssets', label: 'Attività per Imposte Anticipate (DTA)' },
-        { key: 'bsSpvCashFree', label: 'Disponibilità Liquide Libere / DSRA' },
-        { key: 'bsSpvCashMra', label: 'Disponibilità Liquide Vincolate MRA (BESS)' },
-        { key: 'bsSpvCashTrap', label: 'Disponibilità Liquide Vincolate (Cash Trap SPV)' },
-        { key: 'bsSpvCurrentAssets', label: '(=) TOTALE ATTIVO CIRCOLANTE (C)' },
+        { key: 'bsSpvGrossFixedAssets', label: 'Immobilizzazioni Materiali e Immateriali Lorde (CAPEX + Augmentation)' },
+        { key: 'bsSpvAccumDepreciation', label: '(-) Fondo Ammortamento Cumulato (OIC 16)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'bsSpvNetFixedAssets', label: '(=) IMMOBILIZZAZIONI NETTE (B.I + B.II)' },
+        { key: 'bsSpvDta', label: 'Attività per Imposte Anticipate (DTA - C.II.5-ter / OIC 25)' },
+        { key: 'bsSpvRestrictedCash', label: 'Disponibilità Liquide Vincolate (MRA + DSRA) (C.IV)' },
+        { key: 'bsSpvCashBalance', label: 'Disponibilità Liquide Ordinarie / Cassa SPV (C.IV.1)' },
         { key: 'bsSpvTotalAssets', label: 'TOTALE ATTIVO SPV' },
-        { key: 'bsSpvShareCapital', label: 'Capitale Sociale e Riserve di Capitale SPV' },
-        { key: 'bsSpvRetainedEarnings', label: 'Utili (Perdite) Portati a Nuovo' },
-        { key: 'bsSpvNetProfit', label: 'Utile (Perdita) dell\'Esercizio SPV' },
+        { key: 'bsSpvShareCapital', label: 'Capitale Sociale e Riserve di Capitale SPV (A.I - A.VII)' },
+        { key: 'bsSpvLegalReserve', label: 'Riserva Legale Cumulata (Art. 2430 c.c.) (A.IV)' },
+        { key: 'bsSpvRetainedEarnings', label: 'Utili (Perdite) Portati a Nuovo (A.VIII)' },
+        { key: 'bsSpvNetProfit', label: 'Utile (Perdita) dell\'Esercizio SPV (A.IX)' },
         { key: 'bsSpvTotalEquity', label: '(=) TOTALE PATRIMONIO NETTO SPV (A)' },
-        { key: 'bsSpvDeferredTaxLiab', label: 'Fondo Imposte Differite (DTL - OIC 25)' },
-        { key: 'bsSpvSeniorDebt', label: 'Debito Bancario Senior Residuo' },
-        { key: 'bsSpvSociLoan', label: 'Finanziamento Soci Subordinato Residuo (Cap. + Int.)' },
-        { key: 'bsSpvAfDebt', label: 'Strumento Convertibile / Altra Forma (AF)' },
-        { key: 'bsSpvTradePayables', label: 'Debiti verso Fornitori OPEX (DPO)' },
+        { key: 'bsSpvDtl', label: 'Fondo Imposte Differite (DTL - B.2 / OIC 25)' },
+        { key: 'bsSpvSeniorDebt', label: 'Debito Bancario Senior Residuo (D.4 - Project Finance)' },
+        { key: 'bsSpvShareholderLoan', label: 'Finanziamento Soci Subordinato Residuo (D.3 - Sponsor Loan)' },
+        { key: 'bsSpvAfLiability', label: 'Strumenti Finanziari Convertibili / Altra Forma (D.5)' },
         { key: 'bsSpvTotalLiabilities', label: '(=) TOTALE PASSIVITÀ E FONDI SPV (B + D)' },
         { key: 'bsSpvTotalLiabAndEquity', label: 'TOTALE PASSIVO E PATRIMONIO NETTO SPV' },
         { key: 'bsSpvBalanceCheck', label: 'Check Quadratura SPV (Attivo - Passivo - PN = 0)' }
@@ -13695,16 +13710,15 @@ function _repStatoPatrimonialeSpvInline(doc, startY) {
 }
 function _repStatoPatrimonialeHoldingInline(doc, startY) {
     const rows = [
-        { key: 'bsHcParticipationSpv', label: 'Partecipazioni in Imprese Controllate (SPV)' },
-        { key: 'bsHcSociLoanReceivable', label: 'Crediti Finanziari vs SPV per Finanziamento Soci' },
-        { key: 'bsHcFixedAssets', label: '(=) TOTALE IMMOBILIZZAZIONI FINANZIARIE (B.III)' },
-        { key: 'bsHcCash', label: 'Disponibilità Liquide Holding' },
+        { key: 'bsHcSpvEquityInv', label: 'Partecipazioni in Imprese Controllate — Quota Equity SPV (B.III.1.a)' },
+        { key: 'bsHcSociLoanReceivable', label: 'Crediti Finanziari vs Controllate — Finanziamento Soci (B.III.2.a)' },
+        { key: 'bsHcCashBalance', label: 'Disponibilità Liquide Holding — Cassa Ordinaria (C.IV.1)' },
         { key: 'bsHcTotalAssets', label: 'TOTALE ATTIVO HOLDING' },
-        { key: 'bsHcShareCapital', label: 'Capitale Sociale e Conferimenti Soci / PE' },
-        { key: 'bsHcRetainedEarnings', label: 'Utili (Perdite) Portati a Nuovo e Distr. Cumulate' },
-        { key: 'bsHcNetProfit', label: 'Utile (Perdita) dell\'Esercizio Holding' },
+        { key: 'bsHcShareCapital', label: 'Capitale Sociale e Versamenti Soci Sponsor / PE (A.I - A.VII)' },
+        { key: 'bsHcRetainedEarnings', label: 'Utili (Perdite) Portati a Nuovo e Riserve di Competenza (A.VIII)' },
+        { key: 'bsHcNetProfit', label: 'Utile (Perdita) dell\'Esercizio Holding (A.IX)' },
         { key: 'bsHcTotalEquity', label: '(=) TOTALE PATRIMONIO NETTO HOLDING (A)' },
-        { key: 'bsHcPdDebt', label: 'Debiti verso Finanziatori Private Debt (Mezzanine)' },
+        { key: 'bsHcPdDebt', label: 'Debiti verso Finanziatori Private Debt / Mezzanine (D.4)' },
         { key: 'bsHcTotalLiabilities', label: '(=) TOTALE PASSIVITÀ HOLDING (D)' },
         { key: 'bsHcTotalLiabAndEquity', label: 'TOTALE PASSIVO E PATRIMONIO NETTO HOLDING' },
         { key: 'bsHcBalanceCheck', label: 'Check Quadratura Holding (Attivo - Passivo - PN = 0)' }

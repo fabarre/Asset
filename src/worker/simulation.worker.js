@@ -2819,17 +2819,34 @@ function runSensitivityLoop(baseState, config) {
                 cerGseIncentive: [],
                 holdcoOperatingCashflow: [],
                 // ── Stato Patrimoniale SPV (Sez. B-bis) ──
-                bsSpvGrossFixedAssets: [], bsSpvAccumDepreciation: [], bsSpvNetFixedAssets: [],
-                bsSpvDta: [], bsSpvMraCash: [], bsSpvDsraCash: [], bsSpvRestrictedCash: [],
-                bsSpvCashBalance: [], bsSpvTotalAssets: [],
+                bsSpvGrossFixedAssets: [], bsSpvGrossCapex: [],
+                bsSpvAccumDepreciation: [], bsSpvAccumDepr: [],
+                bsSpvNetFixedAssets: [],
+                bsSpvDta: [],
+                bsSpvMraCash: [], bsSpvMra: [],
+                bsSpvDsraCash: [], bsSpvDsra: [],
+                bsSpvRestrictedCash: [],
+                bsSpvCashBalance: [], bsSpvCash: [],
+                bsSpvTotalAssets: [],
                 bsSpvShareCapital: [], bsSpvLegalReserve: [], bsSpvRetainedEarnings: [],
                 bsSpvNetProfit: [], bsSpvTotalEquity: [],
-                bsSpvSeniorDebt: [], bsSpvShareholderLoan: [], bsSpvAfLiability: [],
-                bsSpvDtl: [], bsSpvTotalLiabilities: [], bsSpvTotalLiabAndEquity: [], bsSpvBalanceCheck: [],
+                bsSpvSeniorDebt: [],
+                bsSpvShareholderLoan: [], bsSpvSociLoan: [],
+                bsSpvAfLiability: [], bsSpvAfConvertible: [],
+                bsSpvDtl: [],
+                bsSpvTotalLiabilities: [],
+                bsSpvTotalLiabAndEquity: [], bsSpvTotalLiabilitiesAndEquity: [],
+                bsSpvBalanceCheck: [],
                 // ── Stato Patrimoniale Holding (Sez. D-bis) ──
-                bsHcSpvEquityInv: [], bsHcSociLoanReceivable: [], bsHcCashBalance: [], bsHcTotalAssets: [],
+                bsHcSpvEquityInv: [], bsHcSpvParticipation: [],
+                bsHcSociLoanReceivable: [],
+                bsHcCashBalance: [], bsHcCash: [],
+                bsHcTotalAssets: [],
                 bsHcShareCapital: [], bsHcRetainedEarnings: [], bsHcNetProfit: [], bsHcTotalEquity: [],
-                bsHcPdDebt: [], bsHcTotalLiabilities: [], bsHcTotalLiabAndEquity: [], bsHcBalanceCheck: [],
+                bsHcPdDebt: [],
+                bsHcTotalLiabilities: [],
+                bsHcTotalLiabAndEquity: [], bsHcTotalLiabilitiesAndEquity: [],
+                bsHcBalanceCheck: [],
                 capexBreakdown: capexBreakdown, opexBreakdown: opexBreakdown
             };
 
@@ -4317,13 +4334,18 @@ function runSensitivityLoop(baseState, config) {
                 matrix.spvCashTrap.push(yCashTrap);
                 // Stato Patrimoniale SPV
                 matrix.bsSpvGrossFixedAssets.push(cumGrossFixedAssets);
+                matrix.bsSpvGrossCapex.push(cumGrossFixedAssets);
                 matrix.bsSpvAccumDepreciation.push(cumDeprSpv);
+                matrix.bsSpvAccumDepr.push(cumDeprSpv);
                 matrix.bsSpvNetFixedAssets.push(yBsSpvNetFixedAssets);
                 matrix.bsSpvDta.push(yBsSpvDta);
                 matrix.bsSpvMraCash.push(yBsSpvMra);
+                matrix.bsSpvMra.push(yBsSpvMra);
                 matrix.bsSpvDsraCash.push(yBsSpvDsra);
+                matrix.bsSpvDsra.push(yBsSpvDsra);
                 matrix.bsSpvRestrictedCash.push(yBsSpvRestrictedCash);
                 matrix.bsSpvCashBalance.push(cumSpvCashBalance);
+                matrix.bsSpvCash.push(cumSpvCashBalance);
                 matrix.bsSpvTotalAssets.push(yBsSpvTotalAssets);
                 matrix.bsSpvShareCapital.push(yBsSpvPaidInCapital);
                 matrix.bsSpvLegalReserve.push(yBsSpvLegalReserve);
@@ -4332,15 +4354,20 @@ function runSensitivityLoop(baseState, config) {
                 matrix.bsSpvTotalEquity.push(yBsSpvTotalEquity);
                 matrix.bsSpvSeniorDebt.push(yBsSpvSeniorDebt);
                 matrix.bsSpvShareholderLoan.push(yBsSpvShareholderLoan);
+                matrix.bsSpvSociLoan.push(yBsSpvShareholderLoan);
                 matrix.bsSpvAfLiability.push(yBsSpvAfLiability);
+                matrix.bsSpvAfConvertible.push(yBsSpvAfLiability);
                 matrix.bsSpvDtl.push(yBsSpvDtl);
                 matrix.bsSpvTotalLiabilities.push(yBsSpvTotalLiabilities);
                 matrix.bsSpvTotalLiabAndEquity.push(yBsSpvTotalLiabAndEquity);
+                matrix.bsSpvTotalLiabilitiesAndEquity.push(yBsSpvTotalLiabAndEquity);
                 matrix.bsSpvBalanceCheck.push(Math.abs(yBsSpvCheck) < 1e-6 ? 0 : yBsSpvCheck);
                 // Stato Patrimoniale Holding
                 matrix.bsHcSpvEquityInv.push(cumHcSpvEquityInv);
+                matrix.bsHcSpvParticipation.push(cumHcSpvEquityInv);
                 matrix.bsHcSociLoanReceivable.push(yBsHcSociReceivable);
                 matrix.bsHcCashBalance.push(cumHcCash);
+                matrix.bsHcCash.push(cumHcCash);
                 matrix.bsHcTotalAssets.push(yBsHcTotalAssets);
                 matrix.bsHcShareCapital.push(yBsHcShareCapital);
                 matrix.bsHcRetainedEarnings.push(yBsHcRetainedEarnings);
@@ -4349,6 +4376,7 @@ function runSensitivityLoop(baseState, config) {
                 matrix.bsHcPdDebt.push(yBsHcPdDebt);
                 matrix.bsHcTotalLiabilities.push(yBsHcTotalLiabilities);
                 matrix.bsHcTotalLiabAndEquity.push(yBsHcTotalLiabAndEquity);
+                matrix.bsHcTotalLiabilitiesAndEquity.push(yBsHcTotalLiabAndEquity);
                 matrix.bsHcBalanceCheck.push(Math.abs(yBsHcCheck) < 1e-6 ? 0 : yBsHcCheck);
                 // External financing instruments rows
                 matrix.pdInterestAccrued.push(yPdInterestAccrued);

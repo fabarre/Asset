@@ -218,11 +218,14 @@ const extractFns = new Function(
         _repBilancioHolding,
         _repContoEconomicoHoldingInline,
         _repRendicontoFinanziarioHoldingInline,
-        _repFullDueDiligence
+        _repFullDueDiligence,
+        _repStatoPatrimoniale,
+        _repStatoPatrimonialeSpvInline,
+        _repStatoPatrimonialeHoldingInline
     };`
 );
 
-const { _repCashFlowMensileInline, _repRendicontoFinanziario, _repBilancioHolding, _repContoEconomicoHoldingInline, _repRendicontoFinanziarioHoldingInline, _repFullDueDiligence } = extractFns(global.window);
+const { _repCashFlowMensileInline, _repRendicontoFinanziario, _repBilancioHolding, _repContoEconomicoHoldingInline, _repRendicontoFinanziarioHoldingInline, _repFullDueDiligence, _repStatoPatrimoniale } = extractFns(global.window);
 
 // Imposta i risultati nello State dopo l'inizializzazione di main.js
 global.window.State.inputs = {
@@ -258,7 +261,38 @@ global.window.State.results = {
         holdcoLoanRepaymentReceived: [0, 0, 0, 0, 0],
         spvLockedDividends: [0, 0, 0, 0, 0],
         holdcoDividendReceived: [9000, 9800, 10600, 11400, 12200],
-        spvCashTrap: [0, 0, 0, 0, 0]
+        spvCashTrap: [0, 0, 0, 0, 0],
+        bsSpvGrossFixedAssets: [5000000, 5000000, 5000000, 5000000, 5000000],
+        bsSpvAccumDepreciation: [5000, 10000, 15000, 20000, 25000],
+        bsSpvNetFixedAssets: [4995000, 4990000, 4985000, 4980000, 4975000],
+        bsSpvDta: [0, 0, 0, 0, 0],
+        bsSpvRestrictedCash: [50000, 50000, 50000, 50000, 50000],
+        bsSpvCashBalance: [10000, 15000, 20000, 25000, 30000],
+        bsSpvTotalAssets: [5055000, 5055000, 5055000, 5055000, 5055000],
+        bsSpvShareCapital: [1500000, 1500000, 1500000, 1500000, 1500000],
+        bsSpvLegalReserve: [500, 1050, 1650, 2300, 3000],
+        bsSpvRetainedEarnings: [5000, 10000, 15000, 20000, 25000],
+        bsSpvNetProfit: [10000, 11000, 12000, 13000, 14000],
+        bsSpvTotalEquity: [1515500, 1522050, 1528650, 1535300, 1542000],
+        bsSpvDtl: [0, 0, 0, 0, 0],
+        bsSpvSeniorDebt: [3500000, 3494000, 3487800, 3481400, 3474800],
+        bsSpvShareholderLoan: [39500, 38950, 38550, 38300, 38200],
+        bsSpvAfLiability: [0, 0, 0, 0, 0],
+        bsSpvTotalLiabilities: [3539500, 3532950, 3526350, 3519700, 3513000],
+        bsSpvTotalLiabAndEquity: [5055000, 5055000, 5055000, 5055000, 5055000],
+        bsSpvBalanceCheck: [0, 0, 0, 0, 0],
+        bsHcSpvEquityInv: [1500000, 1500000, 1500000, 1500000, 1500000],
+        bsHcSociLoanReceivable: [39500, 38950, 38550, 38300, 38200],
+        bsHcCashBalance: [10000, 20000, 30000, 40000, 50000],
+        bsHcTotalAssets: [1549500, 1558950, 1568550, 1578300, 1588200],
+        bsHcShareCapital: [1500000, 1500000, 1500000, 1500000, 1500000],
+        bsHcRetainedEarnings: [39500, 47950, 56550, 65300, 74200],
+        bsHcNetProfit: [10000, 11000, 12000, 13000, 14000],
+        bsHcTotalEquity: [1549500, 1558950, 1568550, 1578300, 1588200],
+        bsHcPdDebt: [0, 0, 0, 0, 0],
+        bsHcTotalLiabilities: [0, 0, 0, 0, 0],
+        bsHcTotalLiabAndEquity: [1549500, 1558950, 1568550, 1578300, 1588200],
+        bsHcBalanceCheck: [0, 0, 0, 0, 0]
     },
     debtSchedule: {
         years: [1, 2, 3, 4, 5],
@@ -357,6 +391,24 @@ if (!rfHoldTable.head || !rfHoldTable.head[0] || rfHoldTable.head[0][0] !== 'Voc
 }
 console.log(`✓ Tabelle Conto Economico e Rendiconto Holding strutturate con successo a ${ceHoldTable.head[0].length} colonne.`);
 
+console.log("\n▶ Test 5: Esecuzione di _repStatoPatrimoniale()...");
+const mock5 = createMockDoc();
+const repBsDoc = _repStatoPatrimoniale(mock5.doc);
+const calls5 = (repBsDoc && repBsDoc._calls) ? repBsDoc._calls : mock5.calls;
+if (calls5.tables.length < 2) {
+    throw new Error(`❌ Attese 2 tabelle in _repStatoPatrimoniale (SPV + Holding), trovate: ${calls5.tables.length}`);
+}
+console.log(`✓ Report Stato Patrimoniale genera correttamente ${calls5.tables.length} tabelle (SPV + Holding).`);
+const spvBsTable = calls5.tables[0];
+const hcBsTable = calls5.tables[1];
+if (!spvBsTable.head || !spvBsTable.head[0] || spvBsTable.head[0][0] !== 'Voce') {
+    throw new Error("❌ Tabella Stato Patrimoniale SPV priva di colonna 'Voce'!");
+}
+if (!hcBsTable.head || !hcBsTable.head[0] || hcBsTable.head[0][0] !== 'Voce') {
+    throw new Error("❌ Tabella Stato Patrimoniale Holding priva di colonna 'Voce'!");
+}
+console.log(`✓ Tabelle Stato Patrimoniale SPV e Holding verificate con successo a ${spvBsTable.head[0].length} colonne.`);
+
 console.log("\n========================================================");
-console.log("🎉 TUTTI I TEST REPORT PDF (SPV + HOLDING + CF) SUPERATI AL 100%!");
+console.log("🎉 TUTTI I TEST REPORT PDF (SPV + HOLDING + CF + BS) SUPERATI AL 100%!");
 console.log("========================================================\n");
