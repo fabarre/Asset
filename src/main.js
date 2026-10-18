@@ -7491,7 +7491,19 @@
                 irrEl.title = `Equity IRR SPV: ${fmtDec(spvIrr, 2)}% | Equity IRR HoldCo (Sponsor): ${fmtDec(r.calculatedIrr, 2)}%`;
             }
 
-            setTxt('kpi-npv', formatEuro(r.holdcoNpv));
+            const npvVal = (r.spvEquityNpv !== undefined) ? r.spvEquityNpv : r.holdcoNpv;
+            setTxt('kpi-npv', formatEuro(npvVal));
+            const npvEl = document.getElementById('kpi-npv');
+            if (npvEl) {
+                if (npvVal > 0) {
+                    npvEl.className = "text-lg font-extrabold text-emerald-400 mt-1";
+                } else if (npvVal < 0) {
+                    npvEl.className = "text-lg font-extrabold text-amber-400 mt-1";
+                } else {
+                    npvEl.className = "text-lg font-extrabold text-slate-300 mt-1";
+                }
+                npvEl.title = `VAN Azionisti SPV: ${formatEuro(r.spvEquityNpv || 0)} | VAN Sponsor HoldCo: ${formatEuro(r.holdcoNpv || 0)}`;
+            }
             setTxt('kpi-moic', fmtDec(r.holdcoMoic, 2) + 'x');
             setTxt('kpi-payback', r.paybackPeriod);
             setTxt('kpi-payback-unlevered', r.paybackPeriodUnlevered || r.paybackPeriod);
@@ -12831,7 +12843,7 @@ function _repExecutiveSummary(doc) {
         body: [
             ['Project IRR (Unlevered SPV)', _fmtPct(r.calculatedProjectIrr), 'Rendimento intrinseco progetto'],
             ['Equity IRR (Levered SPV)', _fmtPct(r.calculatedSpvEquityIrr || r.calculatedIrr), 'Target equity ≥ 8%'],
-            ['NPV @ Ke (' + _fmtPct(p.keVal * 100) + ')', _fmtE(r.holdcoNpv), 'Positivo = crea valore'],
+            ['NPV @ Ke (' + _fmtPct(p.keVal * 100) + ')', _fmtE(r.spvEquityNpv !== undefined ? r.spvEquityNpv : r.holdcoNpv), 'Positivo = crea valore'],
             ['MOIC (multiplo cash investito)', _fmtX(r.spvMoic || r.holdcoMoic), '≥ 1.5x tipicamente atteso'],
             ['Payback Equity (Levered SPV)', r.paybackPeriod, 'Anni a recupero equity SPV'],
             ['Payback Progetto (Unlevered SPV)', r.paybackPeriodUnlevered || r.paybackPeriod, 'Anni a recupero Capex progetto'],
@@ -13444,7 +13456,7 @@ function _repExitValutazione(doc) {
             ['Net Proceeds Exit', _fmtEFull(netProceeds)],
             ['MOIC (Multiplo su investito)', _fmtX(moic)],
             ['IRR Equity HoldCo', _fmtPct(r.calculatedIrr)],
-            ['NPV @ Ke', _fmtE(r.holdcoNpv)],
+            ['NPV @ Ke (HoldCo Sponsor)', _fmtE(r.holdcoNpv)],
             ['Payback period', r.paybackPeriod]
         ],
         margin: { left: 14, right: 14 }

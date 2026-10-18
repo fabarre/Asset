@@ -115,6 +115,7 @@ check('SPV Project IRR finito e coerente', isFinite(r1.calculatedProjectIrr) && 
 check('Payback Levered definito e coerente', r1.paybackPeriod !== '-' && !r1.paybackPeriod.includes('NaN'), `leveredPayback=${r1.paybackPeriod}`);
 check('Payback Unlevered definito e coerente', r1.paybackPeriodUnlevered !== '-' && !r1.paybackPeriodUnlevered.includes('NaN'), `unleveredPayback=${r1.paybackPeriodUnlevered}`);
 check('NPV finito', isFinite(r1.holdcoNpv));
+check('SPV Equity NPV finito', isFinite(r1.spvEquityNpv));
 check('DSCR medio > 0', r1.avgDscr > 0, `avgDscr=${r1.avgDscr}`);
 check('Ricavi Anno 0 pari a 0', r1.matrix.revenueTotal[0] === 0);
 check('Ammortamento Anno 0 pari a 0', r1.matrix.depreciationCivil[0] === 0);

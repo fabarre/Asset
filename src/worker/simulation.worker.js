@@ -257,8 +257,10 @@ self.onmessage = async function(e) {
                 results.push({
                     id: scen.id,
                     name: scen.name,
-                    irr: res.calculatedIrr,
-                    npv: res.holdcoNpv,
+                    irr: res.calculatedSpvEquityIrr || res.calculatedIrr,
+                    npv: res.spvEquityNpv !== undefined ? res.spvEquityNpv : res.holdcoNpv,
+                    holdcoNpv: res.holdcoNpv,
+                    spvEquityNpv: res.spvEquityNpv,
                     moic: res.holdcoMoic,
                     minDscr: (res.minDscr === 999 || res.minDscr === 0) ? null : res.minDscr,
                     avgDscr: res.avgDscr,
@@ -1054,8 +1056,8 @@ function runMonteCarloLoop(baseState, mcConfig) {
 
         State = stateClone;
         const res = executeCalculation(stateClone);
-        samples.irr.push(res.calculatedIrr);
-        samples.npv.push(res.holdcoNpv);
+        samples.irr.push(res.calculatedSpvEquityIrr || res.calculatedIrr);
+        samples.npv.push(res.spvEquityNpv !== undefined ? res.spvEquityNpv : res.holdcoNpv);
         samples.dscrMin.push(res.minDscr === 999 ? 0 : res.minDscr);
         samples.dscrAvg.push(res.avgDscr);
     }
@@ -1167,8 +1169,8 @@ function runSensitivityLoop(baseState, config) {
             const res = executeCalculation(stateClone);
             
             let val = null;
-            if (targetKpi === 'irr') val = res.calculatedIrr;
-            else if (targetKpi === 'npv') val = res.holdcoNpv;
+            if (targetKpi === 'irr') val = res.calculatedSpvEquityIrr || res.calculatedIrr;
+            else if (targetKpi === 'npv') val = res.spvEquityNpv !== undefined ? res.spvEquityNpv : res.holdcoNpv;
             else if (targetKpi === 'dscr_min') val = res.minDscr;
             else if (targetKpi === 'dscr_avg') val = res.avgDscr;
             
@@ -4594,8 +4596,9 @@ function runSensitivityLoop(baseState, config) {
             }
             const calculatedProjectIrr = calculateIRR(cashFlowsForProjectIRR);
 
-            // Build SPV Levered Equity cash flows
+            // Build SPV Levered Equity cash flows & SPV Equity NPV
             const cashFlowsForSpvEquityIRR = [-totalSpvEquityTicket];
+            let spvEquityNpv = -totalSpvEquityTicket;
             const maxYearsForSpvIrr = exitOptionYear > 0 ? exitOptionYear : 20;
             for (let yr = 1; yr <= maxYearsForSpvIrr; yr++) {
                 let ySpvFlow = (matrix.spvFCFE[yr] || 0) + (matrix.dsraRelease ? (matrix.dsraRelease[yr] || 0) : 0);
@@ -4604,6 +4607,7 @@ function runSensitivityLoop(baseState, config) {
                     ySpvFlow += exitEq;
                 }
                 cashFlowsForSpvEquityIRR.push(ySpvFlow);
+                spvEquityNpv += ySpvFlow / Math.pow(1 + p.keVal, yr);
             }
             const calculatedSpvEquityIrr = calculateIRR(cashFlowsForSpvEquityIRR);
 
@@ -5459,7 +5463,7 @@ function runSensitivityLoop(baseState, config) {
                 initialShareholderLoan,
                 y1OperatingAvail: y1DebtAvail,
                 totalCustomCapex, totalCustomOpex,
-                calculatedIrr, calculatedProjectIrr, calculatedSpvEquityIrr, holdcoNpv, holdcoMoic, paybackPeriod, paybackPeriodUnlevered, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
+                calculatedIrr, calculatedProjectIrr, calculatedSpvEquityIrr, spvEquityNpv, holdcoNpv, holdcoMoic, paybackPeriod, paybackPeriodUnlevered, calculatedLcoe, calculatedLcos, avgDscr: dscrYearsCount > 0 ? (sumDscr / dscrYearsCount) : 0, minDscr, totalEbitda, totalHoldcoFCFE,
                 matrix, debtSchedule, combinedSolarProfile, generalMedionePrices, bessSimulation,
                 monthlyCashflow: anchorYear !== null
                     ? buildMonthlyCashflowDated(activePlants, matrix, debtSchedule, State.inputs, anchorYear, State.capexPayments || null, State.opexEvents || null, {
@@ -5715,7 +5719,7 @@ function runSensitivityLoop(baseState, config) {
         function buildZeroResults() {
             return {
                 cashFlowsForIRR: [], matrix: {}, debtSchedule: {}, pdSchedule: {}, cashTrapActiveYears: 0, exitEquityValue: 0,
-                calculatedProjectIrr: 0, calculatedIrr: 0, holdcoNpv: 0, holdcoMoic: 0,
+                calculatedProjectIrr: 0, calculatedIrr: 0, calculatedSpvEquityIrr: 0, spvEquityNpv: 0, holdcoNpv: 0, holdcoMoic: 0,
                 paybackPeriod: "-", calculatedLcoe: 0, calculatedLcos: 0, avgDscr: 0, minDscr: 0, totalEbitda: 0, totalHoldcoFCFE: 0,
                 totalProjectCost: 0, equityAmount: 0, debtAmount: 0,
                 pdAmount: 0, peAmount: 0, pdEnabled: false, peEnabled: false, afEnabled: false,
