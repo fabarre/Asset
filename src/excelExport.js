@@ -2924,17 +2924,17 @@ async function exportPnlToExcel() {
     }
 
     addRowBsSpv('sec_bs_spv_assets', 'ATTIVO — STATO PATRIMONIALE SPV (Art. 2424 c.c. / OIC)', 'section-title');
-    addRowBsSpv('bsSpvGrossFixedAssets', 'Immobilizzazioni Materiali e Immateriali Lorde (CAPEX + IDC + Aug. BESS) (€)', 'normal', m.bsSpvGrossFixedAssets, numberFormatEuro, (col, yi) => {
+    addRowBsSpv('bsSpvGrossFixedAssets', 'Immobilizzazioni Materiali e Immateriali Lorde (CAPEX Totale al COD + Aug. BESS) (€)', 'normal', m.bsSpvGrossFixedAssets, numberFormatEuro, (col, yi) => {
         if (yi === 0) return `'FINANZA'!$B$${rowMapFin['capexUsi']}`;
         const prevCol = getColLetter(yi + 1);
         return `${prevCol}${rowMapBsSpv.bsSpvGrossFixedAssets}-'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.bessAugmentationCost}`;
     });
-    addRowBsSpv('bsSpvAccumDepreciation', '  (-) Fondo Ammortamento Cumulato (€)', 'minus', m.bsSpvAccumDepreciation, numberFormatEuro, (col, yi) => {
+    addRowBsSpv('bsSpvAccumDepreciation', '  (-) Fondo Ammortamento Cumulato (OIC 16 — decorre dal COD) (€)', 'minus', m.bsSpvAccumDepreciation, numberFormatEuro, (col, yi) => {
         if (yi === 0) return `'CONTO ECONOMICO'!${col}${rowMapCe.depreciationCivil}`;
         const prevCol = getColLetter(yi + 1);
         return `${prevCol}${rowMapBsSpv.bsSpvAccumDepreciation}+'CONTO ECONOMICO'!${col}${rowMapCe.depreciationCivil}`;
     });
-    addRowBsSpv('bsSpvNetFixedAssets', '(=) Immobilizzazioni Nette (B.I + B.II) (€)', 'bold', m.bsSpvNetFixedAssets, numberFormatEuro, (col) => {
+    addRowBsSpv('bsSpvNetFixedAssets', '(=) Immobilizzazioni Nette (B.II.5 in corso ad Anno 0 / B.II.2 in esercizio) (€)', 'bold', m.bsSpvNetFixedAssets, numberFormatEuro, (col) => {
         return `${col}${rowMapBsSpv.bsSpvGrossFixedAssets}+${col}${rowMapBsSpv.bsSpvAccumDepreciation}`;
     });
     addRowBsSpv('bsSpvDta', 'Attività per Imposte Anticipate — DTA (C.II.5-ter / OIC 25) (€)', 'normal', m.bsSpvDta, numberFormatEuro, (col) => {

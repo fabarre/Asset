@@ -6832,12 +6832,10 @@
             // ═══ SEZIONE B-BIS: STATO PATRIMONIALE CIVILISTICO SPV (ART. 2424 C.C.) ═══
             const pnlRowsBBis = [
                 { section: 'ATTIVO — IMPIEGHI PATRIMONIALI SPV (ART. 2424 C.C.)', type: 'title-blue' },
-                { key: 'bsSpvNetFixedAssets', label: 'B) Immobilizzazioni Nette (Impianti FV + BESS + Terreni) (€)', type: 'bold' },
-                { key: 'bsSpvGrossCapex', label: '  (+) Costo Storico Immobilizzazioni Materiali e Immateriali (€)', type: 'detail', parent: 'bsSpvNetFixedAssets' },
-                { key: 'bsSpvAccumDepr', label: '  (-) Fondo Ammortamento Cumulato (OIC 16) (€)', type: 'detail', parent: 'bsSpvNetFixedAssets' },
-                { key: 'bsSpvCurrentAssetsTax', label: 'C.II) Attivo Circolante - Crediti Tributari e DTA (€)', type: 'group-header' },
-                { key: 'bsSpvVatReceivable', label: '  (+) Crediti Tributari Erario per IVA (Modello TR / Dichiarazione) (€)', type: 'detail', parent: 'bsSpvCurrentAssetsTax' },
-                { key: 'bsSpvDta', label: '  (+) Attività per Imposte Anticipate (DTA - OIC 25) (€)', type: 'detail', parent: 'bsSpvCurrentAssetsTax' },
+                { key: 'bsSpvNetFixedAssets', label: 'B) Immobilizzazioni Nette (B.II.5 in corso ad Anno 0 / B.II.2 in esercizio) (€)', type: 'bold' },
+                { key: 'bsSpvGrossCapex', label: '  (+) Costo Storico Immobilizzazioni Materiali e Immateriali (CAPEX al COD) (€)', type: 'detail', parent: 'bsSpvNetFixedAssets' },
+                { key: 'bsSpvAccumDepr', label: '  (-) Fondo Ammortamento Cumulato (OIC 16 — decorre dal COD) (€)', type: 'detail', parent: 'bsSpvNetFixedAssets' },
+                { key: 'bsSpvDta', label: 'C.II.5-ter) Attività per Imposte Anticipate (DTA - OIC 25) (€)', type: 'normal' },
                 { key: 'bsSpvTotalLiquidity', label: 'C.IV) Disponibilità Liquide e Conti Riserva SPV (€)', type: 'bold-teal' },
                 { key: 'bsSpvCash', label: '  (+) Disponibilità Liquide Ordinarie / Cassa Libera (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
                 { key: 'bsSpvDsra', label: '  (+) Conto Riserva Servizio Debito (DSRA vincolata) (€)', type: 'detail', parent: 'bsSpvTotalLiquidity' },
@@ -6855,7 +6853,6 @@
                 { key: 'bsSpvSeniorDebt', label: '  D.4 - Debito Senior Bancario Residuo (Project Finance) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
                 { key: 'bsSpvSociLoan', label: '  D.3 - Finanziamento Soci Subordinato Residuo (Sponsor Loan) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
                 ...(p.afEnabled && p.afType === 'convertible_note' ? [{ key: 'bsSpvAfConvertible', label: '  D.5 - Strumento Ibrido / Convertibile Residuo (Altra Forma) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' }] : []),
-                { key: 'bsSpvVatPayable', label: '  Debiti Tributari per IVA a Debito da Versare (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
                 { key: 'bsSpvTotalLiabilitiesAndEquity', label: 'TOTALE PASSIVO E PATRIMONIO NETTO SPV (€)', type: 'total' },
                 { key: 'bsSpvBalanceCheck', label: 'CONTROLLO QUADRATURA STATO PATRIMONIALE SPV (Attivo - Passivo & PN) (€)', type: 'bold-teal' }
             ];
@@ -6884,7 +6881,7 @@
                 let headerHtml = `<th class="frozen-column px-4 py-4 border-r border-slate-800 text-left w-[500px] min-w-[500px] max-w-[500px] z-30 uppercase tracking-wider text-[10px] text-slate-400 bg-[#020617] select-none">Voce di Bilancio</th>`;
                 for (let yr = 0; yr <= yearsLimit; yr++) {
                     const yearLabel = yr === 0 ? 'Anno 0' : `Anno ${yr}`;
-                    headerHtml += `<th class="px-3 py-4 text-right font-bold text-slate-200 border-b border-slate-800 w-[120px] min-w-[120px] max-w-[120px] bg-[#020617] sticky top-0 z-20 select-none" title="${yr === 0 ? 'Anno 0 (Pre-COD / Cantiere)' : `Anno ${yr}`}">${yearLabel}</th>`;
+                    headerHtml += `<th class="px-3 py-4 text-right font-bold text-slate-200 border-b border-slate-800 w-[120px] min-w-[120px] max-w-[120px] bg-[#020617] sticky top-0 z-20 select-none" title="${yr === 0 ? 'Anno 0 (Budget Closing / Apertura al COD)' : `Anno ${yr}`}">${yearLabel}</th>`;
                 }
                 header.innerHTML = headerHtml;
             };
@@ -7239,8 +7236,6 @@
                 setCell('bsSpvNetFixedAssets', bsSpvNetFixedVal, true, formatEuro);
                 setCell('bsSpvGrossCapex', bsSpvGrossVal, true, formatEuro);
                 setCell('bsSpvAccumDepr', bsSpvAccumVal, true, formatMinusEuro);
-                setCell('bsSpvCurrentAssetsTax', bsSpvVatRec + bsSpvDtaVal, true, formatEuro);
-                setCell('bsSpvVatReceivable', bsSpvVatRec, true, formatPlusEuro);
                 setCell('bsSpvDta', bsSpvDtaVal, true, formatEuro);
                 setCell('bsSpvTotalLiquidity', bsSpvTotLiqVal, true, formatEuro);
                 setCell('bsSpvCash', bsSpvCashVal, true, formatEuro);
@@ -7262,7 +7257,6 @@
                 if (m.bsSpvAfLiability || m.bsSpvAfConvertible) {
                     setCell('bsSpvAfConvertible', m.bsSpvAfLiability ? m.bsSpvAfLiability[i] : (m.bsSpvAfConvertible ? m.bsSpvAfConvertible[i] : 0), true, formatEuro);
                 }
-                setCell('bsSpvVatPayable', m.bsSpvVatPayable ? m.bsSpvVatPayable[i] : 0, true, formatEuro);
                 setCell('bsSpvTotalLiabilitiesAndEquity', m.bsSpvTotalLiabAndEquity ? m.bsSpvTotalLiabAndEquity[i] : (m.bsSpvTotalLiabilitiesAndEquity ? m.bsSpvTotalLiabilitiesAndEquity[i] : 0), true, formatEuro);
                 setCell('bsSpvBalanceCheck', m.bsSpvBalanceCheck ? m.bsSpvBalanceCheck[i] : 0, true, v => Math.abs(v) < 0.05 ? '0 € (OK)' : formatEuro(v));
 
@@ -13686,9 +13680,9 @@ function _repFullDueDiligence(doc) {
 // ── Versioni inline (rendering sul doc corrente senza ricreare header/copertina) ──
 function _repStatoPatrimonialeSpvInline(doc, startY) {
     const rows = [
-        { key: 'bsSpvGrossFixedAssets', label: 'Immobilizzazioni Materiali e Immateriali Lorde (CAPEX + Augmentation)' },
-        { key: 'bsSpvAccumDepreciation', label: '(-) Fondo Ammortamento Cumulato (OIC 16)', fmt: v => _fmtEFull(-Math.abs(v)) },
-        { key: 'bsSpvNetFixedAssets', label: '(=) IMMOBILIZZAZIONI NETTE (B.I + B.II)' },
+        { key: 'bsSpvGrossFixedAssets', label: 'Immobilizzazioni Materiali e Immateriali Lorde (CAPEX Totale al COD)' },
+        { key: 'bsSpvAccumDepreciation', label: '(-) Fondo Ammortamento Cumulato (OIC 16 — decorre dal COD)', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'bsSpvNetFixedAssets', label: '(=) IMMOBILIZZAZIONI NETTE (B.II.5 in corso / B.II.2 in esercizio)' },
         { key: 'bsSpvDta', label: 'Attività per Imposte Anticipate (DTA - C.II.5-ter / OIC 25)' },
         { key: 'bsSpvRestrictedCash', label: 'Disponibilità Liquide Vincolate (MRA + DSRA) (C.IV)' },
         { key: 'bsSpvCashBalance', label: 'Disponibilità Liquide Ordinarie / Cassa SPV (C.IV.1)' },
