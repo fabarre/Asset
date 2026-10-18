@@ -237,6 +237,7 @@
             'afConvertibleRate': { id: 'slide-af-convertible-rate', mult: 1 },
             'afConvertiblePct': { id: 'slide-af-convertible-pct', mult: 1 },
             'afTaxDeductible': { id: 'input-af-tax-deductible', mult: 1 },
+            'spvCapital': { id: 'input-spv-capital', mult: 1 },
             'holdcoCapital': { id: 'input-holdco-capital', mult: 1 },
             'exitOption': { id: 'input-exit-option', mult: 1 },
             'exitMultiple': { id: 'input-exit-multiple', mult: 1 },
@@ -3756,7 +3757,8 @@
             p.afConvertibleRate = getNum('slide-af-convertible-rate', 6.0);
             p.afConvertiblePct = getNum('slide-af-convertible-pct', 10.0);
             p.afTaxDeductible = document.getElementById('input-af-tax-deductible') ? document.getElementById('input-af-tax-deductible').checked : true;
-            // Holding & Exit params
+            // Holding & SPV Capital & Exit params
+            p.spvCapital = getNum('input-spv-capital', 10000);
             p.holdcoCapital = getNum('input-holdco-capital', 10000);
             p.exitOption = getVal('input-exit-option') || '20';
             p.exitMultiple = getNum('input-exit-multiple', 8.0);
@@ -3936,6 +3938,7 @@
             setVal('slide-af-convertible-rate', p.afConvertibleRate !== undefined ? p.afConvertibleRate : 6.0);
             setVal('slide-af-convertible-pct', p.afConvertiblePct !== undefined ? p.afConvertiblePct : 10.0);
             setChk('input-af-tax-deductible', p.afTaxDeductible);
+            setVal('input-spv-capital', p.spvCapital !== undefined ? p.spvCapital : 10000);
             setVal('input-holdco-capital', p.holdcoCapital !== undefined ? p.holdcoCapital : 10000);
             let eOpt = p.exitOption !== undefined ? p.exitOption : '20';
             if (eOpt === 'none') eOpt = '0';
@@ -7498,8 +7501,9 @@
             // Populate Sources & Uses
             const spvAcquisition = r.totalSpvAcquisitionCapex || 0;
             const constructionCapex = (r.totalProjectCost || 0) - spvAcquisition;
+            const spvSetup = p.spvCapital !== undefined ? p.spvCapital : 10000;
             const holdcoSetup = p.holdcoCapital !== undefined ? p.holdcoCapital : 10000;
-            const totalUses = spvAcquisition + constructionCapex + holdcoSetup;
+            const totalUses = spvAcquisition + constructionCapex + spvSetup + holdcoSetup;
 
             const seniorDebt = r.debtAmount || 0;
             const privateDebt = r.pdAmount || 0;
@@ -7514,6 +7518,7 @@
 
             setTxt('uses-spv-acquisition', formatEuro(spvAcquisition));
             setTxt('uses-construction-capex', formatEuro(constructionCapex));
+            setTxt('uses-spv-setup', formatEuro(spvSetup));
             setTxt('uses-holdco-setup', formatEuro(holdcoSetup));
             setTxt('uses-total', formatEuro(totalUses));
 
@@ -10625,7 +10630,7 @@
                 'input-sweep-value', 'input-sweep-years', 'input-sculpting-enabled', 'input-target-dscr',
                 'input-dsra-months', 'input-refi-enabled', 'input-refi-year', 'input-refi-rate', 'input-refi-term',
                 'input-soci-interest-grace', 'input-soci-principal-grace', 'input-soci-loan-term',
-                'input-holdco-capital',
+                'input-spv-capital', 'input-holdco-capital',
                 'input-pd-amount-value', 'input-pd-interest-grace', 'input-pd-principal-grace', 'input-pd-loan-term',
                 'input-pd-enabled', 'input-pd-tax-deductible',
                 'input-pe-amount-value', 'input-pe-exit-multiple', 'input-pe-enabled', 'input-pe-participates-exit',
@@ -12845,6 +12850,7 @@ function _repExecutiveSummary(doc) {
     y = _ensureSpace(doc, 50, y);
     y = _sectionTitle(doc, '3. Struttura Fonti / Impieghi', y);
     const spvAcq = (plants.reduce((a, pl) => a + (pl.spvAcquisitionCost || 0), 0));
+    const spvSetup = typeof p.spvCapital === 'number' ? p.spvCapital : 10000;
     const holdcoSetup = typeof p.holdcoCapital === 'number' ? p.holdcoCapital : 10000;
     const constructionCapex = (r.totalProjectCost || 0) - spvAcq;
     const seniorDebt = r.debtAmount || 0;
@@ -12864,10 +12870,10 @@ function _repExecutiveSummary(doc) {
         body: [
             ['Acquisizione SPV', _fmtE(spvAcq), 'Debito Senior Bancario', _fmtE(seniorDebt)],
             ['CAPEX Costruzione', _fmtE(constructionCapex), 'Private Debt (Mezzanine)', _fmtE(pdAmt)],
-            ['Capitale Holding', _fmtE(holdcoSetup), 'Private Equity', _fmtE(peAmt)],
-            ['', '', 'Finanziamento Soci', _fmtE(sponsorLoan)],
+            ['Capitale Sociale SPV', _fmtE(spvSetup), 'Private Equity', _fmtE(peAmt)],
+            ['Capitale Holding', _fmtE(holdcoSetup), 'Finanziamento Soci', _fmtE(sponsorLoan)],
             ['', '', 'Sponsor Pure Equity', _fmtE(sponsorEquity)],
-            ['TOTALE IMPIEGHI', _fmtE(spvAcq + constructionCapex + holdcoSetup), 'TOTALE FONTI', _fmtE(seniorDebt + pdAmt + peAmt + sponsorLoan + sponsorEquity)]
+            ['TOTALE IMPIEGHI', _fmtE(spvAcq + constructionCapex + spvSetup + holdcoSetup), 'TOTALE FONTI', _fmtE(seniorDebt + pdAmt + peAmt + sponsorLoan + sponsorEquity)]
         ],
         margin: { left: 14, right: 14 },
         willDrawCell: function(data) {
@@ -13289,6 +13295,7 @@ function _repStrutturaFinanziaria(doc) {
     _pdfHeader(doc, 'Struttura Finanziaria & Fonti/Impieghi', 'Report N. 05');
     let y = 32;
     const spvAcq = plants.reduce((a, pl) => a + (pl.spvAcquisitionCost || 0), 0);
+    const spvSetup = typeof p.spvCapital === 'number' ? p.spvCapital : 10000;
     const holdcoSetup = typeof p.holdcoCapital === 'number' ? p.holdcoCapital : 10000;
     const constructionCapex = (r.totalProjectCost || 0) - spvAcq;
     const seniorDebt = r.debtAmount || 0;
@@ -13300,6 +13307,7 @@ function _repStrutturaFinanziaria(doc) {
     // equityAmount del worker è già al netto del prestito soci
     const sponsorEquity = Math.max(0, r.equityAmount || 0);
     const totalSources = seniorDebt + pdAmt + peAmt + sponsorLoan + sponsorEquity;
+    const totalUses = spvAcq + constructionCapex + spvSetup + holdcoSetup;
 
     y = _sectionTitle(doc, '1. Fonti & Impieghi', y);
     doc.autoTable({
@@ -13309,12 +13317,12 @@ function _repStrutturaFinanziaria(doc) {
         bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
         head: [['Fonti', 'Valore (€)', '%', 'Impieghi', 'Valore (€)', '%']],
         body: [
-            ['Debito Senior Bancario', _fmtEFull(seniorDebt), _fmtPct(totalSources ? seniorDebt/totalSources*100 : 0), 'Acquisizione SPV', _fmtEFull(spvAcq), _fmtPct(totalSources ? spvAcq/totalSources*100 : 0)],
-            ['Private Debt (Mezzanine)', _fmtEFull(pdAmt), _fmtPct(totalSources ? pdAmt/totalSources*100 : 0), 'CAPEX Costruzione', _fmtEFull(constructionCapex), _fmtPct(totalSources ? constructionCapex/totalSources*100 : 0)],
-            ['Private Equity', _fmtEFull(peAmt), _fmtPct(totalSources ? peAmt/totalSources*100 : 0), 'Capitale Holding', _fmtEFull(holdcoSetup), _fmtPct(totalSources ? holdcoSetup/totalSources*100 : 0)],
-            ['Finanziamento Soci', _fmtEFull(sponsorLoan), _fmtPct(totalSources ? sponsorLoan/totalSources*100 : 0), '', '', ''],
+            ['Debito Senior Bancario', _fmtEFull(seniorDebt), _fmtPct(totalSources ? seniorDebt/totalSources*100 : 0), 'Acquisizione SPV', _fmtEFull(spvAcq), _fmtPct(totalUses ? spvAcq/totalUses*100 : 0)],
+            ['Private Debt (Mezzanine)', _fmtEFull(pdAmt), _fmtPct(totalSources ? pdAmt/totalSources*100 : 0), 'CAPEX Costruzione', _fmtEFull(constructionCapex), _fmtPct(totalUses ? constructionCapex/totalUses*100 : 0)],
+            ['Private Equity', _fmtEFull(peAmt), _fmtPct(totalSources ? peAmt/totalSources*100 : 0), 'Capitale Sociale SPV', _fmtEFull(spvSetup), _fmtPct(totalUses ? spvSetup/totalUses*100 : 0)],
+            ['Finanziamento Soci', _fmtEFull(sponsorLoan), _fmtPct(totalSources ? sponsorLoan/totalSources*100 : 0), 'Capitale Holding', _fmtEFull(holdcoSetup), _fmtPct(totalUses ? holdcoSetup/totalUses*100 : 0)],
             ['Sponsor Pure Equity', _fmtEFull(sponsorEquity), _fmtPct(totalSources ? sponsorEquity/totalSources*100 : 0), '', '', ''],
-            ['TOTALE FONTI', _fmtEFull(totalSources), '100,00%', 'TOTALE IMPIEGHI', _fmtEFull(spvAcq + constructionCapex + holdcoSetup), '100,00%']
+            ['TOTALE FONTI', _fmtEFull(totalSources), '100,00%', 'TOTALE IMPIEGHI', _fmtEFull(totalUses), '100,00%']
         ],
         margin: { left: 14, right: 14 },
         willDrawCell: function(data) { if (data.row.index === 5) doc.setFont('helvetica', 'bold'); }

@@ -2352,6 +2352,10 @@ async function exportPnlToExcel() {
 
     // --- 7. VALUTAZIONE DI EXIT & LIQUIDITÀ ---
     addFinRow('hdrExit', '7. STRATEGIA DI EXIT & VALUTAZIONE ASSET', true, true);
+    addFinRow('spvCapital', 'Capitale Sociale Iniziale SPV (€)');
+    sheetFin.getCell(`B${rowMapFin['spvCapital']}`).value = paramsFin.spvCapital !== undefined ? paramsFin.spvCapital : 10000;
+    applyInputStyle(sheetFin.getCell(`B${rowMapFin['spvCapital']}`), numberFormatEuro);
+
     addFinRow('holdcoCapital2', 'Capitale Iniziale Holding (€)');
     sheetFin.getCell(`B${rowMapFin['holdcoCapital2']}`).value = paramsFin.holdcoCapital !== undefined ? paramsFin.holdcoCapital : 10000;
     applyInputStyle(sheetFin.getCell(`B${rowMapFin['holdcoCapital2']}`), numberFormatEuro);
@@ -2479,8 +2483,10 @@ async function exportPnlToExcel() {
     const prePdAmt = m.pdAmount || resultsFin.pdAmount || 0;
     const prePeAmt = m.peAmount || resultsFin.peAmount || 0;
     const preSubDebt = m.subDebt || resultsFin.initialShareholderLoan || 0;
-    const preEqTotal = m.equity || ((preCapexTotal + (p.holdcoCapital || 0)) - preDebtAmt - prePeAmt);
-    const preOtherEq = m.otherEq || Math.max(0, preEqTotal - (p.holdcoCapital || 0) - preSubDebt - prePdAmt);
+    const preSpvCap = (paramsFin.spvCapital !== undefined) ? paramsFin.spvCapital : 10000;
+    const preHoldcoCap = (paramsFin.holdcoCapital !== undefined) ? paramsFin.holdcoCapital : 10000;
+    const preEqTotal = m.equity || ((preCapexTotal + preHoldcoCap + preSpvCap) - preDebtAmt - prePeAmt);
+    const preOtherEq = m.otherEq || Math.max(0, preEqTotal - preHoldcoCap - preSpvCap - preSubDebt - prePdAmt);
 
     addFinRow('usi', '9. TOTALE USI E BASE FINANZIABILE', true, true);
     addFinRow('capexUsi', 'Costo Totale Progetto (CAPEX)', true);
@@ -2492,13 +2498,17 @@ async function exportPnlToExcel() {
     sheetFin.getCell(`B${rowMapFin['spvCost']}`).value = { formula: `CAPEX!${capexTotColLetter}${rowMapCapex['spv']}`, result: preSpvAcq };
     sheetFin.getCell(`B${rowMapFin['spvCost']}`).numFmt = numberFormatEuro;
 
+    addFinRow('spvUsi', 'Capitale Sociale Iniziale SPV (Da versare)');
+    sheetFin.getCell(`B${rowMapFin['spvUsi']}`).value = { formula: `B${rowMapFin['spvCapital']}`, result: preSpvCap };
+    sheetFin.getCell(`B${rowMapFin['spvUsi']}`).numFmt = numberFormatEuro;
+
     addFinRow('holdcoUsi', 'Capitale Sociale HoldCo (Da versare)');
-    sheetFin.getCell(`B${rowMapFin['holdcoUsi']}`).value = { formula: `B${rowMapFin['holdcoCapital2']}`, result: p.holdcoCapital || 0 };
+    sheetFin.getCell(`B${rowMapFin['holdcoUsi']}`).value = { formula: `B${rowMapFin['holdcoCapital2']}`, result: preHoldcoCap };
     sheetFin.getCell(`B${rowMapFin['holdcoUsi']}`).numFmt = numberFormatEuro;
 
     addFinRow('totUsi', 'TOTALE FABBISOGNO (Usi)', true);
-    const totUsiVal = preCapexTotal + (p.holdcoCapital || 0);
-    sheetFin.getCell(`B${rowMapFin['totUsi']}`).value = { formula: `B${rowMapFin['capexUsi']} + B${rowMapFin['holdcoUsi']}`, result: totUsiVal };
+    const totUsiVal = preCapexTotal + preSpvCap + preHoldcoCap;
+    sheetFin.getCell(`B${rowMapFin['totUsi']}`).value = { formula: `B${rowMapFin['capexUsi']} + B${rowMapFin['spvUsi']} + B${rowMapFin['holdcoUsi']}`, result: totUsiVal };
     sheetFin.getCell(`B${rowMapFin['totUsi']}`).numFmt = numberFormatEuro;
     sheetFin.getCell(`C${rowMapFin['totUsi']}`).value = 1;
     sheetFin.getCell(`C${rowMapFin['totUsi']}`).numFmt = numberFormatPct;
@@ -2552,24 +2562,28 @@ async function exportPnlToExcel() {
     sheetFin.getCell(`C${rowMapFin['equity']}`).numFmt = numberFormatPct;
 
     // Equity Stratification
+    addFinRow('spvCapitalEq', '  - Capitale Sociale SPV (Versato)');
+    sheetFin.getCell(`B${rowMapFin['spvCapitalEq']}`).value = { formula: `B${rowMapFin['spvUsi']}`, result: preSpvCap };
+    sheetFin.getCell(`B${rowMapFin['spvCapitalEq']}`).numFmt = numberFormatEuro;
+
     addFinRow('holdcoEq', '  - Capitale Sociale HoldCo (Versato)');
-    sheetFin.getCell(`B${rowMapFin['holdcoEq']}`).value = { formula: `B${rowMapFin['holdcoUsi']}`, result: p.holdcoCapital || 0 };
+    sheetFin.getCell(`B${rowMapFin['holdcoEq']}`).value = { formula: `B${rowMapFin['holdcoUsi']}`, result: preHoldcoCap };
     sheetFin.getCell(`B${rowMapFin['holdcoEq']}`).numFmt = numberFormatEuro;
     
     // FINANZIAMENTO SOCI (Subordinated Debt) — Formula nativa pura, zero hardcoding
     addFinRow('subDebt', '  - Finanziamento Soci (Subordinated Debt)');
-    sheetFin.getCell(`B${rowMapFin['subDebt']}`).value = { formula: `MAX(0, B${rowMapFin['equity']} - B${rowMapFin['holdcoEq']}) * B${rowMapFin['sociEquityPct']}`, result: preSubDebt };
+    sheetFin.getCell(`B${rowMapFin['subDebt']}`).value = { formula: `MAX(0, B${rowMapFin['equity']} - B${rowMapFin['spvCapitalEq']} - B${rowMapFin['holdcoEq']}) * B${rowMapFin['sociEquityPct']}`, result: preSubDebt };
     sheetFin.getCell(`B${rowMapFin['subDebt']}`).numFmt = numberFormatEuro;
 
-    // Sponsor Pure Equity = equity SPV - holdcoEq - subDebt - PD (il PD è debt Holding, riduce l'esposizione Sponsor)
+    // Sponsor Pure Equity = equity SPV - spvCapitalEq - holdcoEq - subDebt - PD (il PD è debt Holding, riduce l'esposizione Sponsor)
     addFinRow('otherEq', '  - Sponsor Pure Equity (al netto PD Holding)');
-    sheetFin.getCell(`B${rowMapFin['otherEq']}`).value = { formula: `MAX(0, B${rowMapFin['equity']} - B${rowMapFin['holdcoEq']} - B${rowMapFin['subDebt']} - B${rowMapFin['pdFonti']})`, result: preOtherEq };
+    sheetFin.getCell(`B${rowMapFin['otherEq']}`).value = { formula: `MAX(0, B${rowMapFin['equity']} - B${rowMapFin['spvCapitalEq']} - B${rowMapFin['holdcoEq']} - B${rowMapFin['subDebt']} - B${rowMapFin['pdFonti']})`, result: preOtherEq };
     sheetFin.getCell(`B${rowMapFin['otherEq']}`).numFmt = numberFormatEuro;
 
     sheetFin.addRow([]); currentRowFin++;
     
     addFinRow('totFonti', 'TOTALE FONTI', true);
-    sheetFin.getCell(`B${rowMapFin['totFonti']}`).value = { formula: `B${rowMapFin['debt']} + B${rowMapFin['pdFonti']} + B${rowMapFin['peFonti']} + B${rowMapFin['holdcoEq']} + B${rowMapFin['subDebt']} + B${rowMapFin['otherEq']}`, result: m.totFonti || totUsiVal };
+    sheetFin.getCell(`B${rowMapFin['totFonti']}`).value = { formula: `B${rowMapFin['debt']} + B${rowMapFin['pdFonti']} + B${rowMapFin['peFonti']} + B${rowMapFin['spvCapitalEq']} + B${rowMapFin['holdcoEq']} + B${rowMapFin['subDebt']} + B${rowMapFin['otherEq']}`, result: m.totFonti || totUsiVal };
     sheetFin.getCell(`B${rowMapFin['totFonti']}`).numFmt = numberFormatEuro;
     
     sheetFin.addRow([]); currentRowFin++;
@@ -2963,7 +2977,7 @@ async function exportPnlToExcel() {
         netChg += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoInterestReceived}`;
         if (rowMapRf.peDividendPaid) netChg += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.peDividendPaid}`;
         netChg += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoLoanRepaymentReceived}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoDividendReceived}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvCapitalReserveReturned}`;
-        if (yi === 0) return netChg;
+        if (yi === 0) return `'FINANZA'!$B$${rowMapFin['spvUsi']}+${netChg}`;
         const prevCol = getColLetter(yi + 1);
         return `${prevCol}${rowMapBsSpv.bsSpvCashBalance}+${netChg}`;
     });
@@ -2976,7 +2990,7 @@ async function exportPnlToExcel() {
     addRowBsSpv('sec_bs_spv_liab', 'PASSIVO E PATRIMONIO NETTO — STATO PATRIMONIALE SPV (Art. 2424 c.c. / OIC)', 'section-title');
     addRowBsSpv('bsSpvShareCapital', 'Capitale Sociale e Riserve di Capitale (A.I - A.VII) (€)', 'normal', m.bsSpvShareCapital, numberFormatEuro, (col, yi) => {
         if (yi === 0) {
-            let f = `'FINANZA'!$B$${rowMapFin['capexUsi']}-'FINANZA'!$B$${rowMapFin['debt']}-'FINANZA'!$B$${rowMapFin['subDebt']}`;
+            let f = `'FINANZA'!$B$${rowMapFin['spvUsi']}+'FINANZA'!$B$${rowMapFin['capexUsi']}-'FINANZA'!$B$${rowMapFin['debt']}-'FINANZA'!$B$${rowMapFin['subDebt']}`;
             if (window.State.inputs.afEnabled && window.State.inputs.afType === 'convertible_note') {
                 f += `-'FINANZA'!$B$${rowMapFin['afConvertibleAmount']}`;
             }
@@ -3132,10 +3146,10 @@ async function exportPnlToExcel() {
     addRowBsHc('sec_bs_hc_assets', 'ATTIVO — STATO PATRIMONIALE HOLDING (Art. 2424 c.c. / OIC)', 'section-title');
     addRowBsHc('bsHcSpvEquityInv', 'Partecipazioni in Imprese Controllate — Equity SPV (B.III.1.a) (€)', 'normal', m.bsHcSpvEquityInv, numberFormatEuro, (col, yi) => {
         if (yi === 0) {
-            return `MAX(0, 'FINANZA'!$B$${rowMapFin['equity']}-'FINANZA'!$B$${rowMapFin['holdcoEq']}-'FINANZA'!$B$${rowMapFin['subDebt']}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvCapitalReserveReturned})`;
+            return `MAX('FINANZA'!$B$${rowMapFin['spvUsi']}, 'FINANZA'!$B$${rowMapFin['equity']}-'FINANZA'!$B$${rowMapFin['holdcoEq']}-'FINANZA'!$B$${rowMapFin['subDebt']}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvCapitalReserveReturned})`;
         }
         const prevCol = getColLetter(yi + 1);
-        return `MAX(0, ${prevCol}${rowMapBsHc.bsHcSpvEquityInv}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvCapitalReserveReturned})`;
+        return `MAX('FINANZA'!$B$${rowMapFin['spvUsi']}, ${prevCol}${rowMapBsHc.bsHcSpvEquityInv}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvCapitalReserveReturned})`;
     });
     addRowBsHc('bsHcSociLoanReceivable', 'Crediti Finanziari vs Controllate — Finanziamento Soci SPV (B.III.2.a) (€)', 'normal', m.bsHcSociLoanReceivable, numberFormatEuro, (col) => {
         return `'AMMORTAMENTO'!${col}${rowMapDebt.endingBalanceSoci}`;
