@@ -2485,7 +2485,7 @@ async function exportPnlToExcel() {
     const preSubDebt = m.subDebt || resultsFin.initialShareholderLoan || 0;
     const preSpvCap = (paramsFin.spvCapital !== undefined) ? paramsFin.spvCapital : 10000;
     const preHoldcoCap = (paramsFin.holdcoCapital !== undefined) ? paramsFin.holdcoCapital : 10000;
-    const preEqTotal = m.equity || ((preCapexTotal + preHoldcoCap + preSpvCap) - preDebtAmt - prePeAmt);
+    const preEqTotal = m.equity || ((preCapexTotal + preHoldcoCap) - preDebtAmt - prePeAmt);
     const preOtherEq = m.otherEq || Math.max(0, preEqTotal - preHoldcoCap - preSpvCap - preSubDebt - prePdAmt);
 
     addFinRow('usi', '9. TOTALE USI E BASE FINANZIABILE', true, true);
@@ -2498,7 +2498,7 @@ async function exportPnlToExcel() {
     sheetFin.getCell(`B${rowMapFin['spvCost']}`).value = { formula: `CAPEX!${capexTotColLetter}${rowMapCapex['spv']}`, result: preSpvAcq };
     sheetFin.getCell(`B${rowMapFin['spvCost']}`).numFmt = numberFormatEuro;
 
-    addFinRow('spvUsi', 'Capitale Sociale Iniziale SPV (Da versare)');
+    addFinRow('spvUsi', '  - di cui Capitale Sociale Iniziale SPV (incluso nel CAPEX)');
     sheetFin.getCell(`B${rowMapFin['spvUsi']}`).value = { formula: `B${rowMapFin['spvCapital']}`, result: preSpvCap };
     sheetFin.getCell(`B${rowMapFin['spvUsi']}`).numFmt = numberFormatEuro;
 
@@ -2507,8 +2507,8 @@ async function exportPnlToExcel() {
     sheetFin.getCell(`B${rowMapFin['holdcoUsi']}`).numFmt = numberFormatEuro;
 
     addFinRow('totUsi', 'TOTALE FABBISOGNO (Usi)', true);
-    const totUsiVal = preCapexTotal + preSpvCap + preHoldcoCap;
-    sheetFin.getCell(`B${rowMapFin['totUsi']}`).value = { formula: `B${rowMapFin['capexUsi']} + B${rowMapFin['spvUsi']} + B${rowMapFin['holdcoUsi']}`, result: totUsiVal };
+    const totUsiVal = preCapexTotal + preHoldcoCap;
+    sheetFin.getCell(`B${rowMapFin['totUsi']}`).value = { formula: `B${rowMapFin['capexUsi']} + B${rowMapFin['holdcoUsi']}`, result: totUsiVal };
     sheetFin.getCell(`B${rowMapFin['totUsi']}`).numFmt = numberFormatEuro;
     sheetFin.getCell(`C${rowMapFin['totUsi']}`).value = 1;
     sheetFin.getCell(`C${rowMapFin['totUsi']}`).numFmt = numberFormatPct;
@@ -2977,7 +2977,7 @@ async function exportPnlToExcel() {
         netChg += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoInterestReceived}`;
         if (rowMapRf.peDividendPaid) netChg += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.peDividendPaid}`;
         netChg += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoLoanRepaymentReceived}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoDividendReceived}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvCapitalReserveReturned}`;
-        if (yi === 0) return `'FINANZA'!$B$${rowMapFin['spvUsi']}+${netChg}`;
+        if (yi === 0) return `${netChg}`;
         const prevCol = getColLetter(yi + 1);
         return `${prevCol}${rowMapBsSpv.bsSpvCashBalance}+${netChg}`;
     });
@@ -2990,7 +2990,7 @@ async function exportPnlToExcel() {
     addRowBsSpv('sec_bs_spv_liab', 'PASSIVO E PATRIMONIO NETTO — STATO PATRIMONIALE SPV (Art. 2424 c.c. / OIC)', 'section-title');
     addRowBsSpv('bsSpvShareCapital', 'Capitale Sociale e Riserve di Capitale (A.I - A.VII) (€)', 'normal', m.bsSpvShareCapital, numberFormatEuro, (col, yi) => {
         if (yi === 0) {
-            let f = `'FINANZA'!$B$${rowMapFin['spvUsi']}+'FINANZA'!$B$${rowMapFin['capexUsi']}-'FINANZA'!$B$${rowMapFin['debt']}-'FINANZA'!$B$${rowMapFin['subDebt']}`;
+            let f = `'FINANZA'!$B$${rowMapFin['capexUsi']}-'FINANZA'!$B$${rowMapFin['debt']}-'FINANZA'!$B$${rowMapFin['subDebt']}`;
             if (window.State.inputs.afEnabled && window.State.inputs.afType === 'convertible_note') {
                 f += `-'FINANZA'!$B$${rowMapFin['afConvertibleAmount']}`;
             }

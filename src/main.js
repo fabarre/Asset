@@ -7500,16 +7500,14 @@
 
             // Populate Sources & Uses
             const spvAcquisition = r.totalSpvAcquisitionCapex || 0;
-            const constructionCapex = (r.totalProjectCost || 0) - spvAcquisition;
             const spvSetup = p.spvCapital !== undefined ? p.spvCapital : 10000;
             const holdcoSetup = p.holdcoCapital !== undefined ? p.holdcoCapital : 10000;
+            const constructionCapex = Math.max(0, (r.totalProjectCost || 0) - spvAcquisition - spvSetup);
             const totalUses = spvAcquisition + constructionCapex + spvSetup + holdcoSetup;
 
             const seniorDebt = r.debtAmount || 0;
             const privateDebt = r.pdAmount || 0;
             const privateEquity = r.peAmount || 0;
-            // Calcolo effettivo quota Finanziamento Soci e Capitale Proprio (Pure Equity) da risultati simulatore
-            const constructionEquity = Math.max(0, constructionCapex - seniorDebt - privateEquity);
             const totalSources = seniorDebt + privateDebt + privateEquity + sponsorLoan + sponsorEquity;
 
             // Aggiorna etichetta ponderata complessiva % finanziamento soci
@@ -12852,14 +12850,11 @@ function _repExecutiveSummary(doc) {
     const spvAcq = (plants.reduce((a, pl) => a + (pl.spvAcquisitionCost || 0), 0));
     const spvSetup = typeof p.spvCapital === 'number' ? p.spvCapital : 10000;
     const holdcoSetup = typeof p.holdcoCapital === 'number' ? p.holdcoCapital : 10000;
-    const constructionCapex = (r.totalProjectCost || 0) - spvAcq;
+    const constructionCapex = Math.max(0, (r.totalProjectCost || 0) - spvAcq - spvSetup);
     const seniorDebt = r.debtAmount || 0;
     const pdAmt = r.pdAmount || 0;
     const peAmt = r.peAmount || 0;
-    // Equity di costruzione SPV senza PD (debito di Holding) - coerente col worker
-    const constructionEquity = Math.max(0, constructionCapex - seniorDebt - peAmt);
-    const sponsorLoan = (r.initialShareholderLoan !== undefined) ? r.initialShareholderLoan : (constructionEquity * ((p.sociEquityPct || 0) / 100));
-    // equityAmount del worker è già al netto del prestito soci
+    const sponsorLoan = (r.initialShareholderLoan !== undefined) ? r.initialShareholderLoan : 0;
     const sponsorEquity = Math.max(0, r.equityAmount || 0);
     doc.autoTable({
         startY: y,
@@ -13297,14 +13292,11 @@ function _repStrutturaFinanziaria(doc) {
     const spvAcq = plants.reduce((a, pl) => a + (pl.spvAcquisitionCost || 0), 0);
     const spvSetup = typeof p.spvCapital === 'number' ? p.spvCapital : 10000;
     const holdcoSetup = typeof p.holdcoCapital === 'number' ? p.holdcoCapital : 10000;
-    const constructionCapex = (r.totalProjectCost || 0) - spvAcq;
+    const constructionCapex = Math.max(0, (r.totalProjectCost || 0) - spvAcq - spvSetup);
     const seniorDebt = r.debtAmount || 0;
     const pdAmt = r.pdAmount || 0;
     const peAmt = r.peAmount || 0;
-    // Equity di costruzione SPV senza PD (debito di Holding) - coerente col worker
-    const constructionEquity = Math.max(0, constructionCapex - seniorDebt - peAmt);
-    const sponsorLoan = (r.initialShareholderLoan !== undefined) ? r.initialShareholderLoan : (constructionEquity * ((p.sociEquityPct || 0) / 100));
-    // equityAmount del worker è già al netto del prestito soci
+    const sponsorLoan = (r.initialShareholderLoan !== undefined) ? r.initialShareholderLoan : 0;
     const sponsorEquity = Math.max(0, r.equityAmount || 0);
     const totalSources = seniorDebt + pdAmt + peAmt + sponsorLoan + sponsorEquity;
     const totalUses = spvAcq + constructionCapex + spvSetup + holdcoSetup;

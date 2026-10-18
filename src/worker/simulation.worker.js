@@ -2564,14 +2564,14 @@ function runSensitivityLoop(baseState, config) {
             if (p.pdEnabled) {
                 if (p.pdAmountType === 'fixed_eur') pdAmount = Math.max(0, p.pdAmountValue || 0);
                 else if (p.pdAmountType === 'pct_bankable') pdAmount = Math.max(0, bankableBase * ((p.pdAmountValue || 0) / 100));
-                else if (p.pdAmountType === 'pct_totusi') pdAmount = Math.max(0, (totalProjectCost + (typeof p.holdcoCapital === 'number' ? p.holdcoCapital : 10000) + (typeof p.spvCapital === 'number' ? p.spvCapital : 10000)) * ((p.pdAmountValue || 0) / 100));
+                else if (p.pdAmountType === 'pct_totusi') pdAmount = Math.max(0, (totalProjectCost + (typeof p.holdcoCapital === 'number' ? p.holdcoCapital : 10000)) * ((p.pdAmountValue || 0) / 100));
             }
             // ── Private Equity sizing (external equity co-investor at SPV level) ──
             // % equity è calcolata sull'equity totale residua dopo senior debt + PD
             let peAmount = 0;
             if (p.peEnabled) {
                 // PE è a livello SPV: sizing sull'equity SPV (che NON include il PD, perché il PD è a Holding level)
-                const equityGrossSpv = Math.max(0, totalProjectCost + (typeof p.spvCapital === 'number' ? p.spvCapital : 10000) - debtAmount);
+                const equityGrossSpv = Math.max(0, totalProjectCost - debtAmount);
                 if (p.peAmountType === 'fixed_eur') peAmount = Math.min(Math.max(0, p.peAmountValue || 0), equityGrossSpv);
                 else if (p.peAmountType === 'pct_equity') peAmount = Math.max(0, equityGrossSpv * ((p.peAmountValue || 0) / 100));
             }
@@ -2661,12 +2661,12 @@ function runSensitivityLoop(baseState, config) {
 
             const holdcoCap = typeof p.holdcoCapital === 'number' ? Math.max(0, p.holdcoCapital) : 10000;
             const spvCap = typeof p.spvCapital === 'number' ? Math.max(0, p.spvCapital) : 10000;
-            // equityAmount = Capitale Proprio Sponsor puro: pure equity + dotazione SPV + dotazione HoldCo - PD (debito Holding)
-            const equityAmount = Math.max(0, totalProjectPureEquity + spvCap + holdcoCap - pdAmount);
-            // totalSponsorCommittedEquity = Totale fondi propri Sponsor (Pure Equity + Finanziamento Soci + Capitale SPV + HoldCo Setup - PD)
-            const totalSponsorCommittedEquity = Math.max(0, totalProjectPureEquity + initialShareholderLoan + spvCap + holdcoCap - pdAmount);
-            // totalSpvEquityTicket = Fabbisogno azionario totale a livello SPV (CAPEX totale - Debito Senior + Capitale SPV)
-            const totalSpvEquityTicket = Math.max(0, (totalProjectCost - debtAmount) + spvCap);
+            // equityAmount = Capitale Proprio Sponsor puro: pure equity + dotazione HoldCo - PD (debito Holding)
+            const equityAmount = Math.max(0, totalProjectPureEquity + holdcoCap - pdAmount);
+            // totalSponsorCommittedEquity = Totale fondi propri Sponsor (Pure Equity + Finanziamento Soci + HoldCo Setup - PD)
+            const totalSponsorCommittedEquity = Math.max(0, totalProjectPureEquity + initialShareholderLoan + holdcoCap - pdAmount);
+            // totalSpvEquityTicket = Fabbisogno azionario totale a livello SPV (CAPEX totale - Debito Senior)
+            const totalSpvEquityTicket = Math.max(0, totalProjectCost - debtAmount);
             let remainingDebt = debtAmount;
 
             // ── Private Debt running balance & schedule (ora a livello HOLDING) ──
@@ -2872,14 +2872,14 @@ function runSensitivityLoop(baseState, config) {
 
             // ── Stato Patrimoniale SPV & Holding running state (Partita Doppia OIC) ──
             const initialAfConvertible = (p.afEnabled && p.afType === 'convertible_note') ? Math.max(0, p.afConvertibleAmount || 0) : 0;
-            const initialSpvPaidInCapital = spvCap + totalProjectPureEquity + idcAmount - initialAfConvertible;
+            const initialSpvPaidInCapital = totalProjectPureEquity + idcAmount - initialAfConvertible;
             let cumGrossFixedAssets = totalProjectCost + idcAmount;
             let cumDeprSpv = 0;
-            let cumSpvCashBalance = spvCap;
+            let cumSpvCashBalance = 0;
             let cumSpvRetainedEarnings = 0;
 
-            const initialHcShareCapital = (totalProjectPureEquity + initialShareholderLoan + spvCap + holdcoCap) - pdAmount;
-            let cumHcSpvEquityInv = spvCap + totalProjectPureEquity;
+            const initialHcShareCapital = (totalProjectPureEquity + initialShareholderLoan + holdcoCap) - pdAmount;
+            let cumHcSpvEquityInv = totalProjectPureEquity;
             let cumHcCash = holdcoCap;
             let cumHcRetainedEarnings = 0;
 
@@ -4103,7 +4103,7 @@ function runSensitivityLoop(baseState, config) {
                     } else if (policy === 'civil_with_capital_reserve_return') {
                         yDividendsDistributed = Math.min(cashPostLoan, capUtili);
                         const cashPostDiv = Math.max(0, cashPostLoan - yDividendsDistributed);
-                        const availableCapitalReserve = Math.max(0, totalProjectPureEquity - accumulatedCapitalReserveReturned);
+                        const availableCapitalReserve = Math.max(0, Math.max(0, totalProjectPureEquity - spvCap) - accumulatedCapitalReserveReturned);
                         yCapitalReserveReturned = Math.min(cashPostDiv, availableCapitalReserve);
                         accumulatedCapitalReserveReturned += yCapitalReserveReturned;
                     } else {
@@ -4288,7 +4288,7 @@ function runSensitivityLoop(baseState, config) {
                 cumSpvCashBalance += ySpvNetCashChange;
                 const yBsSpvTotalAssets = yBsSpvNetFixedAssets + yBsSpvDta + yBsSpvRestrictedCash + cumSpvCashBalance;
 
-                const yBsSpvPaidInCapital = spvCap + Math.max(0, (totalProjectPureEquity + idcAmount - initialAfConvertible) - accumulatedCapitalReserveReturned);
+                const yBsSpvPaidInCapital = Math.max(spvCap, (totalProjectPureEquity + idcAmount - initialAfConvertible) - accumulatedCapitalReserveReturned);
                 const yBsSpvLegalReserve = accumulatedLegalReserve;
                 const yBsSpvRetainedEarnings = cumSpvRetainedEarnings - yDividendsDistributed - yLegalReserveAccrual;
                 const yBsSpvNetProfit = yNetProfitSpv;
