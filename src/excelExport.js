@@ -16,6 +16,23 @@ async function exportPnlToExcel(options = {}) {
     workbook.created = new Date();
     workbook.modified = new Date();
 
+    const m = (window.State && window.State.results && window.State.results.matrix) || {};
+    const activePlants = (window.State && window.State.plants)
+        ? window.State.plants.filter(p => p.enabled !== false)
+        : [];
+    let plantNames = activePlants.map(p => (p.name || '').trim()).filter(Boolean);
+    if (plantNames.length === 0 && m && m.capexBreakdown) {
+        plantNames = m.capexBreakdown.map(cb => (cb.name || '').trim()).filter(Boolean);
+    }
+    const plantTitlePart = plantNames.length > 0
+        ? plantNames.join(' / ')
+        : (window._currentProjectName || 'Solans Srl');
+    const projTitle = `Progetto: ${plantTitlePart}`;
+
+    const filePlantPrefix = plantNames.length > 0
+        ? plantNames.map(name => name.trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_')).filter(Boolean).join('_')
+        : (window._currentProjectName || 'Solans_Srl').trim().replace(/[\\/:*?"<>|\s]+/g, '_');
+
     // C4: foglio COPERTINA brandizzato (primo foglio della cartella)
     const cover = workbook.addWorksheet('COPERTINA', { views: [{ showGridLines: false }] });
     cover.columns = [{ width: 4 }, { width: 35 }, { width: 75 }];
@@ -28,8 +45,10 @@ async function exportPnlToExcel(options = {}) {
         } catch (e) { /* immagine non incorporabile */ }
     }
     const cTitle = cover.getCell(`B${coverRow}`);
-    cTitle.value = brand.company || 'Solar & BESS M&A Deal Simulator';
+    cTitle.value = 'SOLANS SRL';
     cTitle.font = { bold: true, size: 18, color: { argb: 'FF0B0F19' } };
+    cover.getCell('B3').value = 'SOLANS SRL';
+    cover.getCell('B3').font = { bold: true, size: 18, color: { argb: 'FF0B0F19' } };
     if (brand.tagline) {
         coverRow++;
         const cTag = cover.getCell(`B${coverRow}`);
@@ -38,15 +57,10 @@ async function exportPnlToExcel(options = {}) {
     }
     coverRow += 2;
     const cProj = cover.getCell(`B${coverRow}`);
-    const rawProjName = (window._currentProjectName && window._currentProjectName !== 'Progetto New Green Deal')
-        ? window._currentProjectName
-        : 'Solans Srl';
-    const projTitle = rawProjName.toLowerCase().startsWith('progetto:')
-        ? rawProjName
-        : `Progetto: ${rawProjName}`;
     cProj.value = projTitle;
     cProj.font = { bold: true, size: 13, color: { argb: 'FF10B981' } };
     cover.getCell('B5').value = projTitle;
+    cover.getCell('B5').font = { bold: true, size: 13, color: { argb: 'FF10B981' } };
     coverRow++;
     const cDate = cover.getCell(`B${coverRow}`);
     cDate.value = 'Data report: ' + new Date().toLocaleString('it-IT');
@@ -161,7 +175,6 @@ async function exportPnlToExcel(options = {}) {
         coverRow++;
     });
 
-    const m = window.State.results.matrix;
     const p = window.State.inputs;
     let years = m && m.years ? m.years : Array.from({length: 21}, (_, i) => i);
     // exitOption '0' = Nessun Exit -> esporta comunque tutti i 20 anni
@@ -3316,8 +3329,7 @@ async function exportPnlToExcel(options = {}) {
 
         // Riga 1: Banner Titolo Deal
         const r1 = sheetMc.getRow(1);
-        const dealProjectName = (window._currentProjectName && window._currentProjectName !== 'Progetto New Green Deal') ? window._currentProjectName : 'Solans Srl';
-        r1.getCell(1).value = `PROGETTO: ${dealProjectName} - CASH FLOW MENSILE ANALITICO${spvOnly ? ' (SOLA SPV)' : ''}`;
+        r1.getCell(1).value = `PROGETTO: ${plantTitlePart} - CASH FLOW MENSILE ANALITICO${spvOnly ? ' (SOLA SPV)' : ''}`;
         r1.getCell(1).font = { bold: true, size: 13, color: { argb: 'FF203864' } };
         sheetMc.mergeCells(`A1:${lastColLetter}1`);
         r1.height = 24;
@@ -3729,7 +3741,8 @@ async function exportPnlToExcel(options = {}) {
     if (typeof document !== 'undefined') {
         const a = document.createElement('a');
         a.href = url;
-        a.download = spvOnly ? "PL_Driver_Operativi_SPV.xlsx" : "PL_Driver_Operativi.xlsx";
+        const baseFileName = spvOnly ? "PL_Driver_Operativi_SPV.xlsx" : "PL_Driver_Operativi.xlsx";
+        a.download = `${filePlantPrefix}_${baseFileName}`;
         document.body.appendChild(a);
         a.click();
         setTimeout(() => {
