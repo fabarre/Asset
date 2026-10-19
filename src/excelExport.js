@@ -511,7 +511,7 @@ async function exportPnlToExcel() {
     ];
     if (m.capexBreakdown) {
         m.capexBreakdown.forEach((cb, idx) => {
-            capexCols.push({ header: `${cb.name} (kW)`, key: `p${idx}`, width: 20 });
+            capexCols.push({ header: `${cb.name} (€)`, key: `p${idx}`, width: 20 });
         });
     }
     capexCols.push({ header: 'TOTALE PORTAFOGLIO', key: 'total', width: 25 });
@@ -621,6 +621,15 @@ async function exportPnlToExcel() {
     rowAmm.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
     currentRowNumCapex++;
 
+    const capexPropMap = {
+        'solar': 'solarCapex',
+        'bess': 'bessCapex',
+        'connection': 'connectionCapex',
+        'development': 'developmentCapex',
+        'landDds': 'landDdsAttualizzatoCapex',
+        'custom': 'customCapex'
+    };
+
     function addDeprRowCapex(key, label, capexKeyRef) {
         let rowData = { label };
         const row = sheetCapex.addRow(rowData);
@@ -631,6 +640,7 @@ async function exportPnlToExcel() {
         const pctColLetter = getColLetter(pctColIndex);
         const firstPlantCol = getColLetter(2);
         const lastPlantCol = getColLetter(totColIndex - 1);
+        const propName = capexPropMap[capexKeyRef] || capexKeyRef;
         
         for (let colNum = 1; colNum <= totColIndex; colNum++) {
             const cell = row.getCell(colNum);
@@ -638,12 +648,12 @@ async function exportPnlToExcel() {
                 const colLetter = getColLetter(colNum);
                 const capexRow = rowMapCapex[capexKeyRef];
                 const cb = m.capexBreakdown ? m.capexBreakdown[colNum - 2] : null;
-                const capexItemVal = cb ? (cb[capexKeyRef] || 0) : 0;
+                const capexItemVal = cb ? (cb[propName] || 0) : 0;
                 const deprVal = Math.round(capexItemVal * fiscalDeprRate);
                 cell.value = { formula: `ROUND(${colLetter}${capexRow} * ${pctColLetter}${capexRow}, 0)`, result: deprVal };
                 cell.numFmt = numberFormatEuro;
             } else if (colNum === totColIndex) {
-                const totItemVal = (m.capexBreakdown || []).reduce((acc, cb) => acc + (cb[capexKeyRef] || 0), 0);
+                const totItemVal = (m.capexBreakdown || []).reduce((acc, cb) => acc + (cb[propName] || 0), 0);
                 const totDeprVal = Math.round(totItemVal * fiscalDeprRate);
                 if (totColIndex > 2) {
                     cell.value = { formula: `SUM(${firstPlantCol}${currentRowNumCapex}:${lastPlantCol}${currentRowNumCapex})`, result: totDeprVal };
@@ -675,8 +685,7 @@ async function exportPnlToExcel() {
         rowMapCapex['deprIdc'] = currentRowNumCapex;
         const totColIndex = m.capexBreakdown ? m.capexBreakdown.length + 2 : 2;
         const totColLetter = getColLetter(totColIndex);
-        const pctColIndex = totColIndex + 1;
-        for (let colNum = 1; colNum <= Math.max(totColIndex, pctColIndex); colNum++) {
+        for (let colNum = 1; colNum <= totColIndex; colNum++) {
             const cell = rowIdc.getCell(colNum);
             if (colNum === totColIndex) {
                 const idcVal = Math.round((m.idcTotal || 0) * fiscalDeprRate);
@@ -691,7 +700,7 @@ async function exportPnlToExcel() {
                 const colLetter = getColLetter(colNum);
                 const capexRow = rowMapCapex['totalCapex'];
                 const cb = m.capexBreakdown ? m.capexBreakdown[colNum - 2] : null;
-                const totCap = m.capexTotal || 1;
+                const totCap = (m.capexBreakdown || []).reduce((acc, c) => acc + (c.totalCapex || 0), 0) || 1;
                 const plantIdcVal = Math.round((m.idcTotal || 0) * fiscalDeprRate * ((cb?.totalCapex || 0) / totCap));
                 pendingFormulasCapex.push({
                     cell: cell,
@@ -699,14 +708,6 @@ async function exportPnlToExcel() {
                     result: plantIdcVal
                 });
                 cell.numFmt = numberFormatEuro;
-            } else if (colNum === pctColIndex) {
-                pendingFormulasCapex.push({
-                    cell: cell,
-                    formulaFn: () => `FINANZA!$B$${rowMapFin['fiscalDeprRate']}`,
-                    result: fiscalDeprRate
-                });
-                cell.value = fiscalDeprRate;
-                cell.numFmt = numberFormatPct;
             }
         }
         currentRowNumCapex++;
@@ -719,13 +720,28 @@ async function exportPnlToExcel() {
         const rowTotDepr = sheetCapex.addRow(rowDataTotDepr);
         rowMapCapex['totalDepr'] = currentRowNumCapex;
         const totColIndex = m.capexBreakdown ? m.capexBreakdown.length + 2 : 2;
+        const firstPlantCol = getColLetter(2);
+        const lastPlantCol = getColLetter(totColIndex - 1);
         for (let colNum = 1; colNum <= totColIndex; colNum++) {
             const cell = rowTotDepr.getCell(colNum);
-            if (colNum > 1 && colNum <= totColIndex) {
+            if (colNum > 1 && colNum < totColIndex) {
                 const colLetter = getColLetter(colNum);
-                const cb = (colNum <= totColIndex - 1 && m.capexBreakdown) ? m.capexBreakdown[colNum - 2] : null;
-                const totDeprVal = cb ? Math.round((cb.totalCapex || 0) * fiscalDeprRate) : Math.round(((m.capexTotal || 0) + (m.idcTotal || 0)) * fiscalDeprRate);
+                const cb = m.capexBreakdown ? m.capexBreakdown[colNum - 2] : null;
+                const plantAmortizableCapex = cb ? ((cb.solarCapex || 0) + (cb.bessCapex || 0) + (cb.connectionCapex || 0) + (cb.developmentCapex || 0) + (cb.landDdsAttualizzatoCapex || 0) + (cb.customCapex || 0)) : 0;
+                const totDeprVal = Math.round(plantAmortizableCapex * fiscalDeprRate);
                 cell.value = { formula: `SUM(${colLetter}${rowMapCapex['deprSolar']}:${colLetter}${rowMapCapex['deprIdc']})`, result: totDeprVal };
+                cell.numFmt = numberFormatEuro;
+            } else if (colNum === totColIndex) {
+                const colLetter = getColLetter(colNum);
+                const totalAmortizableCapex = (m.capexBreakdown || []).reduce((acc, cb) => {
+                    return acc + (cb.solarCapex || 0) + (cb.bessCapex || 0) + (cb.connectionCapex || 0) + (cb.developmentCapex || 0) + (cb.landDdsAttualizzatoCapex || 0) + (cb.customCapex || 0);
+                }, 0);
+                const totDeprVal = Math.round(totalAmortizableCapex * fiscalDeprRate);
+                if (totColIndex > 2) {
+                    cell.value = { formula: `SUM(${firstPlantCol}${currentRowNumCapex}:${lastPlantCol}${currentRowNumCapex})`, result: totDeprVal };
+                } else {
+                    cell.value = { formula: `SUM(${colLetter}${rowMapCapex['deprSolar']}:${colLetter}${rowMapCapex['deprIdc']})`, result: totDeprVal };
+                }
                 cell.numFmt = numberFormatEuro;
             }
             cell.font = { bold: true };
