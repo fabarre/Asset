@@ -1435,12 +1435,15 @@ async function exportPnlToExcel() {
         const prevCol = getColLetter(yi + 1);
         return `IF(${col}${rowMapRf.rf_netProfitSpv}>0, MIN(0.05*${col}${rowMapRf.rf_netProfitSpv}, MAX(0, 0.2*${pureEqRef}-SUM($B$${rowMapRf.spvLegalReserveAccrual}:${prevCol}${rowMapRf.spvLegalReserveAccrual}))), 0)`;
     });
-    addRowRf('spvRetainedEarnings', '  (Capienza) Capacità Distributiva Utili SPV Cumulata (€)', 'detail', m.spvRetainedEarnings, numberFormatEuro, (col, yi) => {
+    addRowRf('spvRetainedEarnings', '  (Capienza) Capacità Distributiva Utili SPV Cumulata (ante dividendi) (€)', 'detail', m.spvRetainedEarnings, numberFormatEuro, (col, yi) => {
         if (yi === 0) {
-            return `MAX(0, ${col}${rowMapRf.rf_netProfitSpv}-${col}${rowMapRf.spvLegalReserveAccrual}+${col}${rowMapRf.holdcoDividendReceived})`;
+            return `MAX(0, ${col}${rowMapRf.rf_netProfitSpv}-${col}${rowMapRf.spvLegalReserveAccrual})`;
         }
         const prevCol = getColLetter(yi + 1);
-        return `MAX(0, ${prevCol}${rowMapRf.spvRetainedEarnings}+${col}${rowMapRf.rf_netProfitSpv}-${col}${rowMapRf.spvLegalReserveAccrual}+${col}${rowMapRf.holdcoDividendReceived})`;
+        if (yi === 1) {
+            return `MAX(0, MIN(0, ${prevCol}${rowMapRf.rf_netProfitSpv}) + ${col}${rowMapRf.rf_netProfitSpv} - ${col}${rowMapRf.spvLegalReserveAccrual})`;
+        }
+        return `MAX(0, ${prevCol}${rowMapRf.spvRetainedEarnings} + ${prevCol}${rowMapRf.holdcoDividendReceived} + ${col}${rowMapRf.rf_netProfitSpv} - ${col}${rowMapRf.spvLegalReserveAccrual})`;
     });
     addRowRf('holdcoInterestReceived', '  (-) Interessi Soci Pagati da SPV a HoldCo (⇒ Sez. C) (€)', 'minus', m.holdcoInterestReceived, numberFormatEuro, (col) => {
         return `-MIN(MAX(0, ${col}${rowMapRf.spvFCFE}), -'AMMORTAMENTO'!${col}${rowMapDebt.interestAccruedSoci})`;
@@ -1458,11 +1461,8 @@ async function exportPnlToExcel() {
     });
     // Dividendi azionari SPV (Cassa residua post-debito soci, fino a capienza utili distribuibili ex Art. 2433 c.c.)
     addRowRf('holdcoDividendReceived', '  (-) Dividendi SPV Distribuiti a HoldCo (da Utili Art. 2433 c.c.) (⇒ Sez. C) (€)', 'minus', m.holdcoDividendReceived, numberFormatEuro, (col, yi) => {
-        const prevCol = yi > 0 ? getColLetter(yi + 1) : null;
         const cashPostLoan = `MAX(0, ${col}${rowMapRf.spvFCFE}+${col}${rowMapRf.holdcoInterestReceived}+${col}${rowMapRf.holdcoLoanRepaymentReceived})`;
-        const capUtili = yi === 0 
-            ? `MAX(0, ${col}${rowMapRf.rf_netProfitSpv}-${col}${rowMapRf.spvLegalReserveAccrual})`
-            : `MAX(0, ${prevCol}${rowMapRf.spvRetainedEarnings}+${col}${rowMapRf.rf_netProfitSpv}-${col}${rowMapRf.spvLegalReserveAccrual})`;
+        const capUtili = `${col}${rowMapRf.spvRetainedEarnings}`;
         const divAmount = `IF(AND('FINANZA'!$B$${rowMapFin['dividendLock']}="SÌ", 'AMMORTAMENTO'!${col}${rowMapDebt.endingBalance}>1), 0, IF(ISNUMBER(SEARCH("Cash Flow Driven", 'FINANZA'!$B$${rowMapFin['distributionPolicy']})), ${cashPostLoan}, MIN(${cashPostLoan}, ${capUtili})))`;
         return `-${divAmount}`;
     });
@@ -3014,17 +3014,23 @@ async function exportPnlToExcel() {
         return `${prevCol}${rowMapBsSpv.bsSpvLegalReserve}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvLegalReserveAccrual}`;
     });
     addRowBsSpv('bsSpvRetainedEarnings', 'Utili (Perdite) Portati a Nuovo (A.VIII) (€)', 'normal', m.bsSpvRetainedEarnings, numberFormatEuro, (col, yi) => {
-        let divOut = `'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoDividendReceived}`;
-        if (rowMapRf.peDividendPaid) divOut += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.peDividendPaid}`;
-        if (yi === 0) return `${divOut}-'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvLegalReserveAccrual}`;
+        if (yi === 0) return '0';
         const prevCol = getColLetter(yi + 1);
-        return `${prevCol}${rowMapBsSpv.bsSpvRetainedEarnings}+${prevCol}${rowMapBsSpv.bsSpvNetProfit}-'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvLegalReserveAccrual}+${divOut}`;
+        return `${prevCol}${rowMapBsSpv.bsSpvRetainedEarnings}+${prevCol}${rowMapBsSpv.bsSpvNetProfit}+${prevCol}${rowMapBsSpv.bsSpvLegalReserveAlloc}+${prevCol}${rowMapBsSpv.bsSpvDividendsPaid}`;
     });
     addRowBsSpv('bsSpvNetProfit', 'Utile (Perdita) dell\'Esercizio (A.IX) (€)', 'normal', m.bsSpvNetProfit, numberFormatEuro, (col) => {
         return `'CONTO ECONOMICO'!${col}${rowMapCe.netProfitSpv}`;
     });
+    addRowBsSpv('bsSpvLegalReserveAlloc', '  (-) Destinazione a Riserva Legale da Utile Corrente (€)', 'minus', m.bsSpvLegalReserveAlloc, numberFormatEuro, (col) => {
+        return `-'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvLegalReserveAccrual}`;
+    });
+    addRowBsSpv('bsSpvDividendsPaid', '  (-) Dividendi Distribuiti a HoldCo da Utile Corrente (€)', 'minus', m.bsSpvDividendsPaid, numberFormatEuro, (col) => {
+        let divRef = `'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoDividendReceived}`;
+        if (rowMapRf.peDividendPaid) divRef += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.peDividendPaid}`;
+        return divRef;
+    });
     addRowBsSpv('bsSpvTotalEquity', '(=) TOTALE PATRIMONIO NETTO SPV (A) (€)', 'bold', m.bsSpvTotalEquity, numberFormatEuro, (col) => {
-        return `${col}${rowMapBsSpv.bsSpvShareCapital}+${col}${rowMapBsSpv.bsSpvLegalReserve}+${col}${rowMapBsSpv.bsSpvRetainedEarnings}+${col}${rowMapBsSpv.bsSpvNetProfit}`;
+        return `${col}${rowMapBsSpv.bsSpvShareCapital}+${col}${rowMapBsSpv.bsSpvLegalReserve}+${col}${rowMapBsSpv.bsSpvRetainedEarnings}+${col}${rowMapBsSpv.bsSpvNetProfit}+${col}${rowMapBsSpv.bsSpvLegalReserveAlloc}+${col}${rowMapBsSpv.bsSpvDividendsPaid}`;
     });
     addRowBsSpv('bsSpvDtl', 'Fondo Imposte Differite — DTL (B.2 / OIC 25) (€)', 'normal', m.bsSpvDtl, numberFormatEuro, (col) => {
         return `MAX(0, 'CONTO ECONOMICO'!${col}${rowMapCe.taxDeferredFund})`;

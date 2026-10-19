@@ -6751,7 +6751,7 @@
                 // ── CASCATA DI DISTRIBUZIONE SPV -> HOLDCO ───────────────────────────────
                 { section: 'CASCATA DISTRIBUZIONE SPV -> HOLDCO (Waterfall)', type: 'section-title' },
                 { key: 'spvLegalReserveAccrual', label: '  (Nota civilistica) Accantonamento Riserva Legale SPV (5% ex Art. 2430 c.c.) (€)', type: 'detail' },
-                { key: 'spvRetainedEarnings', label: '  (Capienza) Capacità Distributiva Utili SPV Cumulata (€)', type: 'detail' },
+                { key: 'spvRetainedEarnings', label: '  (Capienza) Capacità Distributiva Utili SPV Cumulata (ante dividendi) (€)', type: 'detail' },
                 { key: 'holdcoInterestReceived', label: '  (-) Interessi Soci Pagati da SPV a HoldCo (-> Sez. C) (€)', type: 'minus' },
                 ...(p.peEnabled && p.peMode !== 'royalty_fee' ? [{ key: 'peDividendPaid', label: '  (-) Quota Dividendi/Preferred Private Equity a Partner Esterno (€)', type: 'minus' }] : []),
                 { key: 'holdcoLoanRepaymentReceived', label: '  (-) Rimborso Capitale Finanziamento Soci a HoldCo (-> Sez. D) (€)', type: 'minus' },
@@ -6851,6 +6851,8 @@
                 { key: 'bsSpvLegalReserve', label: '  IV - Riserva Legale Cumulata (Art. 2430 c.c.) (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
                 { key: 'bsSpvRetainedEarnings', label: '  VIII - Utili (Perdite) Portati a Nuovo (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
                 { key: 'bsSpvNetProfit', label: '  IX - Utile (Perdita) dell\'Esercizio (€)', type: 'detail', parent: 'bsSpvTotalEquity' },
+                { key: 'bsSpvLegalReserveAlloc', label: '  (-) Destinazione a Riserva Legale da Utile Corrente (€)', type: 'minus', parent: 'bsSpvTotalEquity' },
+                { key: 'bsSpvDividendsPaid', label: '  (-) Dividendi Distribuiti a HoldCo da Utile Corrente (€)', type: 'minus', parent: 'bsSpvTotalEquity' },
                 { key: 'bsSpvDtl', label: 'B.2) Fondo per Imposte Differite (DTL - OIC 25) (€)', type: 'normal' },
                 { key: 'bsSpvTotalLiabilities', label: 'D) DEBITI FINANZIARI E PASSIVITÀ SPV (€)', type: 'bold-rose' },
                 { key: 'bsSpvSeniorDebt', label: '  D.4 - Debito Senior Bancario Residuo (Project Finance) (€)', type: 'detail', parent: 'bsSpvTotalLiabilities' },
@@ -7253,6 +7255,8 @@
                 setCell('bsSpvLegalReserve', m.bsSpvLegalReserve ? m.bsSpvLegalReserve[i] : 0, true, formatEuro);
                 setCell('bsSpvRetainedEarnings', m.bsSpvRetainedEarnings ? m.bsSpvRetainedEarnings[i] : 0, true, formatEuro);
                 setCell('bsSpvNetProfit', m.bsSpvNetProfit ? m.bsSpvNetProfit[i] : 0, true, formatEuro);
+                setCell('bsSpvLegalReserveAlloc', m.bsSpvLegalReserveAlloc ? m.bsSpvLegalReserveAlloc[i] : 0, true, formatMinusEuro);
+                setCell('bsSpvDividendsPaid', m.bsSpvDividendsPaid ? m.bsSpvDividendsPaid[i] : 0, true, formatMinusEuro);
                 setCell('bsSpvDtl', m.bsSpvDtl ? m.bsSpvDtl[i] : 0, true, formatEuro);
                 setCell('bsSpvTotalLiabilities', m.bsSpvTotalLiabilities ? m.bsSpvTotalLiabilities[i] : 0, true, formatEuro);
                 setCell('bsSpvSeniorDebt', m.bsSpvSeniorDebt ? m.bsSpvSeniorDebt[i] : 0, true, formatEuro);
@@ -13703,6 +13707,8 @@ function _repStatoPatrimonialeSpvInline(doc, startY) {
         { key: 'bsSpvLegalReserve', label: 'Riserva Legale Cumulata (Art. 2430 c.c.) (A.IV)' },
         { key: 'bsSpvRetainedEarnings', label: 'Utili (Perdite) Portati a Nuovo (A.VIII)' },
         { key: 'bsSpvNetProfit', label: 'Utile (Perdita) dell\'Esercizio SPV (A.IX)' },
+        { key: 'bsSpvLegalReserveAlloc', label: '(-) Destinazione a Riserva Legale da Utile Corrente', fmt: v => _fmtEFull(-Math.abs(v)) },
+        { key: 'bsSpvDividendsPaid', label: '(-) Dividendi Distribuiti a HoldCo da Utile Corrente', fmt: v => _fmtEFull(-Math.abs(v)) },
         { key: 'bsSpvTotalEquity', label: '(=) TOTALE PATRIMONIO NETTO SPV (A)' },
         { key: 'bsSpvDtl', label: 'Fondo Imposte Differite (DTL - B.2 / OIC 25)' },
         { key: 'bsSpvSeniorDebt', label: 'Debito Bancario Senior Residuo (D.4 - Project Finance)' },

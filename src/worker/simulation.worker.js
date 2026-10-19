@@ -2833,7 +2833,7 @@ function runSensitivityLoop(baseState, config) {
                 bsSpvCashBalance: [], bsSpvCash: [],
                 bsSpvTotalAssets: [],
                 bsSpvShareCapital: [], bsSpvLegalReserve: [], bsSpvRetainedEarnings: [],
-                bsSpvNetProfit: [], bsSpvTotalEquity: [],
+                bsSpvNetProfit: [], bsSpvLegalReserveAlloc: [], bsSpvDividendsPaid: [], bsSpvTotalEquity: [],
                 bsSpvSeniorDebt: [],
                 bsSpvShareholderLoan: [], bsSpvSociLoan: [],
                 bsSpvAfLiability: [], bsSpvAfConvertible: [],
@@ -2869,6 +2869,7 @@ function runSensitivityLoop(baseState, config) {
             let cumulativeCfads = 0;
             let cumulativeHoldcoFCFE = 0;
             let accumulatedLegalReserve = 0;
+            let cumLossCarriedForward = 0;
             let retainedEarningsBalance = 0;
             let accumulatedCapitalReserveReturned = 0;
             let spvCashTrapCumulative = 0;
@@ -2880,7 +2881,7 @@ function runSensitivityLoop(baseState, config) {
             let cumDeprSpv = 0;
             const initialSpvCash = Math.max(0, spvCap - initialSpvPaidInCapital);
             let cumSpvCashBalance = initialSpvCash;
-            let cumSpvRetainedEarnings = 0;
+            let cumPriorRetainedEarnings = 0;
 
             const initialHcShareCapital = (totalProjectPureEquity + initialShareholderLoan + holdcoCap) - pdAmount;
             let cumHcSpvEquityInv = totalProjectPureEquity;
@@ -4060,16 +4061,26 @@ function runSensitivityLoop(baseState, config) {
                 // col rimborso del finanziamento soci facendo derivare la quota PE anno dopo anno)
                 const peOwnershipPct = (peAmount > 0 && (peAmount + equityAmount + initialShareholderLoan) > 0) ? (peAmount / (peAmount + equityAmount + initialShareholderLoan)) : 0;
 
-                // 1. Riserva Legale SPV (5% ex Art. 2430 c.c., fino al 20% del capitale sociale SPV)
+                // 0. Copertura perdite pregresse ex Art. 2433 comma 3 c.c.
+                let yLossCovered = 0;
+                if (yNetProfitSpv < 0) {
+                    cumLossCarriedForward += Math.abs(yNetProfitSpv);
+                } else if (yNetProfitSpv > 0 && cumLossCarriedForward > 0) {
+                    yLossCovered = Math.min(cumLossCarriedForward, yNetProfitSpv);
+                    cumLossCarriedForward -= yLossCovered;
+                }
+                const yProfitAfterLoss = Math.max(0, yNetProfitSpv - yLossCovered);
+
+                // 1. Riserva Legale SPV (5% ex Art. 2430 c.c. su utile post-copertura perdite, fino al 20% del capitale sociale SPV)
                 let yLegalReserveAccrual = 0;
-                if (yNetProfitSpv > 0) {
+                if (yProfitAfterLoss > 0) {
                     const maxLegalReserve = 0.20 * spvCap;
-                    yLegalReserveAccrual = Math.min(0.05 * yNetProfitSpv, Math.max(0, maxLegalReserve - accumulatedLegalReserve));
+                    yLegalReserveAccrual = Math.min(0.05 * yProfitAfterLoss, Math.max(0, maxLegalReserve - accumulatedLegalReserve));
                 }
                 accumulatedLegalReserve += yLegalReserveAccrual;
 
-                // 2. Capacità Distributiva Utili SPV Cumulata (Capienza Utili ex Art. 2433 c.c.)
-                const capUtili = Math.max(0, retainedEarningsBalance + yNetProfitSpv - yLegalReserveAccrual);
+                // 2. Capacità Distributiva Utili SPV (Capienza Utili ex Art. 2433 c.c. ante dividendi)
+                const capUtili = Math.max(0, retainedEarningsBalance + yProfitAfterLoss - yLegalReserveAccrual);
 
                 // 3. Shareholder distribution (Finanziamento Soci) — subito dopo senior (PD rimosso dal waterfall SPV)
                 const yTotalInterestPaid = Math.max(0, Math.min(ySociInterestAccrued, cashAvailable));
@@ -4296,10 +4307,12 @@ function runSensitivityLoop(baseState, config) {
 
                 const yBsSpvPaidInCapital = Math.max(spvCap, (totalProjectPureEquity + idcAmount - initialAfConvertible) - accumulatedCapitalReserveReturned);
                 const yBsSpvLegalReserve = accumulatedLegalReserve;
-                const yBsSpvRetainedEarnings = cumSpvRetainedEarnings - yDividendsDistributed - yLegalReserveAccrual;
+                const yBsSpvRetainedEarnings = cumPriorRetainedEarnings;
                 const yBsSpvNetProfit = yNetProfitSpv;
-                const yBsSpvTotalEquity = yBsSpvPaidInCapital + yBsSpvLegalReserve + yBsSpvRetainedEarnings + yBsSpvNetProfit;
-                cumSpvRetainedEarnings = yBsSpvRetainedEarnings + yNetProfitSpv + ((exitOptionYear > 0 && yr === exitOptionYear) ? (exitDebtPayoffVal + ((p.afEnabled && p.afType === 'convertible_note' && p.afTaxDeductible !== false) ? remainingAfBeforeExit : 0)) : 0);
+                const yBsSpvLegalReserveAlloc = -yLegalReserveAccrual;
+                const yBsSpvDividendsPaid = -yDividendsDistributed;
+                const yBsSpvTotalEquity = yBsSpvPaidInCapital + yBsSpvLegalReserve + yBsSpvRetainedEarnings + yBsSpvNetProfit + yBsSpvLegalReserveAlloc + yBsSpvDividendsPaid;
+                cumPriorRetainedEarnings = yBsSpvRetainedEarnings + yBsSpvNetProfit + yBsSpvLegalReserveAlloc + yBsSpvDividendsPaid + ((exitOptionYear > 0 && yr === exitOptionYear) ? (exitDebtPayoffVal + ((p.afEnabled && p.afType === 'convertible_note' && p.afTaxDeductible !== false) ? remainingAfBeforeExit : 0)) : 0);
 
                 const yBsSpvSeniorDebt = remainingDebtAfterAmort;
                 const yBsSpvShareholderLoan = remainingShareholderLoan;
@@ -4355,6 +4368,8 @@ function runSensitivityLoop(baseState, config) {
                 matrix.bsSpvLegalReserve.push(yBsSpvLegalReserve);
                 matrix.bsSpvRetainedEarnings.push(yBsSpvRetainedEarnings);
                 matrix.bsSpvNetProfit.push(yBsSpvNetProfit);
+                matrix.bsSpvLegalReserveAlloc.push(yBsSpvLegalReserveAlloc);
+                matrix.bsSpvDividendsPaid.push(yBsSpvDividendsPaid);
                 matrix.bsSpvTotalEquity.push(yBsSpvTotalEquity);
                 matrix.bsSpvSeniorDebt.push(yBsSpvSeniorDebt);
                 matrix.bsSpvShareholderLoan.push(yBsSpvShareholderLoan);
@@ -4535,7 +4550,7 @@ function runSensitivityLoop(baseState, config) {
                 matrix.spvLockedDividends.push(accumulatedSpvCashAtStart);
                 matrix.spvCashTrapCumulative.push(spvCashTrapCumulative);
                 matrix.spvLegalReserveAccrual.push(yLegalReserveAccrual);
-                matrix.spvRetainedEarnings.push(retainedEarningsBalance);
+                matrix.spvRetainedEarnings.push(capUtili);
                 matrix.spvCapitalReserveReturned.push(yCapitalReserveReturned);
                 matrix.holdcoCapitalReserveReceived.push(yCapitalReserveReturned);
                 matrix.partnerDividendReceived.push(0);
