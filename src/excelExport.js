@@ -7,6 +7,7 @@ async function exportPnlToExcel() {
     }
 
     const workbook = new ExcelJS.Workbook();
+    workbook.calcProperties.fullCalcOnLoad = true;
     const brand = (window.State && window.State.branding) || {};
     workbook.creator = brand.company || 'Solar & BESS M&A Deal Simulator';
     workbook.company = brand.company || '';
