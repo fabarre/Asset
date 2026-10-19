@@ -42,7 +42,7 @@
     <!-- Supabase JS Client (versione pinnata + SRI) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous"></script>
     <script src="./supabase_config.js"></script>
-    <script src="./src/excelExport.js?v=157"></script>
+    <script src="./src/excelExport.js?v=160"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
         body {
@@ -3353,12 +3353,18 @@
 
         <!-- Tab 5: 20-Year Financial P&L & Amortization -->
         <div id="tab-financials" class="tab-content space-y-8">
-            <div class="flex justify-between items-center bg-[#0b0f19] border border-slate-850 p-4 rounded-xl shadow-md">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-[#0b0f19] border border-slate-850 p-4 rounded-xl shadow-md">
                 <h2 class="text-xl font-bold text-white tracking-tight">Prospetti Finanziari & P&L</h2>
-                <button onclick="exportPnlToExcel()" class="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm font-bold transition-colors flex items-center space-x-2">
-                    <i class="fa-solid fa-file-excel"></i>
-                    <span>Esporta in Excel</span>
-                </button>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button id="btn-export-excel-spv" onclick="exportPnlToExcel({ spvOnly: true })" class="px-3.5 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm font-bold transition-colors flex items-center space-x-2 shadow-sm" title="Esporta modello Excel completo per la sola SPV (senza fogli Holding e con Cash Flow SPV)">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>Esporta Excel (Sola SPV)</span>
+                    </button>
+                    <button id="btn-export-excel-full" onclick="exportPnlToExcel()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-sm font-bold transition-colors flex items-center space-x-2 shadow-sm" title="Esporta modello Excel consolidato completo (SPV + Holding)">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>Esporta Excel (SPV + Holding)</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Sezione Driver Operativi: Energia e Prezzi -->
@@ -4172,7 +4178,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=159"></script>
+    <script src="./src/main.js?v=160"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

@@ -1,5 +1,6 @@
-async function exportPnlToExcel() {
-    console.log("ESPORTAZIONE AVVIATA CON VERSIONE AGGIORNATA (includeEmpty: true)");
+async function exportPnlToExcel(options = {}) {
+    const spvOnly = (options === 'spv') || (options && (options.spvOnly === true || options.mode === 'spv'));
+    console.log(`ESPORTAZIONE AVVIATA (spvOnly: ${spvOnly})`);
     try {
     if (!window.State || !window.State.results) {
         showToast("Nessun dato da esportare. Esegui prima la simulazione.", 'warning');
@@ -37,8 +38,15 @@ async function exportPnlToExcel() {
     }
     coverRow += 2;
     const cProj = cover.getCell(`B${coverRow}`);
-    cProj.value = 'Progetto: ' + (window._currentProjectName || 'Progetto New Green Deal');
+    const rawProjName = (window._currentProjectName && window._currentProjectName !== 'Progetto New Green Deal')
+        ? window._currentProjectName
+        : 'Solans Srl';
+    const projTitle = rawProjName.toLowerCase().startsWith('progetto:')
+        ? rawProjName
+        : `Progetto: ${rawProjName}`;
+    cProj.value = projTitle;
     cProj.font = { bold: true, size: 13, color: { argb: 'FF10B981' } };
+    cover.getCell('B5').value = projTitle;
     coverRow++;
     const cDate = cover.getCell(`B${coverRow}`);
     cDate.value = 'Data report: ' + new Date().toLocaleString('it-IT');
@@ -117,7 +125,17 @@ async function exportPnlToExcel() {
     cover.getCell(`C${coverRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF203864' } };
     coverRow++;
 
-    const sheetIndexList = [
+    const sheetIndexList = spvOnly ? [
+        { name: '1. DRIVER OPERATIVI', desc: 'Quantitativi fisici di energia (MWh), sottomonopoli CER/PPA/RID e valori unitari (€/MWh)' },
+        { name: '2. CAPEX', desc: 'Breakdown investimenti per impianto, totale portafoglio e quote di ammortamento civilistico' },
+        { name: '3. OPEX', desc: 'Breakdown costi operativi anno 1 per impianto, totale di portafoglio e indicizzazione inflattiva' },
+        { name: '4. CONTO ECONOMICO', desc: 'Sezione A: P&L SPV con ricavi, costi, ammortamenti, oneri finanziari, imposte e utile netto' },
+        { name: '5. RENDICONTO FINANZIARIO SPV', desc: 'Sezione B: CFADS SPV, servizio debito senior e cascata di distribuzione (Art. 2430/2433/2482 c.c.)' },
+        { name: '6. FINANZA', desc: 'Assunzioni macroeconomiche, tassi, parametri di debito, equity, exit e quadratura Usi & Fonti' },
+        { name: '7. AMMORTAMENTO', desc: 'Piani di ammortamento completi di Senior Debt e Finanziamento Soci SPV' },
+        { name: '8. STATO PATRIMONIALE SPV', desc: 'Sezione B-BIS: Stato Patrimoniale SPV riclassificato OIC / Art. 2424 c.c.' },
+        { name: '9. CASH FLOW MENSILE', desc: 'Analisi mensile SPV a 72 mesi (Anno 0 + Anni 1-5), liquidazione IVA periodica TR e cassa progressiva' }
+    ] : [
         { name: '1. DRIVER OPERATIVI', desc: 'Quantitativi fisici di energia (MWh), sottomonopoli CER/PPA/RID e valori unitari (€/MWh)' },
         { name: '2. CAPEX', desc: 'Breakdown investimenti per impianto, totale portafoglio e quote di ammortamento civilistico' },
         { name: '3. OPEX', desc: 'Breakdown costi operativi anno 1 per impianto, totale di portafoglio e indicizzazione inflattiva' },
@@ -127,7 +145,9 @@ async function exportPnlToExcel() {
         { name: '7. RENDICONTO FINANZIARIO HOLDING', desc: 'Sezione D: FCFE Investitore, cassa ordinaria, dismissione exit SPV e payoff private debt' },
         { name: '8. FINANZA', desc: 'Assunzioni macroeconomiche, tassi, parametri di debito, equity, exit e quadratura Usi & Fonti' },
         { name: '9. AMMORTAMENTO', desc: 'Piani di ammortamento completi di Senior Debt, Finanziamento Soci e Private Debt' },
-        { name: '10. CASH FLOW MENSILE', desc: 'Analisi mensile a 72 mesi (Anno 0 + Anni 1-5), liquidazione IVA periodica TR e cassa progressiva' }
+        { name: '10. STATO PATRIMONIALE SPV', desc: 'Sezione B-BIS: Stato Patrimoniale SPV riclassificato OIC / Art. 2424 c.c.' },
+        { name: '11. STATO PATRIMONIALE HOLDING', desc: 'Sezione D-BIS: Stato Patrimoniale HoldCo riclassificato OIC / Art. 2424 c.c.' },
+        { name: '12. CASH FLOW MENSILE', desc: 'Analisi mensile consolidata a 72 mesi (Anno 0 + Anni 1-5), liquidazione IVA periodica TR e cassa progressiva' }
     ];
     sheetIndexList.forEach(item => {
         const cN = cover.getCell(`B${coverRow}`);
@@ -1515,6 +1535,12 @@ async function exportPnlToExcel() {
     // ---------------------------------------------------------
     // FOGLIO: CONTO ECONOMICO HOLDING (SEZIONE C)
     // ---------------------------------------------------------
+    const rowMapCeHc = {};
+    const rowMapRfHc = {};
+    const pendingFormulasCeHc = [];
+    const pendingFormulasRfHc = [];
+
+    if (!spvOnly) {
     const sheetCeHc = workbook.addWorksheet('CONTO ECONOMICO HOLDING', { views: [{ state: 'frozen', xSplit: 1, ySplit: 1, showGridLines: false }] });
     sheetCeHc.columns = columns;
 
@@ -1524,8 +1550,6 @@ async function exportPnlToExcel() {
     });
 
     let currentRowNumCeHc = 2;
-    const rowMapCeHc = {};
-    const pendingFormulasCeHc = [];
 
     function addRowCeHc(key, label, type, dataArray, format, formulaFn = null) {
         if (type === 'section-title') {
@@ -1771,8 +1795,6 @@ async function exportPnlToExcel() {
     });
 
     let currentRowNumRfHc = 2;
-    const rowMapRfHc = {};
-    const pendingFormulasRfHc = [];
 
     function addRowRfHc(key, label, type, dataArray, format, formulaFn = null) {
         if (type === 'section-title') {
@@ -2011,6 +2033,7 @@ async function exportPnlToExcel() {
             return `${prevCol}${rowMapRfHc.holdcoFCFECumulated}+${col}${rowMapRfHc.holdcoFCFE}`;
         }
     });
+    }
 
     // ---------------------------------------------------------
     // FOGLIO FINANZA
@@ -2854,20 +2877,22 @@ async function exportPnlToExcel() {
     });
 
     // Applicazione Formule CE HC e RF HC a posteriori (dopo che tutte le rowMap sono complete)
-    pendingFormulasCeHc.forEach(pf => {
-        const f = pf.formulaFn(pf.colLetter, pf.yearIndex, pf.rowIndex);
-        if (f) {
-            const val = pf.result !== undefined ? pf.result : (typeof pf.cell.value === 'object' ? pf.cell.value?.result : pf.cell.value);
-            pf.cell.value = { formula: f, result: val !== undefined ? val : null };
-        }
-    });
-    pendingFormulasRfHc.forEach(pf => {
-        const f = pf.formulaFn(pf.colLetter, pf.yearIndex, pf.rowIndex);
-        if (f) {
-            const val = pf.result !== undefined ? pf.result : (typeof pf.cell.value === 'object' ? pf.cell.value?.result : pf.cell.value);
-            pf.cell.value = { formula: f, result: val !== undefined ? val : null };
-        }
-    });
+    if (!spvOnly) {
+        pendingFormulasCeHc.forEach(pf => {
+            const f = pf.formulaFn(pf.colLetter, pf.yearIndex, pf.rowIndex);
+            if (f) {
+                const val = pf.result !== undefined ? pf.result : (typeof pf.cell.value === 'object' ? pf.cell.value?.result : pf.cell.value);
+                pf.cell.value = { formula: f, result: val !== undefined ? val : null };
+            }
+        });
+        pendingFormulasRfHc.forEach(pf => {
+            const f = pf.formulaFn(pf.colLetter, pf.yearIndex, pf.rowIndex);
+            if (f) {
+                const val = pf.result !== undefined ? pf.result : (typeof pf.cell.value === 'object' ? pf.cell.value?.result : pf.cell.value);
+                pf.cell.value = { formula: f, result: val !== undefined ? val : null };
+            }
+        });
+    }
 
     // ---------------------------------------------------------
     // FOGLIO: STATO PATRIMONIALE SPV (SEZIONE B-BIS, PARTITA DOPPIA OIC)
@@ -3090,6 +3115,7 @@ async function exportPnlToExcel() {
     // ---------------------------------------------------------
     // FOGLIO: STATO PATRIMONIALE HOLDING (SEZIONE D-BIS, PARTITA DOPPIA OIC)
     // ---------------------------------------------------------
+    if (!spvOnly) {
     const sheetBsHc = workbook.addWorksheet('STATO PATRIMONIALE HOLDING', { views: [{ state: 'frozen', xSplit: 1, ySplit: 1, showGridLines: false }] });
     sheetBsHc.columns = columns;
 
@@ -3245,6 +3271,7 @@ async function exportPnlToExcel() {
             pf.cell.value = { formula: f, result: val !== undefined ? val : null };
         }
     });
+    }
 
     // ---------------------------------------------------------
     // D2: FOGLIO CASH FLOW MENSILE ANALITICO (72 MESI / ANNI 0-5)
@@ -3257,8 +3284,8 @@ async function exportPnlToExcel() {
             views: [{ state: 'frozen', xSplit: 1, ySplit: 4, showGridLines: true }]
         });
 
-        // Definizione Colonne e Larghezze (21 colonne)
-        sheetMc.columns = [
+        // Definizione Colonne e Larghezze (17 colonne per SPV-only, 21 per consolidato)
+        const spvCols = [
             { key: 'mese', width: 16 },            // Col 1 (A)
             { key: 'revAccrued', width: 18 },       // Col 2 (B)
             { key: 'revCollected', width: 18 },     // Col 3 (C)
@@ -3275,18 +3302,24 @@ async function exportPnlToExcel() {
             { key: 'vatCashFlow', width: 16 },      // Col 14 (N)
             { key: 'netCashflow', width: 18 },      // Col 15 (O)
             { key: 'cashClosing', width: 18 },      // Col 16 (P)
-            { key: 'fundedClosing', width: 18 },    // Col 17 (Q)
+            { key: 'fundedClosing', width: 18 }     // Col 17 (Q)
+        ];
+        const holdcoCols = [
             { key: 'sociService', width: 18 },      // Col 18 (R)
             { key: 'pdService', width: 18 },        // Col 19 (S)
             { key: 'holdcoCosts', width: 16 },      // Col 20 (T)
             { key: 'holdcoClosing', width: 18 }     // Col 21 (U)
         ];
+        sheetMc.columns = spvOnly ? spvCols : [...spvCols, ...holdcoCols];
+
+        const lastColLetter = spvOnly ? 'Q' : 'U';
 
         // Riga 1: Banner Titolo Deal
         const r1 = sheetMc.getRow(1);
-        r1.getCell(1).value = `PROGETTO: ${(window._currentProjectName || 'Asset Ibrido FV + BESS')} - CASH FLOW MENSILE ANALITICO`;
+        const dealProjectName = (window._currentProjectName && window._currentProjectName !== 'Progetto New Green Deal') ? window._currentProjectName : 'Solans Srl';
+        r1.getCell(1).value = `PROGETTO: ${dealProjectName} - CASH FLOW MENSILE ANALITICO${spvOnly ? ' (SOLA SPV)' : ''}`;
         r1.getCell(1).font = { bold: true, size: 13, color: { argb: 'FF203864' } };
-        sheetMc.mergeCells('A1:U1');
+        sheetMc.mergeCells(`A1:${lastColLetter}1`);
         r1.height = 24;
 
         // Riga 2: Sottotitolo Metadati
@@ -3294,16 +3327,16 @@ async function exportPnlToExcel() {
         const anchorTxt = mc.anchorYear ? ` · Anno Àncora: ${mc.anchorYear}` : '';
         const horizonTxt = isDated ? `Orizzonte: Anno 0 + Anni 1-5 (${totalMonths} mesi)` : `Orizzonte: Anni 1-5 (${totalMonths} mesi)`;
         const vatMethod = mc.vatQuarterlyRefund ? 'Liquidazione Periodica con Modello IVA TR Trimestrale' : 'Liquidazione Periodica Standard';
-        r2.getCell(1).value = `${horizonTxt}${anchorTxt} · Regime IVA: ${vatMethod} · Valuta: EUR (€)`;
+        r2.getCell(1).value = `${horizonTxt}${anchorTxt} · Regime IVA: ${vatMethod} · Valuta: EUR (€)${spvOnly ? ' · Perimetro: Sola SPV' : ''}`;
         r2.getCell(1).font = { italic: true, size: 9.5, color: { argb: 'FF64748B' } };
-        sheetMc.mergeCells('A2:U2');
+        sheetMc.mergeCells(`A2:${lastColLetter}2`);
         r2.height = 18;
 
         // Riga 3: Spazio
         sheetMc.getRow(3).height = 8;
 
-        // Riga 4: Header di Tabella (21 Colonne)
-        const headers = [
+        // Riga 4: Header di Tabella
+        const spvHeaders = [
             'Mese / Anno',
             'Ricavi Maturati (€)',
             'Ricavi Incassati (€)',
@@ -3320,12 +3353,15 @@ async function exportPnlToExcel() {
             'IVA Cash Flow (€)',
             'Net Cashflow SPV (€)',
             'Cassa Finale Lorda (€)',
-            'Cassa con Funding (€)',
+            'Cassa con Funding (€)'
+        ];
+        const holdcoHeaders = [
             'Serv. Fin. Soci (€)',
             'Serv. Private Debt (€)',
             'Oneri HoldCo (€)',
             'Cassa Holding (€)'
         ];
+        const headers = spvOnly ? spvHeaders : [...spvHeaders, ...holdcoHeaders];
         const r4 = sheetMc.getRow(4);
         r4.height = 28;
         headers.forEach((h, idx) => {
@@ -3348,8 +3384,12 @@ async function exportPnlToExcel() {
         let currentRow = 5;
 
         // Helper colonne flussi e saldi
-        const flowColIndices = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 18, 19, 20];
-        const balanceColIndices = [13, 16, 17, 21];
+        const flowColIndices = spvOnly
+            ? [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15]
+            : [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 18, 19, 20];
+        const balanceColIndices = spvOnly
+            ? [13, 16, 17]
+            : [13, 16, 17, 21];
 
         // Iterazione sui mesi con formule dinamiche
         let prevMonthRowNum = null;
@@ -3391,7 +3431,7 @@ async function exportPnlToExcel() {
                 totalSums[cIdx] = (totalSums[cIdx] || 0) + val;
             });
 
-            const row = sheetMc.addRow({
+            const rowData = {
                 mese: label,
                 revAccrued: revAccrued,
                 revCollected: revCollected,
@@ -3426,18 +3466,21 @@ async function exportPnlToExcel() {
                 } : {
                     formula: `Q${prevMonthRowNum}+O${currentRow}+H${currentRow}`,
                     result: fundedClose
-                },
-                sociService: sociSvc,
-                pdService: pdSvc,
-                holdcoCosts: holdcoOpex,
-                holdcoClosing: (prevMonthRowNum === null) ? {
+                }
+            };
+            if (!spvOnly) {
+                rowData.sociService = sociSvc;
+                rowData.pdService = pdSvc;
+                rowData.holdcoCosts = holdcoOpex;
+                rowData.holdcoClosing = (prevMonthRowNum === null) ? {
                     formula: `O${currentRow}+R${currentRow}+S${currentRow}+T${currentRow}`,
                     result: holdcoClose
                 } : {
                     formula: `U${prevMonthRowNum}+O${currentRow}+R${currentRow}+S${currentRow}+T${currentRow}`,
                     result: holdcoClose
-                }
-            });
+                };
+            }
+            const row = sheetMc.addRow(rowData);
 
             prevMonthRowNum = currentRow;
 
@@ -3618,37 +3661,41 @@ async function exportPnlToExcel() {
         sheetMc.mergeCells(`A${currentRow}:G${currentRow}`);
         currentRow++;
 
-        const kpiFirstRow = currentRow;
-        const capexBudgetRowNum = kpiFirstRow + 9;
-        const capexAllocRowNum = kpiFirstRow + 10;
-        const opexBudgetRowNum = kpiFirstRow + 12;
-        const opexAllocRowNum = kpiFirstRow + 13;
-
+        const kpiRowMap = {};
         const kpis = [
-            ['Cassa Minima SPV senza Funding (Fabbisogno Lordo)', { formula: `MIN(P5:P${lastDataRow})`, result: mc.minCashClosing || 0 }, '€ #,##0', (mc.minCashClosing || 0) < 0 ? 'FFB91C32' : 'FF047857'],
-            ['Mese Fabbisogno Lordo Massimo', mc.minCashMonth ? String(mc.minCashMonth) : '—', '@', 'FF0F172A'],
-            ['Cassa Minima SPV con Funding', { formula: `MIN(Q5:Q${lastDataRow})`, result: (mc.fundedMinCashClosing !== undefined ? mc.fundedMinCashClosing : mc.minCashClosing) || 0 }, '€ #,##0', ((mc.fundedMinCashClosing !== undefined ? mc.fundedMinCashClosing : mc.minCashClosing) || 0) < 0 ? 'FFB91C32' : 'FF047857'],
-            ['Mese Cassa Minima con Funding', mc.fundedMinMonth ? String(mc.fundedMinMonth) : '—', '@', 'FF0F172A'],
-            ['Mesi con Cassa Negativa (senza funding)', mc.negativeMonths || 0, '#,##0', (mc.negativeMonths || 0) > 0 ? 'FFB91C32' : 'FF047857'],
-            ['XIRR Datato Equity HoldCo', (mc.datedXirr !== undefined ? mc.datedXirr / 100 : 0), '0.00%', (mc.datedXirr || 0) < 0 ? 'FFB91C32' : 'FF047857'],
-            ['Credito IVA Massimo Registrato (Picco)', { formula: `MAX(M5:M${lastDataRow})`, result: mc.vatMaxCredit || 0 }, '€ #,##0', 'FF0284C7'],
-            ['Saldo Credito IVA a Fine Orizzonte', { formula: `M${lastDataRow}`, result: (mc.vatCreditEnd && mc.vatCreditEnd.length) ? mc.vatCreditEnd[mc.vatCreditEnd.length - 1] : 0 }, '€ #,##0', 'FF0284C7'],
-            ['Effetto Cassa Netto Cumulato IVA', { formula: `N${totalRow.number}`, result: mc.vatNetCumulative || 0 }, '€ #,##0', 'FF0F172A'],
-            ['Budget CAPEX Totale SPV', mc.capexBudget || 0, '€ #,##0', 'FF0F172A'],
-            ['CAPEX Datato Allocato Effettivo', mc.capexAllocated || 0, '€ #,##0', 'FF0F172A'],
-            ['Residuo CAPEX non Allocato', { formula: `D${capexBudgetRowNum}-D${capexAllocRowNum}`, result: mc.capexResidual || 0 }, '€ #,##0', (mc.capexResidual || 0) <= 0 ? 'FF047857' : 'FFD97706'],
-            ['Budget OPEX Anno 1', mc.opexBudgetY1 || 0, '€ #,##0', 'FF0F172A'],
-            ['OPEX Allocato Anno 1', (mc.opexAllocatedY1 !== undefined ? mc.opexAllocatedY1 : mc.opexAllocated) || 0, '€ #,##0', 'FF0F172A'],
-            ['Residuo OPEX Anno 1', { formula: `D${opexBudgetRowNum}-D${opexAllocRowNum}`, result: (mc.opexResidualY1 !== undefined ? mc.opexResidualY1 : mc.opexResidual) || 0 }, '€ #,##0', ((mc.opexResidualY1 !== undefined ? mc.opexResidualY1 : mc.opexResidual) || 0) <= 0 ? 'FF047857' : 'FFD97706'],
-            ['Totale Imposte SPV a P&L (Competenza)', (mc.taxesAccruedTotal !== undefined ? mc.taxesAccruedTotal : 0), '€ #,##0', 'FF0F172A'],
-            ['Imposte SPV Compensate F24 con Credito IVA', (mc.vatCompensatedTotal !== undefined ? mc.vatCompensatedTotal : 0), '€ #,##0', 'FF047857'],
-            ['Imposte SPV Effettivamente Pagate di Cassa', (mc.taxesPaidTotal !== undefined ? mc.taxesPaidTotal : 0), '€ #,##0', 'FF0F172A']
+            { key: 'minCash', label: 'Cassa Minima SPV senza Funding (Fabbisogno Lordo)', val: { formula: `MIN(P5:P${lastDataRow})`, result: mc.minCashClosing || 0 }, fmt: '€ #,##0', colArgb: (mc.minCashClosing || 0) < 0 ? 'FFB91C32' : 'FF047857' },
+            { key: 'minMonth', label: 'Mese Fabbisogno Lordo Massimo', val: mc.minCashMonth ? String(mc.minCashMonth) : '—', fmt: '@', colArgb: 'FF0F172A' },
+            { key: 'minCashFunded', label: 'Cassa Minima SPV con Funding', val: { formula: `MIN(Q5:Q${lastDataRow})`, result: (mc.fundedMinCashClosing !== undefined ? mc.fundedMinCashClosing : mc.minCashClosing) || 0 }, fmt: '€ #,##0', colArgb: ((mc.fundedMinCashClosing !== undefined ? mc.fundedMinCashClosing : mc.minCashClosing) || 0) < 0 ? 'FFB91C32' : 'FF047857' },
+            { key: 'minMonthFunded', label: 'Mese Cassa Minima con Funding', val: mc.fundedMinMonth ? String(mc.fundedMinMonth) : '—', fmt: '@', colArgb: 'FF0F172A' },
+            { key: 'negMonths', label: 'Mesi con Cassa Negativa (senza funding)', val: mc.negativeMonths || 0, fmt: '#,##0', colArgb: (mc.negativeMonths || 0) > 0 ? 'FFB91C32' : 'FF047857' }
         ];
+        if (!spvOnly) {
+            kpis.push({ key: 'xirr', label: 'XIRR Datato Equity HoldCo', val: (mc.datedXirr !== undefined ? mc.datedXirr / 100 : 0), fmt: '0.00%', colArgb: (mc.datedXirr || 0) < 0 ? 'FFB91C32' : 'FF047857' });
+        }
+        kpis.push(
+            { key: 'vatMaxCredit', label: 'Credito IVA Massimo Registrato (Picco)', val: { formula: `MAX(M5:M${lastDataRow})`, result: mc.vatMaxCredit || 0 }, fmt: '€ #,##0', colArgb: 'FF0284C7' },
+            { key: 'vatCreditEnd', label: 'Saldo Credito IVA a Fine Orizzonte', val: { formula: `M${lastDataRow}`, result: (mc.vatCreditEnd && mc.vatCreditEnd.length) ? mc.vatCreditEnd[mc.vatCreditEnd.length - 1] : 0 }, fmt: '€ #,##0', colArgb: 'FF0284C7' },
+            { key: 'vatNetCum', label: 'Effetto Cassa Netto Cumulato IVA', val: { formula: `N${totalRow.number}`, result: mc.vatNetCumulative || 0 }, fmt: '€ #,##0', colArgb: 'FF0F172A' },
+            { key: 'capexBudget', label: 'Budget CAPEX Totale SPV', val: mc.capexBudget || 0, fmt: '€ #,##0', colArgb: 'FF0F172A' },
+            { key: 'capexAlloc', label: 'CAPEX Datato Allocato Effettivo', val: mc.capexAllocated || 0, fmt: '€ #,##0', colArgb: 'FF0F172A' },
+            { key: 'capexResidual', label: 'Residuo CAPEX non Allocato', valFn: () => ({ formula: `D${kpiRowMap['capexBudget']}-D${kpiRowMap['capexAlloc']}`, result: mc.capexResidual || 0 }), fmt: '€ #,##0', colArgb: (mc.capexResidual || 0) <= 0 ? 'FF047857' : 'FFD97706' },
+            { key: 'opexBudget', label: 'Budget OPEX Anno 1', val: mc.opexBudgetY1 || 0, fmt: '€ #,##0', colArgb: 'FF0F172A' },
+            { key: 'opexAlloc', label: 'OPEX Allocato Anno 1', val: (mc.opexAllocatedY1 !== undefined ? mc.opexAllocatedY1 : mc.opexAllocated) || 0, fmt: '€ #,##0', colArgb: 'FF0F172A' },
+            { key: 'opexResidual', label: 'Residuo OPEX Anno 1', valFn: () => ({ formula: `D${kpiRowMap['opexBudget']}-D${kpiRowMap['opexAlloc']}`, result: (mc.opexResidualY1 !== undefined ? mc.opexResidualY1 : mc.opexResidual) || 0 }), fmt: '€ #,##0', colArgb: ((mc.opexResidualY1 !== undefined ? mc.opexResidualY1 : mc.opexResidual) || 0) <= 0 ? 'FF047857' : 'FFD97706' },
+            { key: 'taxesAccrued', label: 'Totale Imposte SPV a P&L (Competenza)', val: (mc.taxesAccruedTotal !== undefined ? mc.taxesAccruedTotal : 0), fmt: '€ #,##0', colArgb: 'FF0F172A' },
+            { key: 'vatCompensated', label: 'Imposte SPV Compensate F24 con Credito IVA', val: (mc.vatCompensatedTotal !== undefined ? mc.vatCompensatedTotal : 0), fmt: '€ #,##0', colArgb: 'FF047857' },
+            { key: 'taxesPaid', label: 'Imposte SPV Effettivamente Pagate di Cassa', val: (mc.taxesPaidTotal !== undefined ? mc.taxesPaidTotal : 0), fmt: '€ #,##0', colArgb: 'FF0F172A' }
+        );
 
-        kpis.forEach(([label, val, fmt, colArgb]) => {
+        // Pre-calcolo indici di riga per formule KPI
+        kpis.forEach((item, idx) => {
+            kpiRowMap[item.key] = currentRow + idx;
+        });
+
+        kpis.forEach(item => {
             const kRow = sheetMc.addRow({});
             kRow.height = 18;
-            kRow.getCell(1).value = label;
+            kRow.getCell(1).value = item.label;
             kRow.getCell(1).font = { bold: false, size: 9.5, color: { argb: 'FF334155' } };
             kRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
             kRow.getCell(1).border = {
@@ -3659,11 +3706,11 @@ async function exportPnlToExcel() {
             sheetMc.mergeCells(`A${currentRow}:C${currentRow}`);
 
             const valCell = kRow.getCell(4);
-            valCell.value = val;
-            valCell.font = { bold: true, size: 9.5, color: { argb: colArgb || 'FF0F172A' } };
+            valCell.value = item.valFn ? item.valFn() : item.val;
+            valCell.font = { bold: true, size: 9.5, color: { argb: item.colArgb || 'FF0F172A' } };
             valCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
             valCell.alignment = { horizontal: 'right', vertical: 'middle' };
-            valCell.numFmt = fmt;
+            valCell.numFmt = item.fmt;
             valCell.border = {
                 bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
                 right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
@@ -3682,7 +3729,7 @@ async function exportPnlToExcel() {
     if (typeof document !== 'undefined') {
         const a = document.createElement('a');
         a.href = url;
-        a.download = "PL_Driver_Operativi.xlsx";
+        a.download = spvOnly ? "PL_Driver_Operativi_SPV.xlsx" : "PL_Driver_Operativi.xlsx";
         document.body.appendChild(a);
         a.click();
         setTimeout(() => {
@@ -3695,4 +3742,8 @@ async function exportPnlToExcel() {
         showToast("Si è verificato un errore durante l'esportazione in Excel:\n\n" + err.message, 'error');
         console.error("Excel export error:", err);
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.exportPnlToExcel = exportPnlToExcel;
 }

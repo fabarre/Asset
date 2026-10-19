@@ -11710,7 +11710,7 @@ function _pdfHeader(doc, title, subtitle) {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
-    doc.text(window._currentProjectName || 'Progetto New Green Deal', leftX, 10);
+    doc.text(window._currentProjectName || 'Solans Srl', leftX, 10);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(148, 163, 184);
@@ -11745,7 +11745,7 @@ function _pdfFooter(doc) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
         doc.setTextColor(100, 116, 139);
-        const footerLeft = (b.company ? b.company + ' - ' : '') + 'Documento generato automaticamente - ' + (window._currentProjectName || 'Progetto New Green Deal');
+        const footerLeft = (b.company ? b.company + ' - ' : '') + 'Documento generato automaticamente - ' + (window._currentProjectName || 'Solans Srl');
         doc.text(footerLeft, 14, H - 7);
         doc.text('Pagina ' + i + ' di ' + pages, W - 14, H - 7, { align: 'right' });
     }
@@ -12750,7 +12750,7 @@ function _pdfCover(doc, reportTitle) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(11);
     doc.setTextColor(71, 85, 105);
-    doc.text(window._currentProjectName || 'Progetto New Green Deal', W / 2, 115, { align: 'center' });
+    doc.text(window._currentProjectName || 'Solans Srl', W / 2, 115, { align: 'center' });
     doc.setDrawColor(16, 185, 129);
     doc.setLineWidth(0.8);
     doc.line(W / 2 - 30, 122, W / 2 + 30, 122);
@@ -12768,7 +12768,7 @@ window.generateReport = async function(reportType) {
     const projName = await showPrompt({
         title: 'Nome progetto',
         message: 'Inserisci il nome del progetto da stampare nel PDF:',
-        defaultValue: window._currentProjectName || 'Progetto New Green Deal',
+        defaultValue: window._currentProjectName || 'Solans Srl',
         confirmLabel: 'Genera'
     });
     if (projName === null) return;
@@ -13627,7 +13627,7 @@ function _repFullDueDiligence(doc) {
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(71, 85, 105);
-    doc.text(window._currentProjectName || 'Progetto New Green Deal', 14, y);
+    doc.text(window._currentProjectName || 'Solans Srl', 14, y);
     y += 14;
     doc.setFontSize(9);
     const intro = 'Documento di due diligence integrato per valutazione di operazioni M&A nel settore rinnovabili (FV + BESS) in struttura di project finance. Include: executive summary, struttura finanziaria, conto economico SPV, rendiconto finanziario con waterfall, stato patrimoniale SPV e Holding, piano di ammortamento (senior + soci + private debt), analisi exit e valutazione. I parametri finanziari esterni (Private Debt, Private Equity, Altra Forma) sono integrati nel modello waterfall e fiscale.';
