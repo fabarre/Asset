@@ -7116,8 +7116,8 @@
                     }
                 };
                 
-                const formatMinusEuro = v => v > 0 ? '-' + formatEuro(v) : '-';
-                const formatPlusEuro = v => v > 0 ? '+' + formatEuro(v) : '-';
+                const formatMinusEuro = v => Math.abs(v) > 0.001 ? '-' + formatEuro(Math.abs(v)) : '-';
+                const formatPlusEuro = v => v > 0.001 ? '+' + formatEuro(v) : '-';
 
                 const formatMwh = v => v > 0.01 ? new Intl.NumberFormat('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v) + ' MWh' : '-';
                 const formatMinusMwh = v => v > 0.01 ? '-' + formatMwh(v) : '-';
