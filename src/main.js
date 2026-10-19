@@ -1703,12 +1703,18 @@
             const serviceVal = getFloat('plant-service-val');
             const serviceYears = getFloat('plant-service-years');
 
+            const zone = getVal('plant-zone');
             const traderContractType = getVal('plant-trader-contract-type');
             const traderSpread = getFloat('plant-trader-spread-eur-mwh');
             const traderDisp = getFloat('plant-trader-disp-eur-mwh');
             const pnrrContributionPct = getFloat('plant-pnrr-contribution-pct');
             const marketType = getVal('plant-market-type');
             const ferxTariff = getFloat('plant-ferx-tariff');
+            const brpFee1 = getFloat('plant-brp-fee1');
+            const brpFee1Months = parseInt(getVal('plant-brp-fee1-months'), 10) || 0;
+            const brpFee2 = getFloat('plant-brp-fee2');
+            const brpFee2Months = parseInt(getVal('plant-brp-fee2-months'), 10) || 0;
+            const brpFee3 = getFloat('plant-brp-fee3');
 
             const degradeRid = getFloat('plant-degrade-rid');
             const degradeTimeshifting = getFloat('plant-degrade-timeshifting');
@@ -1719,6 +1725,7 @@
             return name !== originalPlantData.name ||
                    codDate !== (originalPlantData.codDate || null) ||
                    Math.abs(prodMultiplier - origProdMultiplier) > 1e-4 ||
+                   zone !== (originalPlantData.zone || 'none') ||
                    capex !== originalPlantData.capex ||
                    opex !== originalPlantData.opex ||
                    opexOmBess !== (originalPlantData.opexOmBess || 0) ||
@@ -1740,13 +1747,13 @@
                    inverterEfficiency !== (originalPlantData.inverterEfficiency || 0) ||
                    inverterMpptCount !== (originalPlantData.inverterMpptCount || 0) ||
                    inverterMaxDcV !== (originalPlantData.inverterMaxDcV || 0) ||
-                   bessMw !== originalPlantData.bessMw ||
-                   bessMwh !== originalPlantData.bessMwh ||
-                   Math.abs(bessEfficiency - originalPlantData.bessEfficiency) > 1e-6 ||
-                   Math.abs(bessDegradation - originalPlantData.bessDegradation) > 1e-6 ||
-                   bessCapexKwh !== originalPlantData.bessCapexKwh ||
-                   bessType !== originalPlantData.bessType ||
-                   bessConnection !== originalPlantData.bessConnection ||
+                   bessMw !== (originalPlantData.bessMw || 0) ||
+                   bessMwh !== (originalPlantData.bessMwh || 0) ||
+                   Math.abs(bessEfficiency - (originalPlantData.bessEfficiency || 0)) > 1e-6 ||
+                   Math.abs(bessDegradation - (originalPlantData.bessDegradation || 0)) > 1e-6 ||
+                   bessCapexKwh !== (originalPlantData.bessCapexKwh || 0) ||
+                   bessType !== (originalPlantData.bessType || 'none') ||
+                   bessConnection !== (originalPlantData.bessConnection || 'none') ||
                    bessDoD !== (originalPlantData.bessDoD || 0) ||
                    bessSocMin !== (originalPlantData.bessSocMin || 0) ||
                    bessSocMax !== (originalPlantData.bessSocMax || 0) ||
@@ -1766,6 +1773,11 @@
                    pnrrContributionPct !== (originalPlantData.pnrrContributionPct || 0) ||
                    marketType !== (originalPlantData.marketType || 'rid') ||
                    ferxTariff !== (originalPlantData.ferxTariff || 85) ||
+                   brpFee1 !== (originalPlantData.brpFee1 !== undefined ? originalPlantData.brpFee1 : 2) ||
+                   brpFee1Months !== (originalPlantData.brpFee1Months !== undefined ? originalPlantData.brpFee1Months : 18) ||
+                   brpFee2 !== (originalPlantData.brpFee2 !== undefined ? originalPlantData.brpFee2 : 1) ||
+                   brpFee2Months !== (originalPlantData.brpFee2Months !== undefined ? originalPlantData.brpFee2Months : 6) ||
+                   brpFee3 !== (originalPlantData.brpFee3 !== undefined ? originalPlantData.brpFee3 : 0) ||
 
                    degradeRid !== (originalPlantData.degradeRidPct !== undefined ? originalPlantData.degradeRidPct : 2.0) ||
                    degradeTimeshifting !== (originalPlantData.degradeTimeshiftingPct !== undefined ? originalPlantData.degradeTimeshiftingPct : 2.0) ||
@@ -1819,6 +1831,11 @@
             if (originalPlantData.degradeRidPct === undefined) originalPlantData.degradeRidPct = 2.0;
             if (originalPlantData.degradeTimeshiftingPct === undefined) originalPlantData.degradeTimeshiftingPct = 2.0;
             if (originalPlantData.degradeArbitragePct === undefined) originalPlantData.degradeArbitragePct = 2.0;
+            if (originalPlantData.brpFee1 === undefined) originalPlantData.brpFee1 = 2;
+            if (originalPlantData.brpFee1Months === undefined) originalPlantData.brpFee1Months = 18;
+            if (originalPlantData.brpFee2 === undefined) originalPlantData.brpFee2 = 1;
+            if (originalPlantData.brpFee2Months === undefined) originalPlantData.brpFee2Months = 6;
+            if (originalPlantData.brpFee3 === undefined) originalPlantData.brpFee3 = 0;
 
             // Normalise: if no BESS installed, treat all BESS numeric fields as 0
             // so that checkFormModified() correctly compares against what the form will show.
@@ -2013,10 +2030,10 @@
             setFieldVal('plant-trader-contract-type', 'pun_orario');
             setFieldVal('plant-trader-spread-eur-mwh', 0);
             setFieldVal('plant-trader-disp-eur-mwh', 0);
-            setFieldVal('plant-brp-fee1', 0);
-            setFieldVal('plant-brp-fee1-months', 0);
-            setFieldVal('plant-brp-fee2', 0);
-            setFieldVal('plant-brp-fee2-months', 0);
+            setFieldVal('plant-brp-fee1', 2);
+            setFieldVal('plant-brp-fee1-months', 18);
+            setFieldVal('plant-brp-fee2', 1);
+            setFieldVal('plant-brp-fee2-months', 6);
             setFieldVal('plant-brp-fee3', 0);
             setFieldVal('plant-pnrr-contribution-pct', 0);
             setFieldVal('plant-degrade-rid', 2.0);
