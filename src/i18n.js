@@ -146,6 +146,7 @@ const I18N_EN = {
     'IMPIEGHI (Investment Uses)': 'USES (Investment Uses)',
     'Acquisizione Quote SPV (Purchase Price)': 'SPV Share Acquisition (Purchase Price)',
     'CAPEX Costruzione Impianti (Hard & Soft Costs)': 'Plant Construction CAPEX (Hard & Soft Costs)',
+    'Capitale Costituzione SPV': 'SPV Setup Capital',
     'Capitale Costituzione Holding': 'Holding Setup Capital',
     'TOTALE IMPIEGHI': 'TOTAL USES',
     'FONTI (Financing Sources)': 'SOURCES (Financing Sources)',
