@@ -25,8 +25,7 @@ const TOKEN_FILE = path.join(ROOT, 'scratch', '.sbp_token');
 const BACKUP_ROOT = path.join(ROOT, 'scratch', 'backups');
 
 const PROJECTS = {
-    dev: 'ozexeaqnvlkflzweikph',
-    prod: 'bfszzyeysqijxrqxsofk'
+    prod: 'bfszzyeysqijxrqxsofk' // Business_Plan_OVH (produzione attiva)
 };
 
 // Ordine di dump/restore compatibile con le Foreign Key
@@ -71,6 +70,7 @@ function sha256File(file) {
 
 // ── RUN ────────────────────────────────────────────────────────────────────
 async function run(target, keep = 10) {
+    if (target === 'dev') throw new Error("L'ambiente 'dev' (Business_Plan) è stato dismesso. Utilizzare 'prod' (Business_Plan_OVH).");
     const ref = PROJECTS[target];
     if (!ref) throw new Error('Target sconosciuto: ' + target);
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

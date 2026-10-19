@@ -24,8 +24,7 @@ const IDE_TOKEN_FILE = 'C:/Users/Utente/.gemini/antigravity-ide/mcp_oauth_tokens
 const LOCAL_TOKEN_FILE = path.join(ROOT, 'scratch', '.sbp_token');
 
 const PROJECTS = {
-    dev: 'ozexeaqnvlkflzweikph',   // Business_Plan (sviluppo)
-    prod: 'bfszzyeysqijxrqxsofk',  // Business_Plan_OVH (produzione)
+    prod: 'bfszzyeysqijxrqxsofk',  // Business_Plan_OVH (produzione attiva)
 };
 
 function refreshToken() {
@@ -84,10 +83,16 @@ async function mgmt(pathname, { method = 'GET', body = null } = {}) {
 
 const runSql = (ref, query) => mgmt(`/v1/projects/${ref}/database/query`, { method: 'POST', body: { query } });
 
-const [cmd, target, ...rest] = process.argv.slice(2);
+const [cmd, targetArg, ...rest] = process.argv.slice(2);
+let target = targetArg;
+if (target === 'dev') {
+    console.error("ERRORE: l'ambiente 'dev' (Business_Plan) è stato dismesso. Utilizzare 'prod' (Business_Plan_OVH).");
+    process.exit(1);
+}
+if (!target && PROJECTS.prod) target = 'prod';
 const ref = PROJECTS[target];
 if (!cmd || !ref) {
-    console.error('Uso: node tools/sb.mjs <tables|counts|rls|query|exec-file|advisors> <dev|prod> [args]');
+    console.error('Uso: node tools/sb.mjs <tables|counts|rls|query|exec-file|advisors> [prod] [args]');
     process.exit(1);
 }
 

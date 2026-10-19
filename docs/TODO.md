@@ -7,7 +7,7 @@ Aggiornato: 2026-08-30 (post Fasi A-E + CF7-CF11 del piano di sviluppo 2026-08).
 - [ ] **Consolidamento `Antigravity Agents Config.md`** (root, v2.2 storico) vs `.agents/AGENTS.md` canonico.
 - [ ] **i18n canvas/PDF**: dizionario EN per label grafici Chart.js e testi report PDF.
 - [ ] **Parità LP↔DP**: test browser con `bessOptimizer: 'lp'` (HiGHS) vs DP su casi noti.
-- [ ] **Ambiente dev Supabase**: il progetto `ozexeaqnvlkflzweikph` non esiste più (DNS) — valutare ricreazione come staging per migrazioni.
+- [x] **Bonifica ambiente dev obsoleto**: rimosso il puntamento al vecchio progetto dismesso `ozexeaqnvlkflzweikph` (Business_Plan); tutti i tool (sb.mjs, backup.mjs) e le configurazioni (supabase_config.json) puntano ora esclusivamente al progetto attivo `Business_Plan_OVH` (`bfszzyeysqijxrqxsofk`).
 - [ ] **TIDE 2026 quart'oraria**: estensione motore a 96 periodi/giorno per settlement CER (feature multi-step).
 - [ ] **Retention audit log**: registro limitato a 200 voci con pruning; per compliance valutare retention più lunga/export periodico.
 
