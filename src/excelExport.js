@@ -2190,7 +2190,6 @@ async function exportPnlToExcel() {
     const graceFullVal = Math.floor(graceCappedVal);
     const graceFracVal = graceCappedVal - graceFullVal;
     const amortizingYearsVal = Math.max(0.1, loanTermVal - graceCappedVal);
-    const activeMaturityVal = paramsFin.refiEnabled ? Math.min(20, (paramsFin.refiYear || 7) - 1 + (paramsFin.refiLoanTerm || 10)) : loanTermVal;
 
     addFinRow('graceCappedYears', 'Preammortamento in Anni (capped)');
     sheetFin.getCell(`B${rowMapFin['graceCappedYears']}`).value = { formula: `MIN(B${rowMapFin['seniorGracePeriodMonths']}/12, MAX(0, B${rowMapFin['loanTerm']}-1))`, result: graceCappedVal };
@@ -2208,14 +2207,17 @@ async function exportPnlToExcel() {
     sheetFin.getCell(`B${rowMapFin['amortizingYears']}`).value = { formula: `MAX(0.1, B${rowMapFin['loanTerm']}-B${rowMapFin['graceCappedYears']})`, result: amortizingYearsVal };
     sheetFin.getCell(`B${rowMapFin['amortizingYears']}`).numFmt = '0.00';
 
-    addFinRow('activeMaturity', 'Scadenza Effettiva Debito Senior');
-    sheetFin.getCell(`B${rowMapFin['activeMaturity']}`).value = { formula: `IF(B${rowMapFin['refiEnabled']}="Sì", MIN(20, B${rowMapFin['refiYear']}-1+B${rowMapFin['refiLoanTerm']}), B${rowMapFin['loanTerm']})`, result: activeMaturityVal };
-    sheetFin.getCell(`B${rowMapFin['activeMaturity']}`).numFmt = '#,##0';
-
     addFinRow('y1OperatingAvail', 'Frazione Operativa Anno 1 post-COD (%)');
     const y1AvailVal = (resultsFin && resultsFin.y1OperatingAvail !== undefined) ? resultsFin.y1OperatingAvail : 1.0;
     sheetFin.getCell(`B${rowMapFin['y1OperatingAvail']}`).value = y1AvailVal;
     applyInputStyle(sheetFin.getCell(`B${rowMapFin['y1OperatingAvail']}`), numberFormatPct);
+
+    const baseMaturityVal = (y1AvailVal < 0.999 && loanTermVal > 0) ? Math.min(20, 1 + Math.ceil(loanTermVal - y1AvailVal)) : loanTermVal;
+    const activeMaturityVal = paramsFin.refiEnabled ? Math.min(20, (paramsFin.refiYear || 7) - 1 + (paramsFin.refiLoanTerm || 10)) : baseMaturityVal;
+
+    addFinRow('activeMaturity', 'Scadenza Effettiva Debito Senior');
+    sheetFin.getCell(`B${rowMapFin['activeMaturity']}`).value = { formula: `IF(B${rowMapFin['refiEnabled']}="Sì", MIN(20, B${rowMapFin['refiYear']}-1+B${rowMapFin['refiLoanTerm']}), IF(B${rowMapFin['y1OperatingAvail']}<0.999, MIN(20, 1+ROUNDUP(B${rowMapFin['loanTerm']}-B${rowMapFin['y1OperatingAvail']},0)), B${rowMapFin['loanTerm']}))`, result: activeMaturityVal };
+    sheetFin.getCell(`B${rowMapFin['activeMaturity']}`).numFmt = '#,##0';
 
     sheetFin.addRow([]); currentRowFin++;
 
@@ -2698,11 +2700,11 @@ async function exportPnlToExcel() {
         return `${prevCol}${rowMapDebt.endingBalance}`;
     });
     // Righe di supporto: tasso attivo (gestisce refinancing) e rata annuitaria attiva
-    addRowDebt('activeRate', 'Tasso Debito Attivo (post-Refi) (%)', 'detail', Array.from({ length: numYears }, () => 0), numberFormatPct, (col, yearIdx) => {
+    addRowDebt('activeRate', 'Tasso Debito Attivo (post-Refi) (%)', 'detail', d.activeRate || Array.from({ length: numYears }, () => p.interestRate || 0), numberFormatPct, (col, yearIdx) => {
         if (yearIdx === 0) return `FINANZA!$B$${rowMapFin['interestRate']}`;
         return `IF(AND(FINANZA!$B$${rowMapFin['refiEnabled']}="Sì", ${yearIdx} >= FINANZA!$B$${rowMapFin['refiYear']}), FINANZA!$B$${rowMapFin['refiInterestRate']}, FINANZA!$B$${rowMapFin['interestRate']})`;
     });
-    addRowDebt('activeAnnuity', 'Rata Annuitaria Attiva (€)', 'detail', Array.from({ length: numYears }, () => 0), numberFormatEuro, (col, yearIdx) => {
+    addRowDebt('activeAnnuity', 'Rata Annuitaria Attiva (€)', 'detail', d.activeAnnuity || Array.from({ length: numYears }, () => 0), numberFormatEuro, (col, yearIdx) => {
         if (yearIdx === 0) return '0';
         if (yearIdx === 1) {
             return `FINANZA!$B$${rowMapFin['periodsPerYear']} * PMT(FINANZA!$B$${rowMapFin['interestRate']} / FINANZA!$B$${rowMapFin['periodsPerYear']}, FINANZA!$B$${rowMapFin['amortizingYears']} * FINANZA!$B$${rowMapFin['periodsPerYear']}, -FINANZA!$B$${rowMapFin['debt']})`;
@@ -2718,7 +2720,7 @@ async function exportPnlToExcel() {
         const begin = `${col}${rowMapDebt['beginningBalance']}`;
         const rate = `${col}${rowMapDebt.activeRate}`;
         const annuity = `${col}${rowMapDebt['activeAnnuity']}`;
-        const dt = yearNum === 1 ? `FINANZA!$B$${rowMapFin['y1OperatingAvail']}` : '1';
+        const dt = yearNum === 1 ? `FINANZA!$B$${rowMapFin['y1OperatingAvail']}` : `MAX(0, MIN(1, FINANZA!$B$${rowMapFin['loanTerm']} - (FINANZA!$B$${rowMapFin['y1OperatingAvail']}+${yearNum - 2})))`;
         const timeElapsed = yearNum === 1 ? '0' : `(FINANZA!$B$${rowMapFin['y1OperatingAvail']}+${yearNum - 2})`;
         const graceInYr = `MAX(0, MIN(${dt}, FINANZA!$B$${rowMapFin['graceCappedYears']}-${timeElapsed}))`;
         const amortInYr = `(${dt}-${graceInYr})`;
@@ -2742,11 +2744,11 @@ async function exportPnlToExcel() {
         const rate = `${col}${rowMapDebt.activeRate}`;
         const intF = `-${col}${rowMapDebt['interestAccrued']}`;
 
-        const dt = yearNum === 1 ? `FINANZA!$B$${rowMapFin['y1OperatingAvail']}` : '1';
+        const dt = yearNum === 1 ? `FINANZA!$B$${rowMapFin['y1OperatingAvail']}` : `MAX(0, MIN(1, FINANZA!$B$${rowMapFin['loanTerm']} - (FINANZA!$B$${rowMapFin['y1OperatingAvail']}+${yearNum - 2})))`;
         const timeElapsed = yearNum === 1 ? '0' : `(FINANZA!$B$${rowMapFin['y1OperatingAvail']}+${yearNum - 2})`;
         const graceInYr = `MAX(0, MIN(${dt}, FINANZA!$B$${rowMapFin['graceCappedYears']}-${timeElapsed}))`;
         const amortInYr = `(${dt}-${graceInYr})`;
-        const baseAmort = `MIN(${begin}, MAX(0, (${annuity}-${intF})*${amortInYr}))`;
+        const baseAmort = `IF(${yearNum}=${maturity}, ${begin}, MIN(${begin}, MAX(0, (${annuity}-${intF})*${amortInYr})))`;
         const sculptBranch = `IF(${yearNum}=${maturity}, MAX(0, ${begin}), MIN(MAX(0, ${begin}), MAX(0, ${cfads}/${target}-${intF})))`;
         return `-IF(${yearNum} > ${maturity}, 0, IF(${sculpt}, ${sculptBranch}, ${baseAmort}))`;
     });

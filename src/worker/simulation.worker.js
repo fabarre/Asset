@@ -2855,7 +2855,7 @@ function runSensitivityLoop(baseState, config) {
             };
 
             const debtSchedule = {
-                years: [], beginningBalance: [], interestAccrued: [], principalScheduled: [], principalVoluntary: [], endingBalance: [],
+                years: [], beginningBalance: [], activeRate: [], activeAnnuity: [], interestAccrued: [], principalScheduled: [], principalVoluntary: [], endingBalance: [],
                 totalDebtService: [], dscr: [], llcr: [], dsraBalance: [], beginningBalanceSoci: [], interestAccruedSoci: [], interestPaidSoci: [], principalPaidSoci: [], endingBalanceSoci: [],
                 // Private Debt schedule (sezione 3)
                 beginningBalancePd: [], interestAccruedPd: [], interestPaidPd: [], principalPaidPd: [], bulletPayoffPd: [], endingBalancePd: []
@@ -2935,6 +2935,23 @@ function runSensitivityLoop(baseState, config) {
             });
 
             let y1DebtAvail = 1.0;
+            if (anchorYear !== null) {
+                let sumCapex = 0;
+                let weightedAvailSum = 0;
+                activePlants.forEach(plant => {
+                    const pCapex = (plant._baseSolarCivil || 0) + (plant._baseBessCivil || 0) + (plant._baseOtherCivil || 0) || (plant.capacity || 1);
+                    const pAvail = codYearAvailability(plant._codParsed, anchorYear);
+                    sumCapex += pCapex;
+                    weightedAvailSum += pCapex * pAvail;
+                });
+                y1DebtAvail = sumCapex > 0 ? (weightedAvailSum / sumCapex) : 1.0;
+            }
+            let baseLoanMaturity = p.loanTerm;
+            if (y1DebtAvail < 0.999 && p.loanTerm > 0) {
+                baseLoanMaturity = Math.min(20, 1 + Math.ceil(p.loanTerm - y1DebtAvail));
+            }
+            activeMaturity = baseLoanMaturity;
+
             for (let yr = 0; yr <= exitYear; yr++) {
                 const inflationMultiplier = yr === 0 ? 1.0 : Math.pow(1 + p.inflation, yr - 1);
                 
@@ -3772,19 +3789,31 @@ function runSensitivityLoop(baseState, config) {
                         let sumPrinYear = 0;
 
                         if (portfolioDebtAvail >= 0.999) {
-                            for (let per = 0; per < mDebt; per++) {
-                                const int_p = curDebtYear * i_m;
-                                let prin_p = 0;
-                                const graceInP = Math.min(remainingGraceYears, 1 / mDebt);
-                                remainingGraceYears = Math.max(0, remainingGraceYears - graceInP);
-                                const amortInP = Math.max(0, (1 / mDebt) - graceInP) * mDebt;
-                                if (amortInP > 0) {
-                                    const amortInt = curDebtYear * i_m * amortInP;
-                                    prin_p = Math.min(curDebtYear, Math.max(0, (activePeriodicAnnuity * amortInP) - amortInt));
-                                    curDebtYear = Math.max(0, curDebtYear - prin_p);
+                            const timeElapsedPrior = y1DebtAvail + (yr - 2);
+                            const remOperatingYears = Math.max(0, p.loanTerm - timeElapsedPrior);
+                            const yearOpFrac = Math.min(1.0, remOperatingYears);
+
+                            if (yr === activeMaturity || yearOpFrac < 0.999) {
+                                // Final maturity year or fractional final year: schedule full remaining principal to clear debt cleanly
+                                const intFrac = (yearOpFrac > 0 && yearOpFrac < 0.999) ? yearOpFrac : 1.0;
+                                sumIntYear = curDebtYear * activeRate * intFrac;
+                                sumPrinYear = curDebtYear;
+                                curDebtYear = 0;
+                            } else {
+                                for (let per = 0; per < mDebt; per++) {
+                                    const int_p = curDebtYear * i_m;
+                                    let prin_p = 0;
+                                    const graceInP = Math.min(remainingGraceYears, 1 / mDebt);
+                                    remainingGraceYears = Math.max(0, remainingGraceYears - graceInP);
+                                    const amortInP = Math.max(0, (1 / mDebt) - graceInP) * mDebt;
+                                    if (amortInP > 0) {
+                                        const amortInt = curDebtYear * i_m * amortInP;
+                                        prin_p = Math.min(curDebtYear, Math.max(0, (activePeriodicAnnuity * amortInP) - amortInt));
+                                        curDebtYear = Math.max(0, curDebtYear - prin_p);
+                                    }
+                                    sumIntYear += int_p;
+                                    sumPrinYear += prin_p;
                                 }
-                                sumIntYear += int_p;
-                                sumPrinYear += prin_p;
                             }
                             yInterest = sumIntYear;
                             yPrincipalScheduled = sumPrinYear;
@@ -4565,6 +4594,8 @@ function runSensitivityLoop(baseState, config) {
                 // Debt matrices
                 debtSchedule.years.push(yr);
                 debtSchedule.beginningBalance.push(yr === 0 ? 0 : debtSchedule.endingBalance[yr - 1]);
+                debtSchedule.activeRate.push(yr === 0 ? p.interestRate : (yr <= activeMaturity && debtSchedule.beginningBalance[yr] > 0 ? activeRate : 0));
+                debtSchedule.activeAnnuity.push(yr === 0 ? 0 : (yr <= activeMaturity && debtSchedule.beginningBalance[yr] > 0 ? activeAnnuity : 0));
                 debtSchedule.interestAccrued.push(yInterest);
                 debtSchedule.principalScheduled.push(yPrincipalScheduled);
                 debtSchedule.principalVoluntary.push(yPrincipalVoluntary);
