@@ -1070,7 +1070,9 @@ async function exportPnlToExcel() {
     });
     
     const sociInterestRate = window.State.inputs.sociInterestRate;
-    addRowCe('sociInterestAccrued', `  (-) Interessi Finanziamento Soci (Accrual) (${sociInterestRate > 0 ? sociInterestRate.toFixed(2) + '%' : 'Nessuno'}) (€)`, 'minus', m.sociInterestAccrued, numberFormatEuro, (col) => {
+    const sociGrace = window.State.inputs.sociInterestGrace || 0;
+    const sociGraceLabel = sociGrace > 0 ? `, grazia ${sociGrace} anni` : '';
+    addRowCe('sociInterestAccrued', `  (-) Interessi Finanziamento Soci (Accrual) (${sociInterestRate > 0 ? sociInterestRate.toFixed(2) + '%' + sociGraceLabel : 'Nessuno'}) (€)`, 'minus', m.sociInterestAccrued, numberFormatEuro, (col) => {
         return `'AMMORTAMENTO'!${col}${rowMapDebt.interestAccruedSoci}`;
     });
     
@@ -1163,20 +1165,20 @@ async function exportPnlToExcel() {
     addRowCe('taxTaxableIres', 'Imponibile IRES Lordo (€)', 'detail', m.taxTaxableIres, numberFormatEuro, (col) => {
         return `${col}${rowMapCe.ebitda}+${col}${rowMapCe.interestActive}-${col}${rowMapCe.taxDeductibleInterest}-${col}${rowMapCe.taxFiscalDepr}`;
     });
-    addRowCe('taxNolFirst3Applied', 'NOL Primi 3 Anni Utilizzata - 100% (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+    addRowCe('taxNolFirst3Applied', 'NOL Primi 3 Anni Utilizzata - 100% (€)', 'detail', m.taxNolFirst3Applied || _zeroArr, numberFormatEuro, (col, yi) => {
         const prev = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxLossFirst3CF}` : '0';
         return `IF(${col}${rowMapCe.taxTaxableIres}>0, MIN(${col}${rowMapCe.taxTaxableIres}, ${prev}), 0)`;
     });
-    addRowCe('taxLossFirst3CF', 'NOL Primi 3 Anni Riportata (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+    addRowCe('taxLossFirst3CF', 'NOL Primi 3 Anni Riportata (€)', 'detail', m.taxLossFirst3CF || _zeroArr, numberFormatEuro, (col, yi) => {
         const prev = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxLossFirst3CF}` : '0';
         const newLoss = yi < 3 ? `MAX(0, -${col}${rowMapCe.taxTaxableIres})` : '0';
         return `MAX(0, ${prev}-${col}${rowMapCe.taxNolFirst3Applied})+${newLoss}`;
     });
-    addRowCe('taxNolNormalApplied', 'NOL Ordinaria Utilizzata - 80% (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+    addRowCe('taxNolNormalApplied', 'NOL Ordinaria Utilizzata - 80% (€)', 'detail', m.taxNolNormalApplied || _zeroArr, numberFormatEuro, (col, yi) => {
         const prev = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxLossNormalCF}` : '0';
         return `IF(${col}${rowMapCe.taxTaxableIres}-${col}${rowMapCe.taxNolFirst3Applied}>0, MIN((${col}${rowMapCe.taxTaxableIres}-${col}${rowMapCe.taxNolFirst3Applied})*0.8, ${prev}), 0)`;
     });
-    addRowCe('taxLossNormalCF', 'NOL Ordinaria Riportata (€)', 'detail', _zeroArr, numberFormatEuro, (col, yi) => {
+    addRowCe('taxLossNormalCF', 'NOL Ordinaria Riportata (€)', 'detail', m.taxLossNormalCF || _zeroArr, numberFormatEuro, (col, yi) => {
         const prev = yi > 0 ? `${getColLetter(yi + 1)}${rowMapCe.taxLossNormalCF}` : '0';
         const newLoss = yi >= 3 ? `MAX(0, -${col}${rowMapCe.taxTaxableIres})` : '0';
         return `MAX(0, ${prev}-${col}${rowMapCe.taxNolNormalApplied})+${newLoss}`;
@@ -2977,7 +2979,13 @@ async function exportPnlToExcel() {
         netChg += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoInterestReceived}`;
         if (rowMapRf.peDividendPaid) netChg += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.peDividendPaid}`;
         netChg += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoLoanRepaymentReceived}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.holdcoDividendReceived}+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvCapitalReserveReturned}`;
-        if (yi === 0) return `${netChg}`;
+        if (yi === 0) {
+            let fPaidCap = `'FINANZA'!$B$${rowMapFin['capexUsi']}-'FINANZA'!$B$${rowMapFin['debt']}-'FINANZA'!$B$${rowMapFin['subDebt']}`;
+            if (window.State.inputs.afEnabled && window.State.inputs.afType === 'convertible_note') {
+                fPaidCap += `-'FINANZA'!$B$${rowMapFin['afConvertibleAmount']}`;
+            }
+            return `MAX(0, 'FINANZA'!$B$${rowMapFin['spvCapital']}-(${fPaidCap}))+${netChg}`;
+        }
         const prevCol = getColLetter(yi + 1);
         return `${prevCol}${rowMapBsSpv.bsSpvCashBalance}+${netChg}`;
     });
@@ -2990,11 +2998,11 @@ async function exportPnlToExcel() {
     addRowBsSpv('sec_bs_spv_liab', 'PASSIVO E PATRIMONIO NETTO — STATO PATRIMONIALE SPV (Art. 2424 c.c. / OIC)', 'section-title');
     addRowBsSpv('bsSpvShareCapital', 'Capitale Sociale e Riserve di Capitale (A.I - A.VII) (€)', 'normal', m.bsSpvShareCapital, numberFormatEuro, (col, yi) => {
         if (yi === 0) {
-            let f = `'FINANZA'!$B$${rowMapFin['capexUsi']}-'FINANZA'!$B$${rowMapFin['debt']}-'FINANZA'!$B$${rowMapFin['subDebt']}`;
+            let f = `MAX('FINANZA'!$B$${rowMapFin['spvCapital']}, 'FINANZA'!$B$${rowMapFin['capexUsi']}-'FINANZA'!$B$${rowMapFin['debt']}-'FINANZA'!$B$${rowMapFin['subDebt']}`;
             if (window.State.inputs.afEnabled && window.State.inputs.afType === 'convertible_note') {
                 f += `-'FINANZA'!$B$${rowMapFin['afConvertibleAmount']}`;
             }
-            f += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvCapitalReserveReturned}`;
+            f += `+'RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.spvCapitalReserveReturned})`;
             return f;
         }
         const prevCol = getColLetter(yi + 1);

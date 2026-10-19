@@ -6698,7 +6698,7 @@
                 { key: 'ebit', label: 'EBIT SPV (Risultato Operativo) (€)', type: 'bold' },
                 { key: 'interestActive', label: '  (+) Interessi Attivi su MRA (€)', type: 'plus' },
                 { key: 'interest', label: '  (-) Interessi Passivi Mutuo Bancario (€)', type: 'minus' },
-                { key: 'sociInterestAccrued', label: `  (-) Interessi Finanziamento Soci (Accrual) (${p.sociInterestRate > 0 ? p.sociInterestRate.toFixed(2) + '%' : 'Nessuno'}) (€)`, type: 'minus' },
+                { key: 'sociInterestAccrued', label: `  (-) Interessi Finanziamento Soci (Accrual) (${p.sociInterestRate > 0 ? p.sociInterestRate.toFixed(2) + '%' + (p.sociInterestGrace > 0 ? `, grazia ${p.sociInterestGrace} anni` : '') : 'Nessuno'}) (€)`, type: 'minus' },
                 ...(p.afEnabled && p.afType === 'convertible_note' ? [{ key: 'afInterestAccrued', label: `  (-) Interessi Convertibile (Altra Forma) PIK ${(p.afConvertibleRate||0).toFixed(2)}% (€)`, type: 'minus' }] : []),
                 { key: 'ebt', label: 'EBT - Utile ante Imposte SPV (€)', type: 'bold' },
                 { key: 'currentTaxesSpv', label: '  (-) Imposte Correnti SPV (IRES 24% + IRAP 3.9%) (€)', type: 'minus' },

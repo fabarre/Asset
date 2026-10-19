@@ -2802,6 +2802,7 @@ function runSensitivityLoop(baseState, config) {
                 currentTaxesSpv: [], iresTaxSpv: [], irapTaxSpv: [], deferredTaxes: [], civilTaxesSpv: [], netProfitSpv: [], cfads: [],
                 deductibleInterest: [], interestCF: [], rolCF: [], taxLossCF: [],
                 taxTaxableIres: [], taxDeprDelta: [], taxInterestDelta: [], taxLossApplied: [], taxTaxableFinal: [], taxableIrap: [],
+                taxNolFirst3Applied: [], taxLossFirst3CF: [], taxNolNormalApplied: [], taxLossNormalCF: [],
                 taxFiscalDepr: [], taxFiscalDeprBase: [], taxFiscalRemaining: [], taxNetInterest: [], taxCivilIdc: [], taxDeferredRaw: [], taxDeferredFund: [],
                 dividendsPaid: [], holdcoFCFE: [], rolCapacity: [], bessAugmentationCost: [], mraRelease: [],
                 maintReserve: [], holdcoOpex: [], holdcoIresTaxPaid: [], holdcoIrapTaxPaid: [], holdcoNetProfit: [], holdcoEarnoutPaid: [], holdcoBuyoutPaid: [],
@@ -2877,7 +2878,8 @@ function runSensitivityLoop(baseState, config) {
             const initialSpvPaidInCapital = totalProjectPureEquity + idcAmount - initialAfConvertible;
             let cumGrossFixedAssets = totalProjectCost + idcAmount;
             let cumDeprSpv = 0;
-            let cumSpvCashBalance = 0;
+            const initialSpvCash = Math.max(0, spvCap - initialSpvPaidInCapital);
+            let cumSpvCashBalance = initialSpvCash;
             let cumSpvRetainedEarnings = 0;
 
             const initialHcShareCapital = (totalProjectPureEquity + initialShareholderLoan + holdcoCap) - pdAmount;
@@ -3931,15 +3933,17 @@ function runSensitivityLoop(baseState, config) {
                 let rawTaxableIres = rawTaxableIresBeforeLoss;
                 let yIresTax = 0;
                 let appliedLossesTotal = 0;
+                let appliedLossesFirst3Y = 0;
+                let appliedLossesNormal = 0;
                 if (rawTaxableIres > 0) {
                     // Art. 84 TUIR: First 3 years losses can offset 100% of taxable income
-                    const appliedLossesFirst3Y = Math.min(rawTaxableIres, taxLossCarriedForwardFirst3Y);
+                    appliedLossesFirst3Y = Math.min(rawTaxableIres, taxLossCarriedForwardFirst3Y);
                     rawTaxableIres -= appliedLossesFirst3Y;
                     taxLossCarriedForwardFirst3Y -= appliedLossesFirst3Y;
                     
                     // Subsequent years losses can offset up to 80% of taxable income
                     const limit80 = rawTaxableIres * 0.8;
-                    const appliedLossesNormal = Math.min(limit80, taxLossCarriedForwardNormal);
+                    appliedLossesNormal = Math.min(limit80, taxLossCarriedForwardNormal);
                     rawTaxableIres -= appliedLossesNormal;
                     taxLossCarriedForwardNormal -= appliedLossesNormal;
                     
@@ -4485,6 +4489,10 @@ function runSensitivityLoop(baseState, config) {
                 matrix.taxDeprDelta.push(yDepreciationCivil - totalAnnualDepreciationFiscal);
                 matrix.taxInterestDelta.push((yInterest + ySociInterestAccrued + yAfDeductible) - totalDeductibleInterest);
                 matrix.taxLossApplied.push(appliedLossesTotal);
+                matrix.taxNolFirst3Applied.push(appliedLossesFirst3Y);
+                matrix.taxLossFirst3CF.push(taxLossCarriedForwardFirst3Y);
+                matrix.taxNolNormalApplied.push(appliedLossesNormal);
+                matrix.taxLossNormalCF.push(taxLossCarriedForwardNormal);
                 matrix.taxTaxableFinal.push(Math.max(0, rawTaxableIres));
                 matrix.taxableIrap.push(taxableIrap);
                 matrix.taxFiscalDepr.push(totalAnnualDepreciationFiscal);
