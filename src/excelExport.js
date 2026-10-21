@@ -1545,6 +1545,27 @@ async function exportPnlToExcel(options = {}) {
         return `${col}${rowMapRf.spvLockedDividends}+${col}${rowMapRf.spvCashTrap}`;
     });
 
+    sheetRf.addRow([]); currentRowNumRf++;
+    addRowRf('sec_proj_irr', 'RENDIMENTO UNLEVERED DI PROGETTO (PROJECT IRR)', 'section-title');
+    const _resultsRf = window.State.results || {};
+    const preCapexTotalVal = m.capexTotal || ((_resultsRf.totalProjectCost || 0) + (_resultsRf.idcAmount || 0));
+    const projFcffVals = [-preCapexTotalVal];
+    for (let i = 1; i < numYears; i++) {
+        projFcffVals.push(m.projectFCFF && m.projectFCFF[i] !== undefined ? m.projectFCFF[i] : 0);
+    }
+    addRowRf('projectFCFF', 'Flusso di Cassa Operativo Unlevered (Project FCFF) (€)', 'bold-teal', projFcffVals, numberFormatEuro, (col, yi) => {
+        if (yi === 0) return `-'FINANZA'!$B$${rowMapFin['capexUsi']}`;
+        return null;
+    });
+    const projIrrVals = [ ((_resultsRf.calculatedProjectIrr || 0) / 100), ...Array(numYears - 1).fill('') ];
+    addRowRf('projectIrr', 'TIR di Progetto Unlevered (Project IRR)', 'bold', projIrrVals, '0.00%', (col, yi) => {
+        if (yi === 0) {
+            const lastCol = getColLetter(numYears + 1);
+            return `IFERROR(IRR(B${rowMapRf.projectFCFF}:${lastCol}${rowMapRf.projectFCFF}), 0)`;
+        }
+        return null;
+    });
+
     // ---------------------------------------------------------
     // FOGLIO: CONTO ECONOMICO HOLDING (SEZIONE C)
     // ---------------------------------------------------------
@@ -2046,6 +2067,31 @@ async function exportPnlToExcel(options = {}) {
             return `${prevCol}${rowMapRfHc.holdcoFCFECumulated}+${col}${rowMapRfHc.holdcoFCFE}`;
         }
     });
+
+    sheetRfHc.addRow([]); currentRowNumRfHc++;
+    addRowRfHc('sec_equity_irr', 'RENDIMENTO LEVERED AZIONISTI (EQUITY IRR HOLDCO)', 'section-title');
+    const _resultsRfHc = window.State.results || {};
+    const preSponsorEquityVal = (_resultsRfHc.totalSponsorCommittedEquity !== undefined) 
+        ? _resultsRfHc.totalSponsorCommittedEquity 
+        : ((_resultsRfHc.equityAmount || 0) + (_resultsRfHc.initialShareholderLoan || 0) + (p.holdcoCapital !== undefined ? p.holdcoCapital : 10000));
+    const eqFlowVals = [-preSponsorEquityVal];
+    for (let i = 1; i < numYears; i++) {
+        eqFlowVals.push(m.holdcoFCFE && m.holdcoFCFE[i] !== undefined ? m.holdcoFCFE[i] : 0);
+    }
+    addRowRfHc('equityCashFlow', 'Flusso di Cassa Netto Investitore per Calcolo TIR (€)', 'bold-gold', eqFlowVals, numberFormatEuro, (col, yi) => {
+        if (yi === 0) {
+            return `=-('FINANZA'!$B$${rowMapFin['spvCapitalEq']}+'FINANZA'!$B$${rowMapFin['holdcoEq']}+'FINANZA'!$B$${rowMapFin['subDebt']}+'FINANZA'!$B$${rowMapFin['otherEq']})`;
+        }
+        return `${col}${rowMapRfHc.holdcoFCFE}`;
+    });
+    const eqIrrVals = [ ((_resultsRfHc.calculatedIrr || 0) / 100), ...Array(numYears - 1).fill('') ];
+    addRowRfHc('equityIrr', 'TIR Azionisti HoldCo (Equity IRR Levered)', 'bold', eqIrrVals, '0.00%', (col, yi) => {
+        if (yi === 0) {
+            const lastCol = getColLetter(numYears + 1);
+            return `IFERROR(IRR(B${rowMapRfHc.equityCashFlow}:${lastCol}${rowMapRfHc.equityCashFlow}), 0)`;
+        }
+        return null;
+    });
     }
 
     // ---------------------------------------------------------
@@ -2061,6 +2107,7 @@ async function exportPnlToExcel(options = {}) {
 
     let currentRowFin = 2;
     let rowMapFin = {};
+    const pendingFormulasFin = [];
     
     function addFinRow(key, label, isBold = false, isHeader = false) {
         const row = sheetFin.addRow({ label });
@@ -2649,6 +2696,49 @@ async function exportPnlToExcel(options = {}) {
     sheetFin.getCell(`B${rowMapFin['check']}`).value = { formula: `B${rowMapFin['totUsi']} - B${rowMapFin['totFonti']}`, result: 0 };
     sheetFin.getCell(`B${rowMapFin['check']}`).numFmt = numberFormatEuro;
 
+    sheetFin.addRow([]); currentRowFin++;
+    
+    // --- 11. SINTESI KPI RENDIMENTO E BANCABILITÀ (IRR & DSCR) ---
+    addFinRow('hdrKpis', '11. SINTESI KPI RENDIMENTO E BANCABILITÀ (IRR & DSCR)', true, true);
+    
+    if (!spvOnly) {
+        addFinRow('kpiEquityIrr', 'TIR Azionisti HoldCo (Equity IRR Levered)', true);
+        sheetFin.getCell(`B${rowMapFin['kpiEquityIrr']}`).numFmt = numberFormatPct;
+        pendingFormulasFin.push({
+            cell: sheetFin.getCell(`B${rowMapFin['kpiEquityIrr']}`),
+            formulaFn: () => `'RENDICONTO FINANZIARIO HOLDING'!B${rowMapRfHc.equityIrr}`,
+            result: (resultsFin.calculatedIrr || 0) / 100
+        });
+    } else {
+        addFinRow('kpiEquityIrr', 'TIR Azionisti SPV (Equity IRR SPV)', true);
+        sheetFin.getCell(`B${rowMapFin['kpiEquityIrr']}`).value = (resultsFin.calculatedSpvEquityIrr || resultsFin.calculatedIrr || 0) / 100;
+        sheetFin.getCell(`B${rowMapFin['kpiEquityIrr']}`).numFmt = numberFormatPct;
+    }
+    
+    addFinRow('kpiProjectIrr', 'TIR di Progetto Unlevered (Project IRR)', true);
+    sheetFin.getCell(`B${rowMapFin['kpiProjectIrr']}`).numFmt = numberFormatPct;
+    pendingFormulasFin.push({
+        cell: sheetFin.getCell(`B${rowMapFin['kpiProjectIrr']}`),
+        formulaFn: () => `'RENDICONTO FINANZIARIO SPV'!B${rowMapRf.projectIrr}`,
+        result: (resultsFin.calculatedProjectIrr || 0) / 100
+    });
+    
+    addFinRow('kpiAvgDscr', 'DSCR Medio Senior Debt', true);
+    sheetFin.getCell(`B${rowMapFin['kpiAvgDscr']}`).numFmt = '0.00"x"';
+    pendingFormulasFin.push({
+        cell: sheetFin.getCell(`B${rowMapFin['kpiAvgDscr']}`),
+        formulaFn: () => `'AMMORTAMENTO'!B${rowMapDebt.avgDscr}`,
+        result: resultsFin.avgDscr || 0
+    });
+    
+    addFinRow('kpiMinDscr', 'DSCR Minimo Senior Debt', true);
+    sheetFin.getCell(`B${rowMapFin['kpiMinDscr']}`).numFmt = '0.00"x"';
+    pendingFormulasFin.push({
+        cell: sheetFin.getCell(`B${rowMapFin['kpiMinDscr']}`),
+        formulaFn: () => `'AMMORTAMENTO'!B${rowMapDebt.minDscr}`,
+        result: (resultsFin.minDscr && resultsFin.minDscr !== 999) ? resultsFin.minDscr : 0
+    });
+
     // Applicazione Formule CAPEX a posteriori (dopo che rowMapFin è completa)
     pendingFormulasCapex.forEach(pf => {
         const val = pf.result !== undefined ? pf.result : (typeof pf.cell.value === 'object' ? pf.cell.value?.result : pf.cell.value);
@@ -2812,6 +2902,23 @@ async function exportPnlToExcel(options = {}) {
         if (yearIdx === 0) return '0';
         return `IFERROR('RENDICONTO FINANZIARIO SPV'!${col}${rowMapRf.cfads}/-(${col}${rowMapDebt.interestAccrued}+${col}${rowMapDebt.principalScheduled}), 0)`;
     });
+    const _resultsDebt = window.State.results || {};
+    const avgDscrVals = [ (_resultsDebt.avgDscr || 0), ...Array(numYears - 1).fill('') ];
+    addRowDebt('avgDscr', 'DSCR Medio (Periodo di Ammortamento Mutuo)', 'bold', avgDscrVals, '0.00"x"', (col, yearIdx) => {
+        if (yearIdx === 0) {
+            const lastCol = getColLetter(numYears + 1);
+            return `IFERROR(AVERAGEIF(C${rowMapDebt.dscr}:${lastCol}${rowMapDebt.dscr}, ">0"), 0)`;
+        }
+        return null;
+    });
+    const minDscrVals = [ ((_resultsDebt.minDscr !== undefined && _resultsDebt.minDscr !== 999) ? _resultsDebt.minDscr : 0), ...Array(numYears - 1).fill('') ];
+    addRowDebt('minDscr', 'DSCR Minimo (Worst-case Covenants)', 'bold', minDscrVals, '0.00"x"', (col, yearIdx) => {
+        if (yearIdx === 0) {
+            const lastCol = getColLetter(numYears + 1);
+            return `IFERROR(MINIFS(C${rowMapDebt.dscr}:${lastCol}${rowMapDebt.dscr}, C${rowMapDebt.dscr}:${lastCol}${rowMapDebt.dscr}, ">0"), 0)`;
+        }
+        return null;
+    });
 
     sheetDebt.addRow([]); currentRowNumDebt++;
 
@@ -2906,6 +3013,15 @@ async function exportPnlToExcel(options = {}) {
             }
         });
     }
+
+    // Applicazione Formule Finanza a posteriori (dopo che rowMapDebt, rowMapRf, rowMapRfHc sono complete)
+    pendingFormulasFin.forEach(pf => {
+        const f = pf.formulaFn();
+        if (f) {
+            const val = pf.result !== undefined ? pf.result : (typeof pf.cell.value === 'object' ? pf.cell.value?.result : pf.cell.value);
+            pf.cell.value = { formula: f, result: val !== undefined ? val : null };
+        }
+    });
 
     // ---------------------------------------------------------
     // FOGLIO: STATO PATRIMONIALE SPV (SEZIONE B-BIS, PARTITA DOPPIA OIC)
