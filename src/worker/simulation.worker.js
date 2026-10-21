@@ -2663,10 +2663,11 @@ function runSensitivityLoop(baseState, config) {
 
             const holdcoCap = typeof p.holdcoCapital === 'number' ? Math.max(0, p.holdcoCapital) : 10000;
             const spvCap = typeof p.spvCapital === 'number' ? Math.max(0, p.spvCapital) : 10000;
+            const effectiveSpvPureEquity = Math.max(spvCap, totalProjectPureEquity);
             // equityAmount = Capitale Proprio Sponsor puro: pure equity + dotazione HoldCo - PD (debito Holding)
-            const equityAmount = Math.max(0, totalProjectPureEquity + holdcoCap - pdAmount);
+            const equityAmount = Math.max(0, effectiveSpvPureEquity + holdcoCap - pdAmount);
             // totalSponsorCommittedEquity = Totale fondi propri Sponsor (Pure Equity + Finanziamento Soci + HoldCo Setup - PD)
-            const totalSponsorCommittedEquity = Math.max(0, totalProjectPureEquity + initialShareholderLoan + holdcoCap - pdAmount);
+            const totalSponsorCommittedEquity = Math.max(0, effectiveSpvPureEquity + initialShareholderLoan + holdcoCap - pdAmount);
             // totalSpvEquityTicket = Fabbisogno azionario totale a livello SPV (CAPEX totale - Debito Senior)
             const totalSpvEquityTicket = Math.max(0, totalProjectCost - debtAmount);
             let remainingDebt = debtAmount;
@@ -2883,8 +2884,9 @@ function runSensitivityLoop(baseState, config) {
             let cumSpvCashBalance = initialSpvCash;
             let cumPriorRetainedEarnings = 0;
 
-            const initialHcShareCapital = (totalProjectPureEquity + initialShareholderLoan + holdcoCap) - pdAmount;
-            let cumHcSpvEquityInv = totalProjectPureEquity;
+            const initialHcSpvEquityInv = Math.max(spvCap, totalProjectPureEquity);
+            const initialHcShareCapital = (initialHcSpvEquityInv + initialShareholderLoan + holdcoCap) - pdAmount;
+            let cumHcSpvEquityInv = initialHcSpvEquityInv;
             let cumHcCash = holdcoCap;
             let cumHcRetainedEarnings = 0;
 

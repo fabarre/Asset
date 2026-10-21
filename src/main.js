@@ -2228,7 +2228,7 @@
         
         function initWorker() {
             if (!simWorker) {
-                simWorker = new Worker('./src/worker/simulation.worker.js?v=148');
+                simWorker = new Worker('./src/worker/simulation.worker.js?v=149');
                 simWorker.onmessage = function(e) {
                     const data = e.data;
                     try {

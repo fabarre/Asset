@@ -257,6 +257,10 @@ function runAllScenarios() {
     verifyScenarioInvariants('Scenario E: Debito Senior Semestrale (Preammortamento 12m)',
         createBaseState({ inputs: { debtRepaymentFrequency: 'semestrale', seniorGracePeriodMonths: 12 } }), capexPaySample);
 
+    // 6. Scenario F: 100% Finanziamento Soci (Pure Equity = 0, SPV Capital = 10k)
+    verifyScenarioInvariants('Scenario F: 100% Finanziamento Soci (sociEquityPct = 100)',
+        createBaseState({ inputs: { sociEquityPct: 100, spvCapital: 10000, holdcoCapital: 10000 } }), capexPaySample);
+
     console.log(`\n======================================================`);
     console.log(`Riepilogo Suite Invarianti Finanziarie:`);
     console.log(`Controlli Eseguiti: ${totalChecks} | Superati: ${passedChecks} | Falliti: ${failedChecks}`);
