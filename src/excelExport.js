@@ -1546,7 +1546,7 @@ async function exportPnlToExcel(options = {}) {
     });
 
     sheetRf.addRow([]); currentRowNumRf++;
-    addRowRf('sec_proj_irr', 'RENDIMENTO UNLEVERED DI PROGETTO (PROJECT IRR)', 'section-title');
+    addRowRf('sec_proj_irr', '1. RENDIMENTO UNLEVERED DI PROGETTO (PROJECT IRR)', 'section-title');
     const _resultsRf = window.State.results || {};
     const preCapexTotalVal = m.capexTotal || ((_resultsRf.totalProjectCost || 0) + (_resultsRf.idcAmount || 0));
     const projFcffVals = [-preCapexTotalVal];
@@ -1555,13 +1555,51 @@ async function exportPnlToExcel(options = {}) {
     }
     addRowRf('projectFCFF', 'Flusso di Cassa Operativo Unlevered (Project FCFF) (€)', 'bold-teal', projFcffVals, numberFormatEuro, (col, yi) => {
         if (yi === 0) return `-'FINANZA'!$B$${rowMapFin['capexUsi']}`;
-        return null;
+        const fMwp = `'FINANZA'!$B$${rowMapFin['exitValuePerMwp']} * ('DRIVER OPERATIVI'!${col}${rowMap['totKwp']} / 1000)`;
+        const fMultiple = `'CONTO ECONOMICO'!${col}${rowMapCe.ebitda} * 'FINANZA'!$B$${rowMapFin['exitMultiple']}`;
+        const fFixed = `'FINANZA'!$B$${rowMapFin['exitEnterpriseValue']}`;
+        const fCalc = `IF('FINANZA'!$B$${rowMapFin['exitOption']}="Multiplo EBITDA", ${fMultiple}, IF('FINANZA'!$B$${rowMapFin['exitOption']}="Valore per MWp", ${fMwp}, ${fFixed}))`;
+        const fExitEv = `IF(OR(${yi}='FINANZA'!$B$${rowMapFin['exitYear']}, ${yi}=VALUE('FINANZA'!$B$${rowMapFin['exitYear']})), ${fCalc}, 0)`;
+        return `'CONTO ECONOMICO'!${col}${rowMapCe.ebitda}+'CONTO ECONOMICO'!${col}${rowMapCe.currentTaxesSpv}+${col}${rowMapRf.bessAugmentationCost}+${fExitEv}`;
     });
     const projIrrVals = [ ((_resultsRf.calculatedProjectIrr || 0) / 100), ...Array(numYears - 1).fill('') ];
     addRowRf('projectIrr', 'TIR di Progetto Unlevered (Project IRR)', 'bold', projIrrVals, '0.00%', (col, yi) => {
         if (yi === 0) {
             const lastCol = getColLetter(numYears + 1);
             return `IFERROR(IRR(B${rowMapRf.projectFCFF}:${lastCol}${rowMapRf.projectFCFF}), 0)`;
+        }
+        return null;
+    });
+
+    sheetRf.addRow([]); currentRowNumRf++;
+    addRowRf('sec_spv_equity_irr', '2. RENDIMENTO LEVERED DEI MEZZI PROPRI SPV (SPV EQUITY IRR)', 'section-title');
+    const preSpvEquityTicketVal = (_resultsRf.totalProjectCost || preCapexTotalVal) - (_resultsRf.debtAmount || 0);
+    const spvEquityFlowVals = [-preSpvEquityTicketVal];
+    const exitOptYr = (p.exitOption && p.exitOption !== 'none') ? parseInt(p.exitOption) : 20;
+    for (let i = 1; i < numYears; i++) {
+        let yFlow = (m.spvFCFE && m.spvFCFE[i] !== undefined ? m.spvFCFE[i] : 0) + (m.dsraRelease && m.dsraRelease[i] ? m.dsraRelease[i] : 0);
+        if (i === exitOptYr) {
+            yFlow += Math.max(0, (m.exitEnterpriseValue && m.exitEnterpriseValue[i] ? m.exitEnterpriseValue[i] : 0) - (m.exitDebtPayoff && m.exitDebtPayoff[i] ? m.exitDebtPayoff[i] : 0));
+        }
+        spvEquityFlowVals.push(yFlow);
+    }
+    addRowRf('spvEquityFlow', 'Flusso di Cassa Netto Mezzi Propri SPV (SPV Equity Flow) (€)', 'bold-teal', spvEquityFlowVals, numberFormatEuro, (col, yi) => {
+        if (yi === 0) return `-'FINANZA'!$B$${rowMapFin['equity']}`;
+        let f = `${col}${rowMapRf.spvFCFE}`;
+        if (rowMapRf.dsraRelease) f += `+${col}${rowMapRf.dsraRelease}`;
+        const fMwp = `'FINANZA'!$B$${rowMapFin['exitValuePerMwp']} * ('DRIVER OPERATIVI'!${col}${rowMap['totKwp']} / 1000)`;
+        const fMultiple = `'CONTO ECONOMICO'!${col}${rowMapCe.ebitda} * 'FINANZA'!$B$${rowMapFin['exitMultiple']}`;
+        const fFixed = `'FINANZA'!$B$${rowMapFin['exitEnterpriseValue']}`;
+        const fCalc = `IF('FINANZA'!$B$${rowMapFin['exitOption']}="Multiplo EBITDA", ${fMultiple}, IF('FINANZA'!$B$${rowMapFin['exitOption']}="Valore per MWp", ${fMwp}, ${fFixed}))`;
+        const fExitEquity = `IF(OR(${yi}='FINANZA'!$B$${rowMapFin['exitYear']}, ${yi}=VALUE('FINANZA'!$B$${rowMapFin['exitYear']})), MAX(0, ${fCalc}-('AMMORTAMENTO'!${col}${rowMapDebt['endingBalance']})), 0)`;
+        f += `+${fExitEquity}`;
+        return f;
+    });
+    const spvEquityIrrVals = [ ((_resultsRf.calculatedSpvEquityIrr || _resultsRf.calculatedIrr || 0) / 100), ...Array(numYears - 1).fill('') ];
+    addRowRf('spvEquityIrr', 'TIR Mezzi Propri SPV Levered (SPV Equity IRR)', 'bold', spvEquityIrrVals, '0.00%', (col, yi) => {
+        if (yi === 0) {
+            const lastCol = getColLetter(numYears + 1);
+            return `IFERROR(IRR(B${rowMapRf.spvEquityFlow}:${lastCol}${rowMapRf.spvEquityFlow}), 0)`;
         }
         return null;
     });
@@ -2702,18 +2740,22 @@ async function exportPnlToExcel(options = {}) {
     addFinRow('hdrKpis', '11. SINTESI KPI RENDIMENTO E BANCABILITÀ (IRR & DSCR)', true, true);
     
     if (!spvOnly) {
-        addFinRow('kpiEquityIrr', 'TIR Azionisti HoldCo (Equity IRR Levered)', true);
+        addFinRow('kpiEquityIrr', 'TIR Azionisti HoldCo (HoldCo Equity IRR Levered)', true);
         sheetFin.getCell(`B${rowMapFin['kpiEquityIrr']}`).numFmt = numberFormatPct;
         pendingFormulasFin.push({
             cell: sheetFin.getCell(`B${rowMapFin['kpiEquityIrr']}`),
             formulaFn: () => `'RENDICONTO FINANZIARIO HOLDING'!B${rowMapRfHc.equityIrr}`,
             result: (resultsFin.calculatedIrr || 0) / 100
         });
-    } else {
-        addFinRow('kpiEquityIrr', 'TIR Azionisti SPV (Equity IRR SPV)', true);
-        sheetFin.getCell(`B${rowMapFin['kpiEquityIrr']}`).value = (resultsFin.calculatedSpvEquityIrr || resultsFin.calculatedIrr || 0) / 100;
-        sheetFin.getCell(`B${rowMapFin['kpiEquityIrr']}`).numFmt = numberFormatPct;
     }
+
+    addFinRow('kpiSpvEquityIrr', 'TIR Mezzi Propri SPV (SPV Equity IRR Levered)', true);
+    sheetFin.getCell(`B${rowMapFin['kpiSpvEquityIrr']}`).numFmt = numberFormatPct;
+    pendingFormulasFin.push({
+        cell: sheetFin.getCell(`B${rowMapFin['kpiSpvEquityIrr']}`),
+        formulaFn: () => `'RENDICONTO FINANZIARIO SPV'!B${rowMapRf.spvEquityIrr}`,
+        result: (resultsFin.calculatedSpvEquityIrr || 0) / 100
+    });
     
     addFinRow('kpiProjectIrr', 'TIR di Progetto Unlevered (Project IRR)', true);
     sheetFin.getCell(`B${rowMapFin['kpiProjectIrr']}`).numFmt = numberFormatPct;
