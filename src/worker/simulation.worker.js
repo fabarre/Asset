@@ -5515,7 +5515,7 @@ function runSensitivityLoop(baseState, config) {
 
             const finalResults = {
                 medioneKpiText: medioneKpiText,
-                totalProjectCost, debtAmount, equityAmount,
+                totalProjectCost, debtAmount, equityAmount, pureProjectEquity: totalProjectPureEquity,
                 initialShareholderLoan,
                 y1OperatingAvail: y1DebtAvail,
                 totalCustomCapex, totalCustomOpex,
@@ -5777,7 +5777,7 @@ function runSensitivityLoop(baseState, config) {
                 cashFlowsForIRR: [], matrix: {}, debtSchedule: {}, pdSchedule: {}, cashTrapActiveYears: 0, exitEquityValue: 0,
                 calculatedProjectIrr: 0, calculatedIrr: 0, calculatedSpvEquityIrr: 0, spvEquityNpv: 0, holdcoNpv: 0, holdcoMoic: 0,
                 paybackPeriod: "-", calculatedLcoe: 0, calculatedLcos: 0, avgDscr: 0, minDscr: 0, totalEbitda: 0, totalHoldcoFCFE: 0,
-                totalProjectCost: 0, equityAmount: 0, debtAmount: 0,
+                totalProjectCost: 0, equityAmount: 0, pureProjectEquity: 0, debtAmount: 0,
                 pdAmount: 0, peAmount: 0, pdEnabled: false, peEnabled: false, afEnabled: false,
                 combinedSolarProfile: new Float64Array(8760),
                 generalMedioneKpiValue: 0,

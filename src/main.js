@@ -7541,7 +7541,10 @@
             const seniorDebt = r.debtAmount || 0;
             const privateDebt = r.pdAmount || 0;
             const privateEquity = r.peAmount || 0;
-            const totalSources = seniorDebt + privateDebt + privateEquity + sponsorLoan + spvSetup + holdcoSetup + sponsorEquity;
+            // Sponsor Pure Equity = quota di equity su CAPEX residua dopo Senior Debt, Private Debt/Equity e Finanziamento Soci
+            // (al netto dei capitali di costituzione SPV e Holding già esposti nelle righe dedicate)
+            const pureSponsorEquity = Math.max(0, (r.totalProjectCost || 0) - seniorDebt - privateDebt - privateEquity - sponsorLoan);
+            const totalSources = seniorDebt + privateDebt + privateEquity + sponsorLoan + spvSetup + holdcoSetup + pureSponsorEquity;
 
             // Aggiorna etichetta ponderata complessiva % finanziamento soci
             const effectiveSociPct = totalSponsorFunds > 0 ? ((sponsorLoan / totalSponsorFunds) * 100).toFixed(1) : (p.sociEquityPct !== undefined ? p.sociEquityPct : 100);
@@ -7559,14 +7562,14 @@
             setTxt('sources-sponsor-loan', formatEuro(sponsorLoan));
             setTxt('sources-spv-setup', formatEuro(spvSetup));
             setTxt('sources-holdco-setup', formatEuro(holdcoSetup));
-            setTxt('sources-sponsor-equity', formatEuro(sponsorEquity));
+            setTxt('sources-sponsor-equity', formatEuro(pureSponsorEquity));
             setTxt('sources-total', formatEuro(totalSources));
 
             const seniorDebtPct = totalSources > 0 ? (seniorDebt / totalSources * 100) : 0;
             const pdPct = totalSources > 0 ? (privateDebt / totalSources * 100) : 0;
             const pePct = totalSources > 0 ? (privateEquity / totalSources * 100) : 0;
             const sponsorLoanPct = totalSources > 0 ? (sponsorLoan / totalSources * 100) : 0;
-            const totalSponsorEquity = spvSetup + holdcoSetup + sponsorEquity;
+            const totalSponsorEquity = spvSetup + holdcoSetup + pureSponsorEquity;
             const sponsorEquityPct = totalSources > 0 ? (totalSponsorEquity / totalSources * 100) : 0;
 
             setTxt('sources-uses-leverage-pct', `${seniorDebtPct.toFixed(0)}% Debito / ${pdPct.toFixed(0)}% PD / ${pePct.toFixed(0)}% PE / ${sponsorLoanPct.toFixed(0)}% Sponsor Loan / ${sponsorEquityPct.toFixed(0)}% Sponsor Equity`);
@@ -12891,9 +12894,9 @@ function _repExecutiveSummary(doc) {
     const pdAmt = r.pdAmount || 0;
     const peAmt = r.peAmount || 0;
     const sponsorLoan = (r.initialShareholderLoan !== undefined) ? r.initialShareholderLoan : 0;
-    const sponsorEquity = Math.max(0, r.equityAmount || 0);
+    const pureSponsorEquity = Math.max(0, (r.totalProjectCost || 0) - seniorDebt - pdAmt - peAmt - sponsorLoan);
     const totalUses = spvAcq + constructionCapex + spvSetup + holdcoSetup;
-    const totalSources = seniorDebt + pdAmt + peAmt + sponsorLoan + spvSetup + holdcoSetup + sponsorEquity;
+    const totalSources = seniorDebt + pdAmt + peAmt + sponsorLoan + spvSetup + holdcoSetup + pureSponsorEquity;
     doc.autoTable({
         startY: y,
         theme: 'grid',
@@ -12907,7 +12910,7 @@ function _repExecutiveSummary(doc) {
             ['Capitale Holding', _fmtE(holdcoSetup), 'Finanziamento Soci', _fmtE(sponsorLoan)],
             ['', '', 'Capitale Sociale SPV', _fmtE(spvSetup)],
             ['', '', 'Capitale Holding', _fmtE(holdcoSetup)],
-            ['', '', 'Sponsor Pure Equity', _fmtE(sponsorEquity)],
+            ['', '', 'Sponsor Pure Equity', _fmtE(pureSponsorEquity)],
             ['TOTALE IMPIEGHI', _fmtE(totalUses), 'TOTALE FONTI', _fmtE(totalSources)]
         ],
         margin: { left: 14, right: 14 },
@@ -13337,9 +13340,9 @@ function _repStrutturaFinanziaria(doc) {
     const pdAmt = r.pdAmount || 0;
     const peAmt = r.peAmount || 0;
     const sponsorLoan = (r.initialShareholderLoan !== undefined) ? r.initialShareholderLoan : 0;
-    const sponsorEquity = Math.max(0, r.equityAmount || 0);
+    const pureSponsorEquity = Math.max(0, (r.totalProjectCost || 0) - seniorDebt - pdAmt - peAmt - sponsorLoan);
     const totalUses = spvAcq + constructionCapex + spvSetup + holdcoSetup;
-    const totalSources = seniorDebt + pdAmt + peAmt + sponsorLoan + spvSetup + holdcoSetup + sponsorEquity;
+    const totalSources = seniorDebt + pdAmt + peAmt + sponsorLoan + spvSetup + holdcoSetup + pureSponsorEquity;
 
     y = _sectionTitle(doc, '1. Fonti & Impieghi', y);
     doc.autoTable({
@@ -13355,7 +13358,7 @@ function _repStrutturaFinanziaria(doc) {
             ['Finanziamento Soci', _fmtEFull(sponsorLoan), _fmtPct(totalSources ? sponsorLoan/totalSources*100 : 0), 'Capitale Holding', _fmtEFull(holdcoSetup), _fmtPct(totalUses ? holdcoSetup/totalUses*100 : 0)],
             ['Capitale Sociale SPV', _fmtEFull(spvSetup), _fmtPct(totalSources ? spvSetup/totalSources*100 : 0), '', '', ''],
             ['Capitale Holding', _fmtEFull(holdcoSetup), _fmtPct(totalSources ? holdcoSetup/totalSources*100 : 0), '', '', ''],
-            ['Sponsor Pure Equity', _fmtEFull(sponsorEquity), _fmtPct(totalSources ? sponsorEquity/totalSources*100 : 0), '', '', ''],
+            ['Sponsor Pure Equity', _fmtEFull(pureSponsorEquity), _fmtPct(totalSources ? pureSponsorEquity/totalSources*100 : 0), '', '', ''],
             ['TOTALE FONTI', _fmtEFull(totalSources), '100,00%', 'TOTALE IMPIEGHI', _fmtEFull(totalUses), '100,00%']
         ],
         margin: { left: 14, right: 14 },
