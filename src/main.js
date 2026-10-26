@@ -1251,8 +1251,9 @@
                 if (p.enabled === false) return;
                 const g = p.generation;
                 if (!g || g.length === 0) { add('Impianti', `Curva ${p.name}`, 'error', 'assente', 'Nessuna curva di generazione'); return; }
+                const mult = (p.prodMultiplier !== undefined && p.prodMultiplier !== null) ? Number(p.prodMultiplier) : 1.0;
                 let nan = 0, neg = 0, sum = 0;
-                for (let i = 0; i < g.length; i++) { const v = g[i]; if (v === null || isNaN(v)) nan++; else { if (v < 0) neg++; else sum += v; } }
+                for (let i = 0; i < g.length; i++) { const v = g[i]; if (v === null || isNaN(v)) nan++; else { if (v < 0) neg++; else sum += v * mult; } }
                 const mwh = sum / 1000;
                 const capMw = (p.capacity || 0) / 1000;
                 const yieldKwhKw = capMw > 0 ? (mwh / capMw) : 0;
@@ -5609,10 +5610,12 @@
             if (p._cachedWeightedPun === undefined || p._cachedWeightedPunVer !== punVerKey) {
                 let num = 0, den = 0;
                 const zonePrices = State.zonalPun[String(p.zone).toUpperCase()] || State.zonalPun["CNOR"];
+                const mult = (p.prodMultiplier !== undefined && p.prodMultiplier !== null) ? Number(p.prodMultiplier) : 1.0;
                 if (p.generation) {
                     for (let t = 0; t < 8760; t++) {
-                        num += p.generation[t] * zonePrices[t];
-                        den += p.generation[t];
+                        const g = p.generation[t] * mult;
+                        num += g * zonePrices[t];
+                        den += g;
                     }
                 }
                 const rawWeighted = den > 0 ? (num / den) : 0;
@@ -6144,9 +6147,13 @@
                 const dischargeArb = sim.hourlyDischargeArbitrage || new Float64Array(8760);
                 const dischargeTs = sim.hourlyDischargeTimeshifting || new Float64Array(8760);
 
+                const pMult = (p.prodMultiplier !== undefined && p.prodMultiplier !== null)
+                    ? Number(p.prodMultiplier)
+                    : ((p.prod_multiplier !== undefined && p.prod_multiplier !== null) ? Number(p.prod_multiplier) : 1.0);
+
                 for (let t = 0; t < 8760; t++) {
                     const acc = months[getMonthOfHour(t)];
-                    const solar = p.generation[t];
+                    const solar = (p.generation[t] || 0) * pMult;
                     const pun = zonePrices[t];
                     const month = getMonthOfHour(t);
                     const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pun;
@@ -8683,9 +8690,12 @@
                 const pZoneUpper = String(plant.zone).toUpperCase();
                 const baseZonePrices = State.zonalPun[pZoneUpper] || State.zonalPun["CNOR"];
                 const zonePrices = (punDiscountMult !== 1) ? baseZonePrices.map(v => v * punDiscountMult) : baseZonePrices;
+                const mult = (plant.prodMultiplier !== undefined && plant.prodMultiplier !== null)
+                    ? Number(plant.prodMultiplier)
+                    : ((plant.prod_multiplier !== undefined && plant.prod_multiplier !== null) ? Number(plant.prod_multiplier) : 1.0);
                 
                 for (let t = 0; t < 8760; t++) {
-                    const g = plant.generation[t] || 0;
+                    const g = (plant.generation[t] || 0) * mult;
                     solGenHourly[t] += g;
                     weightedPunNum[t] += g * zonePrices[t];
                     weightedPunNumRaw[t] += g * baseZonePrices[t];
@@ -8748,12 +8758,15 @@
                 if (stab && (stab.ppaType === 'on-site' || stab.ppaType === 'cer') && stab.load) {
                     const pmStab = State.results && State.results.plantsMetrics ? State.results.plantsMetrics.find(mm => mm.id === plant.id) : null;
                     const simStab = (pmStab && pmStab.sim) || plant.sim || null;
+                    const plantMult = (plant.prodMultiplier !== undefined && plant.prodMultiplier !== null)
+                        ? Number(plant.prodMultiplier)
+                        : ((plant.prod_multiplier !== undefined && plant.prod_multiplier !== null) ? Number(plant.prod_multiplier) : 1.0);
                     for (let i = 0; i < 8760; i++) {
                         stabLoadHourly[i] += stab.load[i] || 0;
                         if (simStab && simStab.hourlySelfCons) {
                             stabSelfConsHourly[i] += simStab.hourlySelfCons[i] || 0;
                         } else {
-                            stabSelfConsHourly[i] += Math.min(plant.generation[i] || 0, stab.load[i] || 0);
+                            stabSelfConsHourly[i] += Math.min((plant.generation[i] || 0) * plantMult, stab.load[i] || 0);
                         }
                     }
                 }
