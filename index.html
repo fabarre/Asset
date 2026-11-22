@@ -42,7 +42,7 @@
     <!-- Supabase JS Client (versione pinnata + SRI) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js" integrity="sha384-ysv13JVP3fufiEXfjML9OdCa/rRbMJvUBOWyor82wfuK8INNZAvmbxHgKIHi+oqz" crossorigin="anonymous"></script>
     <script src="./supabase_config.js"></script>
-    <script src="./src/excelExport.js?v=161"></script>
+    <script src="./src/excelExport.js?v=168"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
         body {
@@ -826,7 +826,7 @@
                             </table>
                         </div>
                         <!-- CF Popover: Dettaglio CAPEX per impianto on hover -->
-                        <div id="mc-capex-popover" class="fixed hidden z-[9999] pointer-events-none bg-[#0b0f19]/95 backdrop-blur-md border border-orange-500/40 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] p-3 text-white text-[11px] min-w-[280px] max-w-[420px] transition-opacity duration-150"></div>
+                        <div id="mc-capex-popover" class="fixed hidden z-[9999] pointer-events-none bg-[#0b0f19]/95 backdrop-blur-md border border-orange-500/40 rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] p-3 text-white text-[11px] min-w-[360px] max-w-[560px] transition-opacity duration-150"></div>
                     </div>
                 </div>
 
@@ -4201,7 +4201,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=167"></script>
+    <script src="./src/main.js?v=168"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

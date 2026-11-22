@@ -4874,6 +4874,7 @@ function runSensitivityLoop(baseState, config) {
                     holdcoSociService: [], holdcoPdService: [], holdcoOtherCosts: [],
                     sociService: [], pdService: [],
                     holdcoNetCashflow: [], holdcoCashOpening: [], holdcoCashClosing: [],
+                    capexBreakdown: Array.from({ length: totalMonths }, () => []),
                     lagResidual: 0, capexBeforeHorizon: 0, taxesAfterHorizon: 0,
                     fundedMinCashClosing: 0, fundedMinMonth: 0, datedXirr: 0
                 };
@@ -5063,7 +5064,7 @@ function runSensitivityLoop(baseState, config) {
                     sumPlantCapexVat += plantVatBase;
                     const cod = pl._codParsed;
                     const codIdx = cod ? (cod.y - firstYear) * 12 + (cod.m - 1) : 12; // senza COD: gen anno 1
-                    plantBases.push({ base, codIdx, vatBlend: plantVatBlend });
+                    plantBases.push({ name: pl.name || 'Impianto', base, codIdx, vatBlend: plantVatBlend });
                     const list = (capexPayments && capexPayments[pl.id]) || [];
                     let outlaysSum = 0;
                     list.forEach(pm => {
@@ -5077,13 +5078,34 @@ function runSensitivityLoop(baseState, config) {
                         const d = parseCodDate(pm.date);
                         const idx = d ? (d.y - firstYear) * 12 + (d.m - 1) : codIdx;
                         if (idx < 0) out.capexBeforeHorizon += amt;
-                        else if (idx < totalMonths) { capexOut[idx] += amt; capexVat[idx] += vatAmt; }
+                        else if (idx < totalMonths) {
+                            capexOut[idx] += amt;
+                            capexVat[idx] += vatAmt;
+                            out.capexBreakdown[idx].push({
+                                plantName: pl.name || 'Impianto',
+                                label: (pm.label || 'CAPEX').trim(),
+                                amount: amt,
+                                vatAmount: vatAmt,
+                                grossAmount: amt + vatAmt
+                            });
+                        }
                     });
                     // Residuo impianto (CAPEX non ancora allocato) collocato al COD
                     const residual = Math.max(0, base - outlaysSum);
                     residualPlantsSum += residual;
                     if (residual > 0) {
-                        if (codIdx >= 0 && codIdx < totalMonths) { capexOut[codIdx] += residual; capexVat[codIdx] += residual * plantVatBlend; }
+                        const resVat = residual * plantVatBlend;
+                        if (codIdx >= 0 && codIdx < totalMonths) {
+                            capexOut[codIdx] += residual;
+                            capexVat[codIdx] += resVat;
+                            out.capexBreakdown[codIdx].push({
+                                plantName: pl.name || 'Impianto',
+                                label: 'Residuo CAPEX al COD',
+                                amount: residual,
+                                vatAmount: resVat,
+                                grossAmount: residual + resVat
+                            });
+                        }
                         else if (codIdx < 0) out.capexBeforeHorizon += residual;
                     }
                 });
@@ -5098,12 +5120,31 @@ function runSensitivityLoop(baseState, config) {
                     plantBases.forEach(pb => {
                         const share = extra * (pb.base / sumPlantCapex);
                         if (share <= 0) return;
-                        if (pb.codIdx >= 0 && pb.codIdx < totalMonths) { capexOut[pb.codIdx] += share; capexVat[pb.codIdx] += share * projectVatBlend; }
+                        const shareVat = share * projectVatBlend;
+                        if (pb.codIdx >= 0 && pb.codIdx < totalMonths) {
+                            capexOut[pb.codIdx] += share;
+                            capexVat[pb.codIdx] += shareVat;
+                            out.capexBreakdown[pb.codIdx].push({
+                                plantName: pb.name || 'Portafoglio',
+                                label: 'Oneri Finanziari (IDC) / Extra al COD',
+                                amount: share,
+                                vatAmount: shareVat,
+                                grossAmount: share + shareVat
+                            });
+                        }
                         else if (pb.codIdx < 0) out.capexBeforeHorizon += share;
                     });
                 } else if (extra > 0) {
+                    const extraVat = extra * projectVatBlend;
                     capexOut[12] += extra;
-                    capexVat[12] += extra * projectVatBlend;
+                    capexVat[12] += extraVat;
+                    out.capexBreakdown[12].push({
+                        plantName: 'Portafoglio',
+                        label: 'Oneri Finanziari (IDC) / Extra al COD',
+                        amount: extra,
+                        vatAmount: extraVat,
+                        grossAmount: extra + extraVat
+                    });
                 }
                 out.capexBudget = totalProjCost;
                 out.capexAllocated = capexAllocated;

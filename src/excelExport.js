@@ -3651,6 +3651,26 @@ async function exportPnlToExcel(options = {}) {
                 };
             }
             const row = sheetMc.addRow(rowData);
+            if (capexVal !== 0) {
+                let noteText = (typeof window !== 'undefined' && typeof window.formatCapexBreakdownNote === 'function')
+                    ? window.formatCapexBreakdownNote(mc, i)
+                    : '';
+                if (!noteText && mc.capexBreakdown && mc.capexBreakdown[i] && mc.capexBreakdown[i].length > 0) {
+                    const fmtN = (v) => '€ ' + new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 }).format(Math.round(v || 0));
+                    const items = mc.capexBreakdown[i];
+                    let totN = 0, totV = 0, totG = 0;
+                    const lines = [`DETTAGLIO CAPEX — ${label}`];
+                    items.forEach(it => {
+                        const a = Number(it.amount) || 0, v = Number(it.vatAmount) || 0, g = Number(it.grossAmount) || (a + v);
+                        totN += a; totV += v; totG += g;
+                        lines.push(`• ${it.plantName || 'Impianto'} | ${it.label || 'CAPEX'}: Imponibile ${fmtN(a)} | IVA ${fmtN(v)} | Totale ${fmtN(g)}`);
+                    });
+                    lines.push('----------------------------------------');
+                    lines.push(`TOTALE MESE (${items.length} ${items.length === 1 ? 'voce' : 'voci'}): Imponibile ${fmtN(totN)} | IVA ${fmtN(totV)} | Totale ${fmtN(totG)}`);
+                    noteText = lines.join('\n');
+                }
+                if (noteText) row.getCell(7).note = noteText;
+            }
 
             prevMonthRowNum = currentRow;
 

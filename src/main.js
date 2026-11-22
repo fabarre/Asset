@@ -7879,6 +7879,53 @@
             return months;
         };
 
+        function getMonthlyCapexDetailItems(mc, monthIdx) {
+            const rawItems = (mc && mc.capexBreakdown && mc.capexBreakdown[monthIdx]) || [];
+            const items = [];
+            let totalNet = 0, totalVat = 0, totalGross = 0;
+
+            if (rawItems.length > 0) {
+                rawItems.forEach(it => {
+                    const pName = (it.plantName || 'Portafoglio').trim();
+                    const lbl = (it.label || 'CAPEX').trim();
+                    const amt = parseFloat(it.amount) || 0;
+                    const vat = parseFloat(it.vatAmount) || 0;
+                    const gross = (it.grossAmount !== undefined) ? (parseFloat(it.grossAmount) || (amt + vat)) : (amt + vat);
+                    if (amt <= 0 && vat <= 0) return;
+                    items.push({ plantName: pName, label: lbl, amount: amt, vatAmount: vat, grossAmount: gross });
+                    totalNet += amt;
+                    totalVat += vat;
+                    totalGross += gross;
+                });
+            } else if (mc && mc.capexOutflow && mc.capexOutflow[monthIdx] > 0) {
+                const net = mc.capexOutflow[monthIdx];
+                items.push({ plantName: 'Portafoglio', label: 'CAPEX', amount: net, vatAmount: 0, grossAmount: net });
+                totalNet = net;
+                totalGross = net;
+            }
+
+            items.sort((a, b) => {
+                const cmp = a.plantName.localeCompare(b.plantName);
+                if (cmp !== 0) return cmp;
+                return a.label.localeCompare(b.label);
+            });
+            return { items, totalNet, totalVat, totalGross };
+        }
+
+        window.formatCapexBreakdownNote = function(mc, monthIdx) {
+            if (!mc || !mc.capexOutflow || !(mc.capexOutflow[monthIdx] > 0)) return '';
+            const monthLabel = (mc.labels && mc.labels[monthIdx]) || `Mese ${monthIdx + 1}`;
+            const { items, totalNet, totalVat, totalGross } = getMonthlyCapexDetailItems(mc, monthIdx);
+            const fmtNoteEur = (v) => '€ ' + new Intl.NumberFormat('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(v || 0));
+            const lines = [`DETTAGLIO CAPEX — ${monthLabel}`];
+            items.forEach(it => {
+                lines.push(`• ${it.plantName} | ${it.label}: Imponibile ${fmtNoteEur(it.amount)} | IVA ${fmtNoteEur(it.vatAmount)} | Totale ${fmtNoteEur(it.grossAmount)}`);
+            });
+            lines.push('----------------------------------------');
+            lines.push(`TOTALE MESE (${items.length} ${items.length === 1 ? 'voce' : 'voci'}): Imponibile ${fmtNoteEur(totalNet)} | IVA ${fmtNoteEur(totalVat)} | Totale ${fmtNoteEur(totalGross)}`);
+            return lines.join('\n');
+        };
+
         function showMonthlyCapexPopover(cell, monthIdx) {
             const popover = document.getElementById('mc-capex-popover');
             if (!popover || !cell) return;
@@ -7888,44 +7935,16 @@
                 return;
             }
 
-            const rawItems = (mc.capexBreakdown && mc.capexBreakdown[monthIdx]) || [];
-            // Raggruppa per impianto e voce per massima pulizia contabile
-            const grouped = {};
-            let totalAmt = 0;
-            if (rawItems.length > 0) {
-                rawItems.forEach(it => {
-                    const pName = (it.plantName || 'Portafoglio').trim();
-                    const lbl = (it.label || 'CAPEX').trim();
-                    const key = `${pName}:::${lbl}`;
-                    if (!grouped[key]) {
-                        grouped[key] = { plantName: pName, label: lbl, amount: 0 };
-                    }
-                    const amt = parseFloat(it.amount) || 0;
-                    grouped[key].amount += amt;
-                    totalAmt += amt;
-                });
-            } else {
-                grouped['Portafoglio:::CAPEX'] = {
-                    plantName: 'Portafoglio',
-                    label: 'CAPEX',
-                    amount: mc.capexOutflow[monthIdx]
-                };
-                totalAmt = mc.capexOutflow[monthIdx];
-            }
-
-            const items = Object.values(grouped).sort((a, b) => {
-                const cmp = a.plantName.localeCompare(b.plantName);
-                if (cmp !== 0) return cmp;
-                return a.label.localeCompare(b.label);
-            });
-
+            const { items, totalNet, totalVat, totalGross } = getMonthlyCapexDetailItems(mc, monthIdx);
             const monthLabel = (mc.labels && mc.labels[monthIdx]) || `Mese ${monthIdx + 1}`;
 
             const rowsHtml = items.map(it => `
                 <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors">
-                    <td class="py-1.5 pr-3 font-semibold text-slate-100 whitespace-nowrap">${escapeHtml(it.plantName)}</td>
-                    <td class="py-1.5 pr-3 text-slate-300 text-[10px] whitespace-nowrap">${escapeHtml(it.label)}</td>
-                    <td class="py-1.5 text-right font-mono text-orange-300 whitespace-nowrap font-medium">${_fmtE(it.amount)}</td>
+                    <td class="py-1.5 pr-2.5 font-semibold text-slate-100 whitespace-nowrap">${escapeHtml(it.plantName)}</td>
+                    <td class="py-1.5 pr-2.5 text-slate-300 text-[10px] whitespace-nowrap">${escapeHtml(it.label)}</td>
+                    <td class="py-1.5 pr-2.5 text-right font-mono text-orange-300 whitespace-nowrap">${_fmtE(it.amount)}</td>
+                    <td class="py-1.5 pr-2.5 text-right font-mono text-violet-300 whitespace-nowrap">${_fmtE(it.vatAmount)}</td>
+                    <td class="py-1.5 text-right font-mono text-slate-100 font-semibold whitespace-nowrap">${_fmtE(it.grossAmount)}</td>
                 </tr>
             `).join('');
 
@@ -7941,9 +7960,11 @@
                     <table class="w-full text-left text-[10px] border-collapse">
                         <thead>
                             <tr class="text-slate-400 uppercase tracking-wider border-b border-slate-800 text-[9px]">
-                                <th class="pb-1 pr-3 font-semibold">Impianto</th>
-                                <th class="pb-1 pr-3 font-semibold">Voce</th>
-                                <th class="pb-1 text-right font-semibold">Importo (netto)</th>
+                                <th class="pb-1 pr-2.5 font-semibold">Impianto</th>
+                                <th class="pb-1 pr-2.5 font-semibold">Voce di spesa</th>
+                                <th class="pb-1 pr-2.5 text-right font-semibold">Imponibile</th>
+                                <th class="pb-1 pr-2.5 text-right font-semibold">IVA</th>
+                                <th class="pb-1 text-right font-semibold">Totale</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -7951,9 +7972,11 @@
                         </tbody>
                         <tfoot>
                             <tr class="border-t border-slate-700 font-bold text-slate-200">
-                                <td class="pt-1.5 pr-3 text-[10px]">Totale Mese</td>
-                                <td class="pt-1.5 pr-3 text-[9px] text-slate-400 font-normal">${items.length} ${items.length === 1 ? 'voce' : 'voci'}</td>
-                                <td class="pt-1.5 text-right font-mono text-orange-300 text-[11px] font-black">${_fmtE(totalAmt)}</td>
+                                <td class="pt-1.5 pr-2.5 text-[10px]">Totale Mese</td>
+                                <td class="pt-1.5 pr-2.5 text-[9px] text-slate-400 font-normal">${items.length} ${items.length === 1 ? 'voce' : 'voci'}</td>
+                                <td class="pt-1.5 pr-2.5 text-right font-mono text-orange-300 text-[11px] font-black">${_fmtE(totalNet)}</td>
+                                <td class="pt-1.5 pr-2.5 text-right font-mono text-violet-300 text-[11px] font-black">${_fmtE(totalVat)}</td>
+                                <td class="pt-1.5 text-right font-mono text-white text-[11px] font-black">${_fmtE(totalGross)}</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -8491,6 +8514,10 @@
                             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
                         } else if (idx % 2 === 1) {
                             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+                        }
+                        if (colDef && colDef.key === 'capexOutflow' && mc.capexOutflow[idx] > 0) {
+                            const noteText = window.formatCapexBreakdownNote(mc, idx);
+                            if (noteText) cell.note = noteText;
                         }
                     });
                 });

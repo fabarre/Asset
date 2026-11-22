@@ -1227,10 +1227,41 @@ const y2NonZero = y2Months.filter(v => v > 1e-6).length;
 check('Anno 2 (frequenza annuale): 1 solo pagamento nel 2028 (aprile 2028)',
     y2NonZero === 1 && mc43.debtService[27] > 0,
     `nonZero=${y2NonZero} apr2028=${mc43.debtService[27].toFixed(0)}`);
-// Coerenza interessi post-sweep: interessi Y3 nel cashflow < interessi Y2 (grazie all'abbattimento sweep)
+// Cashflow interessi Y3 < Y2 (riduzione debito per Cash Sweep)
 check('Cashflow interessi Y3 < Y2 (riduzione debito per Cash Sweep)',
     mc43.interest[39] < mc43.interest[27],
     `intY2=${mc43.interest[27].toFixed(0)} intY3=${mc43.interest[39].toFixed(0)}`);
+
+// ── Test 44: Dettaglio CAPEX mensile non cumulativo (imponibile + IVA + totale) ──
+console.log('\n[Test 44] Cashflow: capexBreakdown mensile dettagliato (non cumulativo) con imponibile, IVA e totale');
+const p44 = plants32();
+const capex44 = {
+    [p44[0].id]: [
+        { date: '2026-12-15', amount: 100000, label: 'EPC FV' },
+        { date: '2026-12-20', amount: 50000, label: 'Terreno' },
+        { date: '2027-04-15', amount: 200000, label: 'Connessione rete' }
+    ]
+};
+const r44 = run(buildState({
+    inputs: {
+        vatEnabled: true, vatCapexEpcFv: 22, vatCapexLand: 0, vatCapexConnection: 22,
+        fundingEquityDate: '2026-12-01', fundingDebtDate: '2027-04-01'
+    },
+    plants: p44
+}), capex44);
+const mc44 = r44.monthlyCashflow;
+const dec26 = mc44.capexBreakdown[11] || [];
+const apr27 = mc44.capexBreakdown[15] || [];
+check('Dic 2026: 2 voci distinte non cumulative (EPC FV + Terreno)', dec26.length === 2, `len=${dec26.length}`);
+const decNet = dec26.reduce((s, it) => s + it.amount, 0);
+const decVat = dec26.reduce((s, it) => s + it.vatAmount, 0);
+const decGross = dec26.reduce((s, it) => s + it.grossAmount, 0);
+check('Dic 2026: imponibile = 150.000, IVA = 22.000 (22% su EPC, 0% su Terreno), lordo = 172.000',
+    Math.abs(decNet - 150000) < 1 && Math.abs(decVat - 22000) < 1 && Math.abs(decGross - 172000) < 1,
+    `net=${decNet} vat=${decVat} gross=${decGross}`);
+check('Apr 2027: solo voce di aprile (200.000 + 44.000 IVA), non cumulativa con dic 2026',
+    apr27.length === 1 && Math.abs(apr27[0].amount - 200000) < 1 && Math.abs(apr27[0].vatAmount - 44000) < 1 && Math.abs(apr27[0].grossAmount - 244000) < 1,
+    `apr27=${JSON.stringify(apr27)}`);
 
 console.log('\n═══════════════════════════════════');
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
