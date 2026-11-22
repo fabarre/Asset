@@ -4238,7 +4238,10 @@ function runSensitivityLoop(baseState, config) {
                 }
 
                 // HoldCo Level Inflows (Sponsor ownership = 100% dei flussi intra-gruppo, al netto quote PE)
-                const yHoldcoOpex = (yr === 0 ? 15000 : 15000 * inflationMultiplier);
+                const baseHoldcoOpex = (p.holdcoOpexAnnual !== undefined && p.holdcoOpexAnnual !== null && isFinite(p.holdcoOpexAnnual))
+                    ? Math.max(0, Number(p.holdcoOpexAnnual))
+                    : 15000;
+                const yHoldcoOpex = (yr === 0 ? baseHoldcoOpex : baseHoldcoOpex * inflationMultiplier);
                 // Aggiungiamo yOpexAssetManagement come ricavo per la Holdco
                 // HoldCo IRES: se gli interessi PD sono deducibili (flag pdTaxDeductible),
                 // riducono la base imponibile Holding (prima era un no-op: bug corretto)
@@ -5221,18 +5224,56 @@ function runSensitivityLoop(baseState, config) {
                 out.opexVatAllocated = opexVatEvTotal;
                 out.opexGrossAllocated = opexEvTotal + opexVatEvTotal;
 
-                // CF6/CF11: vista Holding mensile — servizi Soci e PD sono DATATI
-                // (calcolati sotto, senza ripartizioni /12); gli oneri Holding annuali
-                // (earnout, OPEX HoldCo, imposte Holding) restano spalmati /12 perché
-                // aggregati annui senza scadenza dichiarata.
-                const otherM = new Float64Array(YEARS);
-                for (let y = 1; y <= YEARS; y++) {
-                    const yi = y - 1;
-                    otherM[yi] = (((mtx.holdcoEarnoutPaid && mtx.holdcoEarnoutPaid[y]) || 0) + ((mtx.holdcoOpex && mtx.holdcoOpex[y]) || 0) +
-                        ((mtx.holdcoIresTaxPaid && mtx.holdcoIresTaxPaid[y]) || 0) + ((mtx.holdcoIrapTaxPaid && mtx.holdcoIrapTaxPaid[y]) || 0)) / 12;
+                // CF6/CF11: vista Holding mensile — servizi Soci, PD e Oneri HoldCo sono DATATI
+                // (nessuna ripartizione /12):
+                // - Data costituzione Holding (Anno 0): nessun onere HoldCo prima di incIdx
+                // - OPEX Holding: singola spesa annuale nel mese di holdcoOpexPayDate (default: dicembre o mese costituzione)
+                // - Earn-Out: singola uscita annuale alla data di chiusura bilancio (holdcoBalanceCloseDate, default taxPayMonth),
+                //   riferita al maturato dell'anno precedente
+                // - Imposte IRES/IRAP Holding: singola uscita annuale a taxPayMonth riferita all'anno precedente
+                const holdcoOtherDated = new Float64Array(totalMonths);
+                {
+                    const incParsed = parseCodDate(inputs.holdcoIncorporationDate);
+                    const incIdx = incParsed ? Math.max(0, (incParsed.y - firstYear) * 12 + (incParsed.m - 1)) : 0;
+                    const opexPayParsed = parseCodDate(inputs.holdcoOpexPayDate);
+                    const opexPayMonth = opexPayParsed ? opexPayParsed.m : (incParsed ? incParsed.m : 12);
+                    const closeParsed = parseCodDate(inputs.holdcoBalanceCloseDate);
+                    const closeMonth = closeParsed ? closeParsed.m : taxPayMonth;
+
+                    // 1. OPEX Holding Anno 0 (solo se costituita entro Anno 0)
+                    const hcOpexY0 = (mtx.holdcoOpex && mtx.holdcoOpex[0]) || 0;
+                    if (hcOpexY0 > 0 && incIdx < 12) {
+                        const y0Idx = Math.min(11, Math.max(incIdx, opexPayMonth - 1));
+                        holdcoOtherDated[y0Idx] += hcOpexY0;
+                    }
+                    // 2. OPEX Holding Anni 1..YEARS (singola spesa annuale al mese opexPayMonth)
+                    for (let y = 1; y <= YEARS; y++) {
+                        const hcOpexY = (mtx.holdcoOpex && mtx.holdcoOpex[y]) || 0;
+                        if (hcOpexY > 0) {
+                            const payIdx = 12 + (y - 1) * 12 + (opexPayMonth - 1);
+                            if (payIdx >= incIdx && payIdx < totalMonths) {
+                                holdcoOtherDated[payIdx] += hcOpexY;
+                            }
+                        }
+                        // 3. Earn-Out maturato nell'anno y -> regolato 1 volta l'anno alla chiusura bilancio dell'anno y+1
+                        const earnoutY = (mtx.holdcoEarnoutPaid && mtx.holdcoEarnoutPaid[y]) || 0;
+                        if (earnoutY > 0) {
+                            const eIdx = 12 + y * 12 + (closeMonth - 1);
+                            if (eIdx >= incIdx && eIdx < totalMonths) {
+                                holdcoOtherDated[eIdx] += earnoutY;
+                            }
+                        }
+                        // 4. Imposte Holding maturate nell'anno y -> pagate 1 volta l'anno a taxPayMonth dell'anno y+1
+                        const hcTaxY = ((mtx.holdcoIresTaxPaid && mtx.holdcoIresTaxPaid[y]) || 0) +
+                            ((mtx.holdcoIrapTaxPaid && mtx.holdcoIrapTaxPaid[y]) || 0);
+                        if (hcTaxY > 0) {
+                            const tIdx = 12 + y * 12 + (taxPayMonth - 1);
+                            if (tIdx >= incIdx && tIdx < totalMonths) {
+                                holdcoOtherDated[tIdx] += hcTaxY;
+                            }
+                        }
+                    }
                 }
-                const otherM_Y0 = (((mtx.holdcoEarnoutPaid && mtx.holdcoEarnoutPaid[0]) || 0) + ((mtx.holdcoOpex && mtx.holdcoOpex[0]) || 0) +
-                    ((mtx.holdcoIresTaxPaid && mtx.holdcoIresTaxPaid[0]) || 0) + ((mtx.holdcoIrapTaxPaid && mtx.holdcoIrapTaxPaid[0]) || 0)) / 12;
 
                 let cash = 0;
                 let holdcoCash = 0;
@@ -5610,7 +5651,7 @@ function runSensitivityLoop(baseState, config) {
                     sociSvcDated[i] = sociSvc;
                     const hSoci = sociSvc;
                     const hPd = pdSvcDated[i];
-                    const hOther = isYear0 ? 0 : otherM[yi];
+                    const hOther = holdcoOtherDated[i];
                     const hNet = net - hSoci - hPd - hOther;
                     out.sociService.push(sociSvc);
                     out.pdService.push(pdSvcDated[i]);

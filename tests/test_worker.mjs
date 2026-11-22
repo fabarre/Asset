@@ -614,14 +614,16 @@ const r27 = run(buildState({
 }));
 const mc27 = r27.monthlyCashflow;
 check('Array Holding presenti (72 mesi)', mc27.holdcoNetCashflow.length === 72 && mc27.holdcoCashClosing.length === 72);
-check('Anno 0: nessun servizio soci/PD/oneri HoldCo', mc27.holdcoSociService.slice(0, 12).every(v => v === 0) &&
-    mc27.holdcoPdService.slice(0, 12).every(v => v === 0) && mc27.holdcoOtherCosts.slice(0, 12).every(v => v === 0));
-// giu-2028 (idx 29): holdcoNet = spvNet - sociSvc(dato) - pdSvc(dato) - otherM
+check('Anno 0: nessun servizio soci/PD e OPEX HoldCo solo nel mese di pagamento (dic-2026)',
+    mc27.holdcoSociService.slice(0, 12).every(v => v === 0) &&
+    mc27.holdcoPdService.slice(0, 12).every(v => v === 0) &&
+    mc27.holdcoOtherCosts.slice(0, 11).every(v => v === 0) &&
+    Math.abs(mc27.holdcoOtherCosts[11] - (r27.matrix.holdcoOpex[0] || 0)) < 1e-6);
+// giu-2028 (idx 29): holdcoNet = spvNet - sociSvc(dato) - pdSvc(dato) - holdcoOtherCosts[29]
 const i27 = 29;
 const sociM27 = mc27.sociService[i27];
 const pdM27 = mc27.pdService[i27];
-const otherM27 = ((r27.matrix.holdcoEarnoutPaid[2] || 0) + (r27.matrix.holdcoOpex[2] || 0) +
-    (r27.matrix.holdcoIresTaxPaid[2] || 0) + (r27.matrix.holdcoIrapTaxPaid[2] || 0)) / 12;
+const otherM27 = mc27.holdcoOtherCosts[i27];
 check('Netto Holding = SPV − soci (datato) − PD (datato) − oneri HoldCo (giu-2028)', Math.abs(mc27.holdcoNetCashflow[i27] - (mc27.netCashflow[i27] - sociM27 - pdM27 - otherM27)) < 1e-6);
 check('Servizio soci datato: parte dalla data finanziamento (non prima)', (() => {
     // sociIdx = primo mese CAPEX (default senza date funding) → nessun servizio soci nei mesi precedenti
@@ -1301,6 +1303,40 @@ check('Giu 2027: imponibile = 25.000, IVA = 4.400 (22% O&M, 0% Assic.), lordo = 
 check('Dic 2027: solo voce di dicembre (12.000 + 2.640 IVA), non cumulativa con giu 2027',
     dic27.length === 1 && Math.abs(dic27[0].amount - 12000) < 1 && Math.abs(dic27[0].vatAmount - 2640) < 1 && Math.abs(dic27[0].grossAmount - 14640) < 1,
     `dic27=${JSON.stringify(dic27)}`);
+
+// ── Test 46: Holding datata — costituzione Anno 0, OPEX annuale editabile in singola uscita, Earn-Out a chiusura bilancio anno succ. ──
+console.log('\n[Test 46] Holding: costituzione Anno 0, OPEX annuale singolo (no /12), Earn-Out a chiusura bilancio su maturato anno prec.');
+const p46 = plants32().map(pl => ({ ...pl, earnoutType: 'fixed', earnoutVal: 50000, earnoutYears: 5 }));
+const r46 = run(buildState({
+    inputs: {
+        holdcoOpexAnnual: 24000,
+        holdcoIncorporationDate: '2026-10-15',
+        holdcoOpexPayDate: '2026-11-20',
+        holdcoBalanceCloseDate: '2028-06-30',
+        taxPaymentMonth: 6
+    },
+    plants: p46
+}));
+const mc46 = r46.monthlyCashflow;
+check('P&L Holding OPEX Anno 0 = 24.000 € (editabile, non 15.000 hardcoded)',
+    Math.abs(r46.matrix.holdcoOpex[0] - 24000) < 1,
+    `y0=${r46.matrix.holdcoOpex[0]}`);
+check('Anno 0: nessun onere HoldCo prima della costituzione (gen-ott 2026 = 0)',
+    mc46.holdcoOtherCosts.slice(0, 10).every(v => Math.abs(v) < 1e-9));
+check('Anno 0: OPEX Holding pagato come singola spesa a nov-2026 (idx 10 = 24.000)',
+    Math.abs(mc46.holdcoOtherCosts[10] - 24000) < 1 && Math.abs(mc46.holdcoOtherCosts[11]) < 1e-9,
+    `nov26=${mc46.holdcoOtherCosts[10]}`);
+check('Anno 1 (2027): OPEX Holding pagato come singola spesa a nov-2027 (idx 22 = 24.000), altri mesi = 0',
+    Math.abs(mc46.holdcoOtherCosts[22] - 24000) < 1 &&
+    mc46.holdcoOtherCosts.slice(12, 22).every(v => Math.abs(v) < 1e-9) &&
+    Math.abs(mc46.holdcoOtherCosts[23]) < 1e-9,
+    `nov27=${mc46.holdcoOtherCosts[22]}`);
+// Earn-Out maturato Anno 1 (50.000 * 2 impianti = 100.000) -> pagato a giu-2028 (idx 29)
+const earnoutY1 = r46.matrix.holdcoEarnoutPaid[1] || 0;
+const hcTaxY1 = (r46.matrix.holdcoIresTaxPaid[1] || 0) + (r46.matrix.holdcoIrapTaxPaid[1] || 0);
+check('Anno 2 (giu-2028, idx 29): Earn-Out maturato Anno 1 regolato 1 volta alla chiusura bilancio',
+    earnoutY1 > 0 && Math.abs(mc46.holdcoOtherCosts[29] - (earnoutY1 + hcTaxY1)) < 1,
+    `giu28=${mc46.holdcoOtherCosts[29].toFixed(0)} exp=${(earnoutY1 + hcTaxY1).toFixed(0)}`);
 
 console.log('\n═══════════════════════════════════');
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);

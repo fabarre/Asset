@@ -1456,7 +1456,7 @@
                                 <input type="range" id="input-exit-option" min="0" max="20" value="20" step="1" oninput="document.getElementById('val-exit-option').textContent = this.value == 0 ? 'Nessun Exit' : 'Anno ' + this.value" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500 mt-2">
                             </div>
                         </div>
-                        <div class="grid grid-cols-3 gap-4">
+                        <div class="grid grid-cols-3 gap-4 mb-4">
                             <div>
                                 <label class="block text-[11px] text-slate-400 mb-1">Moltiplicatore EBITDA</label>
                                 <input type="number" id="input-exit-multiple" value="8.0" step="0.1" readonly class="w-full bg-slate-900 border border-slate-700/50 rounded px-2.5 py-1.5 text-amber-400/50 font-bold text-xs outline-none cursor-not-allowed">
@@ -1468,6 +1468,27 @@
                             <div>
                                 <label class="block text-[11px] text-slate-400 mb-1">Enterprise Value (&#8364;)</label>
                                 <input type="number" id="input-exit-ev" value="0" step="10000" oninput="window.syncExitFields('ev', true)" onchange="window.syncExitFields('ev')" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                            </div>
+                        </div>
+                        <div class="border-t border-slate-800/80 pt-3">
+                            <p class="text-[9px] text-emerald-400 uppercase tracking-widest font-bold mb-2">Parametri Holding (Costituzione, OPEX &amp; Bilancio)</p>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div title="Costi annui di funzionamento della Holding (OPEX), indicizzati all'inflazione negli anni operativi e pagati come singola uscita annuale">
+                                    <label class="block text-[10px] text-slate-400 mb-1">OPEX Annuale Holding (€)</label>
+                                    <input type="number" id="input-holdco-opex" value="15000" min="0" step="500" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                </div>
+                                <div title="Data di costituzione della Holding nell'Anno 0: nessun onere HoldCo precede questa data">
+                                    <label class="block text-[10px] text-slate-400 mb-1">Data Costituzione Holding (Y0)</label>
+                                    <input type="date" id="input-holdco-incorporation-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                </div>
+                                <div title="Data di pagamento della singola spesa annuale OPEX Holding (ricorre ogni anno nel mese indicato)">
+                                    <label class="block text-[10px] text-slate-400 mb-1">Data Pagamento OPEX Holding</label>
+                                    <input type="date" id="input-holdco-opex-pay-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                </div>
+                                <div title="Data di presentazione e chiusura del bilancio: regola l'Earn-Out (una volta l'anno, riferito al maturato dell'anno precedente)">
+                                    <label class="block text-[10px] text-slate-400 mb-1">Data Chiusura Bilancio / Earn-Out</label>
+                                    <input type="date" id="input-holdco-balance-close-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -4201,7 +4222,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=169"></script>
+    <script src="./src/main.js?v=170"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

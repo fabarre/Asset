@@ -239,6 +239,10 @@
             'afTaxDeductible': { id: 'input-af-tax-deductible', mult: 1 },
             'spvCapital': { id: 'input-spv-capital', mult: 1 },
             'holdcoCapital': { id: 'input-holdco-capital', mult: 1 },
+            'holdcoOpexAnnual': { id: 'input-holdco-opex', mult: 1 },
+            'holdcoIncorporationDate': { id: 'input-holdco-incorporation-date', mult: 1 },
+            'holdcoOpexPayDate': { id: 'input-holdco-opex-pay-date', mult: 1 },
+            'holdcoBalanceCloseDate': { id: 'input-holdco-balance-close-date', mult: 1 },
             'exitOption': { id: 'input-exit-option', mult: 1 },
             'exitMultiple': { id: 'input-exit-multiple', mult: 1 },
             'exitValuePerMwp': { id: 'input-exit-value-mwp', mult: 1 },
@@ -3785,6 +3789,10 @@
             // Holding & SPV Capital & Exit params
             p.spvCapital = getNum('input-spv-capital', 10000);
             p.holdcoCapital = getNum('input-holdco-capital', 10000);
+            p.holdcoOpexAnnual = getNum('input-holdco-opex', 15000);
+            p.holdcoIncorporationDate = getVal('input-holdco-incorporation-date') || '';
+            p.holdcoOpexPayDate = getVal('input-holdco-opex-pay-date') || '';
+            p.holdcoBalanceCloseDate = getVal('input-holdco-balance-close-date') || '';
             p.exitOption = getVal('input-exit-option') || '20';
             p.exitMultiple = getNum('input-exit-multiple', 8.0);
             p.exitValuePerMwp = getNum('input-exit-value-mwp', 0);
@@ -3965,6 +3973,10 @@
             setChk('input-af-tax-deductible', p.afTaxDeductible);
             setVal('input-spv-capital', p.spvCapital !== undefined ? p.spvCapital : 10000);
             setVal('input-holdco-capital', p.holdcoCapital !== undefined ? p.holdcoCapital : 10000);
+            setVal('input-holdco-opex', p.holdcoOpexAnnual !== undefined ? p.holdcoOpexAnnual : 15000);
+            setVal('input-holdco-incorporation-date', p.holdcoIncorporationDate || '');
+            setVal('input-holdco-opex-pay-date', p.holdcoOpexPayDate || '');
+            setVal('input-holdco-balance-close-date', p.holdcoBalanceCloseDate || '');
             let eOpt = p.exitOption !== undefined ? p.exitOption : '20';
             if (eOpt === 'none') eOpt = '0';
             setVal('input-exit-option', eOpt);
@@ -10934,7 +10946,7 @@
                 'input-sweep-value', 'input-sweep-years', 'input-sculpting-enabled', 'input-target-dscr',
                 'input-dsra-months', 'input-refi-enabled', 'input-refi-year', 'input-refi-rate', 'input-refi-term',
                 'input-soci-interest-grace', 'input-soci-principal-grace', 'input-soci-loan-term',
-                'input-spv-capital', 'input-holdco-capital',
+                'input-spv-capital', 'input-holdco-capital', 'input-holdco-opex',
                 'input-pd-amount-value', 'input-pd-interest-grace', 'input-pd-principal-grace', 'input-pd-loan-term',
                 'input-pd-enabled', 'input-pd-tax-deductible',
                 'input-pe-amount-value', 'input-pe-exit-multiple', 'input-pe-enabled', 'input-pe-participates-exit',
@@ -10951,8 +10963,11 @@
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', triggerRecalculate);
             });
-            // CF8: date di messa a disposizione capitali -> salvataggio + ricalcolo in tempo reale
-            const fundingDateInputs = ['input-funding-equity-date', 'input-funding-soci-date', 'input-funding-debt-date'];
+            // CF8: date di messa a disposizione capitali e date Holding -> salvataggio + ricalcolo in tempo reale
+            const fundingDateInputs = [
+                'input-funding-equity-date', 'input-funding-soci-date', 'input-funding-debt-date',
+                'input-holdco-incorporation-date', 'input-holdco-opex-pay-date', 'input-holdco-balance-close-date'
+            ];
             fundingDateInputs.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
