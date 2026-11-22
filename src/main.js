@@ -1716,6 +1716,7 @@
             const brpFee2 = getFloat('plant-brp-fee2');
             const brpFee2Months = parseInt(getVal('plant-brp-fee2-months'), 10) || 0;
             const brpFee3 = getFloat('plant-brp-fee3');
+            const brpFeeBasis = getVal('plant-brp-fee-basis') || 'gross';
 
             const degradeRid = getFloat('plant-degrade-rid');
             const degradeTimeshifting = getFloat('plant-degrade-timeshifting');
@@ -1779,6 +1780,7 @@
                    brpFee2 !== (originalPlantData.brpFee2 !== undefined ? originalPlantData.brpFee2 : 1) ||
                    brpFee2Months !== (originalPlantData.brpFee2Months !== undefined ? originalPlantData.brpFee2Months : 6) ||
                    brpFee3 !== (originalPlantData.brpFee3 !== undefined ? originalPlantData.brpFee3 : 0) ||
+                   brpFeeBasis !== (originalPlantData.brpFeeBasis || 'gross') ||
 
                    degradeRid !== (originalPlantData.degradeRidPct !== undefined ? originalPlantData.degradeRidPct : 2.0) ||
                    degradeTimeshifting !== (originalPlantData.degradeTimeshiftingPct !== undefined ? originalPlantData.degradeTimeshiftingPct : 2.0) ||
@@ -1837,6 +1839,7 @@
             if (originalPlantData.brpFee2 === undefined) originalPlantData.brpFee2 = 1;
             if (originalPlantData.brpFee2Months === undefined) originalPlantData.brpFee2Months = 6;
             if (originalPlantData.brpFee3 === undefined) originalPlantData.brpFee3 = 0;
+            if (!originalPlantData.brpFeeBasis) originalPlantData.brpFeeBasis = 'gross';
 
             // Normalise: if no BESS installed, treat all BESS numeric fields as 0
             // so that checkFormModified() correctly compares against what the form will show.
@@ -1890,6 +1893,8 @@
             document.getElementById('plant-brp-fee2').value = plant.brpFee2 !== undefined ? plant.brpFee2 : 1;
             document.getElementById('plant-brp-fee2-months').value = plant.brpFee2Months !== undefined ? plant.brpFee2Months : 6;
             document.getElementById('plant-brp-fee3').value = plant.brpFee3 !== undefined ? plant.brpFee3 : 0;
+            const brpBasisEl = document.getElementById('plant-brp-fee-basis');
+            if (brpBasisEl) brpBasisEl.value = plant.brpFeeBasis || 'gross';
             if (window.onMarketTypeChange) window.onMarketTypeChange();
             
             document.getElementById('plant-trader-contract-type').value = plant.traderContractType || 'pun_orario';
@@ -2036,6 +2041,7 @@
             setFieldVal('plant-brp-fee2', 1);
             setFieldVal('plant-brp-fee2-months', 6);
             setFieldVal('plant-brp-fee3', 0);
+            setFieldVal('plant-brp-fee-basis', 'gross');
             setFieldVal('plant-pnrr-contribution-pct', 0);
             setFieldVal('plant-degrade-rid', 2.0);
             setFieldVal('plant-degrade-timeshifting', 2.0);
@@ -2193,6 +2199,7 @@
                 brpFee2: parseFloat(document.getElementById('plant-brp-fee2').value) || 0,
                 brpFee2Months: parseInt(document.getElementById('plant-brp-fee2-months').value) || 0,
                 brpFee3: parseFloat(document.getElementById('plant-brp-fee3').value) || 0,
+                brpFeeBasis: (document.getElementById('plant-brp-fee-basis') || {}).value || 'gross',
                 traderContractType: document.getElementById('plant-trader-contract-type').value,
                 traderSpread: parseFloat(document.getElementById('plant-trader-spread-eur-mwh').value) || 0,
                 traderDisp: parseFloat(document.getElementById('plant-trader-disp-eur-mwh').value) || 0,
@@ -4373,6 +4380,7 @@
                                 brpFee2: p.brp_fee2 !== null && p.brp_fee2 !== undefined ? parseFloat(p.brp_fee2) : 1,
                                 brpFee2Months: p.brp_fee2_months !== null && p.brp_fee2_months !== undefined ? parseInt(p.brp_fee2_months) : 6,
                                 brpFee3: p.brp_fee3 !== null && p.brp_fee3 !== undefined ? parseFloat(p.brp_fee3) : 0,
+                                brpFeeBasis: p.brp_fee_basis || 'gross',
                                 pnrrContributionPct: parseFloat(p.pnrr_contribution_pct || 0),
                                 degradeRidPct: p.degrade_rid_pct !== undefined && p.degrade_rid_pct !== null ? parseFloat(p.degrade_rid_pct) : 0,
                                 degradeTimeshiftingPct: p.degrade_timeshifting_pct !== undefined && p.degrade_timeshifting_pct !== null ? parseFloat(p.degrade_timeshifting_pct) : 0,
@@ -4889,6 +4897,7 @@
                     brp_fee2: plant.brpFee2 !== undefined ? plant.brpFee2 : 1,
                     brp_fee2_months: plant.brpFee2Months !== undefined ? plant.brpFee2Months : 6,
                     brp_fee3: plant.brpFee3 !== undefined ? plant.brpFee3 : 0,
+                    brp_fee_basis: plant.brpFeeBasis || 'gross',
                     degrade_rid_pct: plant.degradeRidPct !== undefined ? plant.degradeRidPct : 0,
                     degrade_timeshifting_pct: plant.degradeTimeshiftingPct !== undefined ? plant.degradeTimeshiftingPct : 0,
                     degrade_arbitrage_pct: plant.degradeArbitragePct !== undefined ? plant.degradeArbitragePct : 0,
@@ -5128,6 +5137,7 @@
                 brpFee2: parseFloat((document.getElementById('plant-brp-fee2') || {}).value) || 0,
                 brpFee2Months: parseInt((document.getElementById('plant-brp-fee2-months') || {}).value) || 0,
                 brpFee3: parseFloat((document.getElementById('plant-brp-fee3') || {}).value) || 0,
+                brpFeeBasis: (document.getElementById('plant-brp-fee-basis') || {}).value || 'gross',
                 pnrrContributionPct: pnrrContributionPct,
                 marketType: marketType || 'rid',
                 ferxTariff: ferxTariff !== undefined ? ferxTariff : 85,
@@ -5454,6 +5464,7 @@
             const brpFee2 = parseFloat((document.getElementById('plant-brp-fee2') || {}).value) || 0;
             const brpFee2Months = parseInt((document.getElementById('plant-brp-fee2-months') || {}).value) || 0;
             const brpFee3 = parseFloat((document.getElementById('plant-brp-fee3') || {}).value) || 0;
+            const brpFeeBasis = (document.getElementById('plant-brp-fee-basis') || {}).value || 'gross';
 
             // ── BESS standalone (senza FV): profilo solare a zero, nessun PVGIS richiesto ──
             if (isBessOnlyCheck && fileInput.files.length === 0 && !window._pvgisApiText) {
@@ -5471,7 +5482,7 @@
                     earnoutType, earnoutVal, earnoutYears,
                     serviceType, serviceVal, serviceYears,
                     traderContractType, traderSpread, traderDisp,
-                    brpFee1, brpFee1Months, brpFee2, brpFee2Months, brpFee3,
+                    brpFee1, brpFee1Months, brpFee2, brpFee2Months, brpFee3, brpFeeBasis,
                     pnrrContributionPct,
                     marketType, ferxTariff,
                     degradeRidPct, degradeTimeshiftingPct, degradeArbitragePct,
@@ -10770,7 +10781,7 @@
                 'input-cerCapSmall', 'input-cerCapMedium', 'input-cerCapLarge',
                 'input-cerVarReferencePrice', 'input-cerVarMax',
                 'input-cerGeoNord', 'input-cerGeoCentro', 'input-cerGeoSud',
-                'plant-brp-fee1', 'plant-brp-fee1-months', 'plant-brp-fee2', 'plant-brp-fee2-months', 'plant-brp-fee3'
+                'plant-brp-fee1', 'plant-brp-fee1-months', 'plant-brp-fee2', 'plant-brp-fee2-months', 'plant-brp-fee3', 'plant-brp-fee-basis'
             ];
             inputs.forEach(id => {
                 const el = document.getElementById(id);

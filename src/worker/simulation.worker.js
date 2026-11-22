@@ -9,13 +9,46 @@ function getMonthOfHour(t) {
     return 11;
 }
 
-function getBrpFeeForMonth(plant, yr, monthIndex) {
-    const absMonth = (yr - 1) * 12 + monthIndex + 1;
+function getBrpFeeForMonth(plant, yr, monthIndex, anchorYear) {
+    const fee1 = plant.brpFee1 !== undefined ? plant.brpFee1 : 2;
     const fee1M = plant.brpFee1Months !== undefined ? plant.brpFee1Months : 18;
+    const fee2 = plant.brpFee2 !== undefined ? plant.brpFee2 : 1;
     const fee2M = plant.brpFee2Months !== undefined ? plant.brpFee2Months : 6;
-    if (absMonth <= fee1M) return plant.brpFee1 !== undefined ? plant.brpFee1 : 2;
-    if (absMonth <= fee1M + fee2M) return plant.brpFee2 !== undefined ? plant.brpFee2 : 1;
-    return plant.brpFee3 !== undefined ? plant.brpFee3 : 0;
+    const fee3 = plant.brpFee3 !== undefined ? plant.brpFee3 : 0;
+
+    const cod = plant._codParsed || parseCodDate(plant.codDate || plant.cod);
+    if (!cod) {
+        const absMonth = (yr - 1) * 12 + monthIndex + 1;
+        if (absMonth <= fee1M) return fee1;
+        if (absMonth <= fee1M + fee2M) return fee2;
+        return fee3;
+    }
+
+    const baseYear = (anchorYear !== undefined && anchorYear !== null)
+        ? anchorYear
+        : ((plant._anchorYear !== undefined && plant._anchorYear !== null) ? plant._anchorYear : cod.y);
+    const calYear = baseYear + yr - 1;
+    const calMonth = monthIndex + 1;
+
+    // Pre-COD (es. simulazione nominale 8760h): restituisce fee1 come riferimento nominale Anno 1
+    if (calYear < cod.y || (calYear === cod.y && calMonth < cod.m)) {
+        return fee1;
+    }
+
+    // Mese operativo progressivo dal mese di COD (1-based)
+    const opMonth = (calYear - cod.y) * 12 + (calMonth - cod.m) + 1;
+    if (opMonth <= fee1M) return fee1;
+    if (opMonth <= fee1M + fee2M) return fee2;
+    return fee3;
+}
+
+// Prezzo unitario BRP (€/kWh):
+//   - 'gross'   (default): premio/fee su energia lorda perdite -> (PUN + fee) * (1 + perdite) / 1000
+//   - 'metered'          : premio/fee su energia misurata      -> (PUN * (1 + perdite) + fee) / 1000
+function calcBrpPricePerKwh(pricePUN, fee, lossMult, feeBasis) {
+    return feeBasis === 'metered'
+        ? ((pricePUN * lossMult + fee) / 1000)
+        : (((pricePUN + fee) * lossMult) / 1000);
 }
 
 // Fee BRP rappresentativa per l'ottimizzazione del dispatch: il profilo orario
@@ -366,7 +399,7 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
         const month = getMonthOfHour(t);
         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
-            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpLifetimeAvgFeeForMonth(p, month), lossMult, p.brpFeeBasis)
             : ((pricePUN * lossMult - gseImb) / 1000);
         const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
@@ -479,7 +512,7 @@ function simulateBessLP(solarProfile, punProfile, loadProfile, p) {
         const month = getMonthOfHour(t);
         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
-            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(p, 1, month), lossMult, p.brpFeeBasis)
             : ((pricePUN * lossMult - gseImb) / 1000);
         const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
@@ -588,7 +621,7 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
             const pricePUN = punProfile[t];
             const month = getMonthOfHour(t);
             const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
-                : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+                : (marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(p, 1, month), lossMult, p.brpFeeBasis)
                 : ((pricePUN * lossMult - gseImb) / 1000);
             const pricePPA = ppaPrice / 1000;
 
@@ -697,7 +730,7 @@ function simulateBessContinuous(solarProfile, punProfile, loadProfile, p, mode =
             const month = getMonthOfHour(t);
             const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
             const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
-                : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+                : (marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(p, 1, month), lossMult, p.brpFeeBasis)
                 : ((pricePUN * lossMult - gseImb) / 1000);
             const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
             const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
@@ -1244,7 +1277,7 @@ function runSensitivityLoop(baseState, config) {
                     const pricePUN = punProfile[t];
                     const month = getMonthOfHour(t);
                     const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(p, 1, month), lossMult, p.brpFeeBasis)
             : ((pricePUN * lossMult - gseImb) / 1000);
                     const pricePPA = ppaPrice / 1000;
 
@@ -1388,7 +1421,7 @@ function runSensitivityLoop(baseState, config) {
                         const traderPrice = p.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                         
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000)
-                            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
+                            : (marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpLifetimeAvgFeeForMonth(p, month), lossMult, p.brpFeeBasis)
                             : ((pricePUN * lossMult - gseImb) / 1000);
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
                         
@@ -1502,7 +1535,7 @@ function runSensitivityLoop(baseState, config) {
                         const pricePUN = punProfile[h];
                         const month = getMonthOfHour(h);
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-                            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+                            : (marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(p, 1, month), lossMult, p.brpFeeBasis)
                             : ((pricePUN * lossMult - gseImb) / 1000);
                         const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
                         const pricePPA = ppaPrice / 1000;
@@ -1628,7 +1661,7 @@ function runSensitivityLoop(baseState, config) {
                         
                         const pricePPA = ppaPrice / 1000;
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-            : (marketType === 'brp') ? ((pricePUN + getBrpLifetimeAvgFeeForMonth(p, month)) * lossMult / 1000)
+            : (marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpLifetimeAvgFeeForMonth(p, month), lossMult, p.brpFeeBasis)
             : ((pricePUN * lossMult - gseImb) / 1000);
                         const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
                         const costGrid = (traderPrice * lossWithdrawMult + spread + disp) / 1000;
@@ -1762,7 +1795,7 @@ function runSensitivityLoop(baseState, config) {
                         const pricePUN = punProfile[h];
                         const month = getMonthOfHour(h);
                         const priceRID = (marketType === 'fer_x') ? (ferxTariff / 1000) 
-                            : (marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(p, 1, month)) * lossMult / 1000)
+                            : (marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(p, 1, month), lossMult, p.brpFeeBasis)
                             : ((pricePUN * lossMult - gseImb) / 1000);
                         const priceArb = arbitragePriceKwh(marketType, pricePUN, lossMult, priceRID);
                         const pricePPA = ppaPrice / 1000;
@@ -1938,6 +1971,15 @@ function runSensitivityLoop(baseState, config) {
             const capexBreakdown = [];
             const opexBreakdown = [];
 
+            // ═══ CF3: anno àncora = anno del COD più antico (precalcolato prima del dispatch BESS/BRP) ═══
+            let anchorYear = null;
+            activePlants.forEach(pl => {
+                const cod = parseCodDate(pl.codDate || pl.cod);
+                pl._codParsed = cod;
+                if (cod && (anchorYear === null || cod.y < anchorYear)) anchorYear = cod.y;
+            });
+            activePlants.forEach(pl => { pl._anchorYear = anchorYear; });
+
             // ── CF13: Riduzione PUN Zonale (%) applicata a tutti i calcoli orari ──
             const punDiscountPct = (State.inputs && State.inputs.punDiscountPct !== undefined) ? Number(State.inputs.punDiscountPct) : 0;
             const punDiscountMult = Math.max(0, 1 - (punDiscountPct / 100));
@@ -2072,6 +2114,10 @@ function runSensitivityLoop(baseState, config) {
                     brpFee2: plant.brpFee2,
                     brpFee2Months: plant.brpFee2Months,
                     brpFee3: plant.brpFee3,
+                    brpFeeBasis: plant.brpFeeBasis || 'gross',
+                    codDate: plant.codDate || plant.cod || null,
+                    _codParsed: plant._codParsed || null,
+                    _anchorYear: anchorYear,
                     gridLosses: resolveGridLosses(plant.gridVoltage, 'inject'),
                     gridLossesWithdraw: resolveGridLosses(plant.gridVoltage, 'withdraw'),
                     gridWithdrawalKw: plant.gridWithdrawalKw,
@@ -2171,7 +2217,7 @@ function runSensitivityLoop(baseState, config) {
                     const traderPrice = plant.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
                     
                     const priceRID = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
-                        : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
+                        : (plant.marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t), anchorYear), lossMult, plant.brpFeeBasis)
                         : ((pricePUN * lossMult - gseImb) / 1000);
                     const costGrid = (traderPrice * (1 + lossWithdraw / 100) + spread + disp) / 1000;
 
@@ -2214,7 +2260,7 @@ function runSensitivityLoop(baseState, config) {
                     for (let t = 0; t < 8760; t++) {
                         const pricePUN = zonePrices[t];
                         const priceRID = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
-                            : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
+                            : (plant.marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t), anchorYear), lossMult, plant.brpFeeBasis)
                             : ((pricePUN * lossMult - gseImb) / 1000);
                         const actualRid = plantSim.hourlyGridFeed[t];
                         bessRidRevY1 += (actualRid - plant.generation[t]) * priceRID;
@@ -2281,7 +2327,7 @@ function runSensitivityLoop(baseState, config) {
                         const solar = plant.generation[t];
                         const pricePUN = zonePrices[t];
                         const priceRID = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
-                            : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
+                            : (plant.marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t), anchorYear), lossMult, plant.brpFeeBasis)
                             : ((pricePUN * lossMult - gseImb) / 1000);
                         const month = getMonthOfHour(t);
                         const traderPrice = plant.traderContractType === 'pun_medio' ? monthlyAveragePun[month] : pricePUN;
@@ -2897,13 +2943,7 @@ function runSensitivityLoop(baseState, config) {
             const exitYear = 20;
             let spvLockedDividends = 0;
 
-            // ═══ CF3: anno àncora = anno del COD più antico (null = legacy: anno 1 = gen-dic pieno) ═══
-            let anchorYear = null;
-            activePlants.forEach(pl => {
-                const cod = parseCodDate(pl.codDate || pl.cod);
-                pl._codParsed = cod;
-                if (cod && (anchorYear === null || cod.y < anchorYear)) anchorYear = cod.y;
-            });
+            // ═══ CF3: anchorYear e pl._codParsed già precalcolati prima del loop BESS ═══
 
             // ═══ OIC 16 / Art. 102 TUIR: Basi e residui ammortamento per impianto e per categoria ═══
             const totalDeprCapexExIdc = activePlants.reduce((sum, pl) => {
@@ -3160,7 +3200,7 @@ function runSensitivityLoop(baseState, config) {
                                 pPhysSolarGen += solar / 1000;
                                 const pricePUN = zonePrices[t];
                                 const basePrice = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
-                                    : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t))) * lossMult / 1000)
+                                    : (plant.marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(plant, typeof yr !== 'undefined' ? yr : 1, getMonthOfHour(t), anchorYear), lossMult, plant.brpFeeBasis)
                                     : ((pricePUN * lossMult - gseImb) / 1000);
                                 const priceRID = basePrice * currentRidDecay;
                                 const month = getMonthOfHour(t);
@@ -3273,9 +3313,9 @@ function runSensitivityLoop(baseState, config) {
                                     const loadProfile = (stab && stab.ppaType === 'on-site' && stab.load) ? stab.load : null;
                                     const isOffsiteBrp = (stab && stab.ppaType === 'off-site');
                                     for (let t = 0; t < 8760; t++) {
-                                        const fee = getBrpFeeForMonth(plant, yr, getMonthOfHour(t));
+                                        const fee = getBrpFeeForMonth(plant, yr, getMonthOfHour(t), anchorYear);
                                         const pricePUN = zonePrices[t];
-                                        const basePriceBrp = (pricePUN + fee) * lossMult / 1000;
+                                        const basePriceBrp = calcBrpPricePerKwh(pricePUN, fee, lossMult, plant.brpFeeBasis);
                                         const priceRID = basePriceBrp * currentRidDecay;
                                         const priceTs = basePriceBrp * currentTimeshiftingDecay;
                                         const priceArb = basePriceBrp * currentArbitrageDecay;
@@ -3339,7 +3379,7 @@ function runSensitivityLoop(baseState, config) {
                                     const costGrid = ((traderPrice * (1 + lossWithdraw / 100) + spread + disp) / 1000) * currentArbitrageDecay;
                                     
                                     const basePrice = (plant.marketType === 'fer_x') ? (plant.ferxTariff / 1000) 
-                                        : (plant.marketType === 'brp') ? ((pricePUN + getBrpFeeForMonth(plant, yr, month)) * lossMult / 1000)
+                                        : (plant.marketType === 'brp') ? calcBrpPricePerKwh(pricePUN, getBrpFeeForMonth(plant, yr, month, anchorYear), lossMult, plant.brpFeeBasis)
                                         : ((pricePUN * lossMult - gseImb) / 1000);
                                     const priceRID = basePrice * currentRidDecay;
 

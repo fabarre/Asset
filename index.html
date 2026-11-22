@@ -2762,35 +2762,45 @@
 
                             <!-- Parametri BRP -->
                             <div id="market-params-brp" class="hidden space-y-3 pt-2 border-t border-slate-800/60">
-                                <p class="text-[9px] text-fuchsia-500 uppercase tracking-widest font-bold mb-2">Parametri Ritiro BRP</p>
+                                <p class="text-[9px] text-fuchsia-500 uppercase tracking-widest font-bold mb-2">Parametri Ritiro BRP (Premio / Fee)</p>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label class="block text-[10px] text-slate-400 mb-1">Fee 1 (€/MWh)</label>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Premio / Fee 1 (€/MWh)</label>
                                         <input type="number" id="plant-brp-fee1" value="2" step="0.1" class="w-full bg-slate-950 border border-fuchsia-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 outline-none">
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] text-slate-400 mb-1">Durata Fee 1 (Mesi)</label>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Durata 1 (Mesi da COD)</label>
                                         <input type="number" id="plant-brp-fee1-months" value="18" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label class="block text-[10px] text-slate-400 mb-1">Fee 2 (€/MWh)</label>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Premio / Fee 2 (€/MWh)</label>
                                         <input type="number" id="plant-brp-fee2" value="1" step="0.1" class="w-full bg-slate-950 border border-fuchsia-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 outline-none">
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] text-slate-400 mb-1">Durata Fee 2 (Mesi)</label>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Durata 2 (Mesi)</label>
                                         <input type="number" id="plant-brp-fee2-months" value="6" step="1" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label class="block text-[10px] text-slate-400 mb-1">Fee 3 (€/MWh)</label>
+                                        <label class="block text-[10px] text-slate-400 mb-1">Premio / Fee 3 (€/MWh)</label>
                                         <input type="number" id="plant-brp-fee3" value="0" step="0.1" class="w-full bg-slate-950 border border-fuchsia-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 outline-none">
                                     </div>
                                     <div class="flex items-center pt-5">
-                                        <span class="text-[9px] text-slate-500 italic">Fee 3 valida per restanti mesi</span>
+                                        <span class="text-[9px] text-slate-500 italic">Valida per restanti mesi</span>
                                     </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-slate-400 mb-1">Base di calcolo Premio / Fee BRP</label>
+                                    <select id="plant-brp-fee-basis" class="w-full bg-slate-950 border border-fuchsia-700/80 text-white px-2.5 py-1.5 rounded text-xs outline-none focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500">
+                                        <option value="gross" selected>Energia lorda perdite — (PUN + Premio) × (1 + perdite)</option>
+                                        <option value="metered">Energia misurata al contatore — PUN × (1 + perdite) + Premio</option>
+                                    </select>
+                                    <p class="text-[9px] text-slate-500 mt-1 leading-relaxed">
+                                        Valori positivi (+) = premio riconosciuto dal BRP; valori negativi (-) = commissione trattenuta. La durata decorre dal mese di COD dell'impianto.
+                                    </p>
                                 </div>
                             </div>
 
@@ -4186,7 +4196,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=165"></script>
+    <script src="./src/main.js?v=166"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

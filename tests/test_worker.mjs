@@ -1155,6 +1155,56 @@ const simLp = r_lp.plantsMetrics[0].sim;
 check('BESS LP Globale (HiGHS / fallback continuo): esecuzione completata', !!simLp);
 check('BESS LP Globale: energia traslata > 0', simLp.annualShifted > 0, `shifted=${simLp.annualShifted}`);
 
+// ── Test 42: BRP fee basis (gross vs metered) e durata fee ancorata al COD ──
+console.log('\n[Test 42] BRP: base calcolo premio (lorda perdite vs misurata) e durata da COD');
+const r42Gross = run(buildState({
+    inputs: { ridLossInjectMt: 2.3 },
+    plant: {
+        marketType: 'brp', gridVoltage: 'mt', brpFeeBasis: 'gross',
+        brpFee1: 2, brpFee1Months: 18, brpFee2: 0, brpFee2Months: 0, brpFee3: 0,
+        degradeRidPct: 0, ...plantNoBess
+    }
+}));
+const r42Metered = run(buildState({
+    inputs: { ridLossInjectMt: 2.3 },
+    plant: {
+        marketType: 'brp', gridVoltage: 'mt', brpFeeBasis: 'metered',
+        brpFee1: 2, brpFee1Months: 18, brpFee2: 0, brpFee2Months: 0, brpFee3: 0,
+        degradeRidPct: 0, ...plantNoBess
+    }
+}));
+check('BRP gross: (100 + 2) * 1.023 = 104.346 €/MWh',
+    Math.abs(r42Gross.matrix.priceSolarRid[1] - 104.346) < 0.005,
+    `price=${r42Gross.matrix.priceSolarRid[1].toFixed(4)}`);
+check('BRP metered: 100 * 1.023 + 2 = 104.300 €/MWh',
+    Math.abs(r42Metered.matrix.priceSolarRid[1] - 104.300) < 0.005,
+    `price=${r42Metered.matrix.priceSolarRid[1].toFixed(4)}`);
+check('BRP gross - metered = 2 * 0.023 = 0.046 €/MWh',
+    Math.abs((r42Gross.matrix.priceSolarRid[1] - r42Metered.matrix.priceSolarRid[1]) - 0.046) < 0.002,
+    `diff=${(r42Gross.matrix.priceSolarRid[1] - r42Metered.matrix.priceSolarRid[1]).toFixed(4)}`);
+
+// COD infra-annuale 15/10/2027 con brpFee1 = 2 per 18 mesi (Ott-Dic 2027 = 3m, Gen-Dic 2028 = 12m, Gen-Mar 2029 = 3m)
+const r42Cod = run(buildState({
+    inputs: { ridLossInjectMt: 0 },
+    plant: {
+        marketType: 'brp', gridVoltage: 'mt', brpFeeBasis: 'gross', codDate: '2027-10-15',
+        brpFee1: 2, brpFee1Months: 18, brpFee2: 0, brpFee2Months: 0, brpFee3: 0,
+        degradeRidPct: 0, ...plantNoBess
+    }
+}));
+check('BRP COD 15/10/2027 Anno 1: prezzo = 102.00 €/MWh (mesi 1-3 da COD)',
+    Math.abs(r42Cod.matrix.priceSolarRid[1] - 102.0) < 0.01,
+    `Y1=${r42Cod.matrix.priceSolarRid[1].toFixed(4)}`);
+check('BRP COD 15/10/2027 Anno 2: prezzo = 102.00 €/MWh su tutti i 12 mesi (mesi 4-15 da COD)',
+    Math.abs(r42Cod.matrix.priceSolarRid[2] - 102.0) < 0.01,
+    `Y2=${r42Cod.matrix.priceSolarRid[2].toFixed(4)}`);
+check('BRP COD 15/10/2027 Anno 3: prezzo tra 100 e 102 €/MWh (mesi 16-18 Gen-Mar + Apr-Dic a 0)',
+    r42Cod.matrix.priceSolarRid[3] > 100.05 && r42Cod.matrix.priceSolarRid[3] < 101.95,
+    `Y3=${r42Cod.matrix.priceSolarRid[3].toFixed(4)}`);
+check('BRP COD 15/10/2027 Anno 4: prezzo = 100.00 €/MWh (fee scaduta)',
+    Math.abs(r42Cod.matrix.priceSolarRid[4] - 100.0) < 0.01,
+    `Y4=${r42Cod.matrix.priceSolarRid[4].toFixed(4)}`);
+
 console.log('\n═══════════════════════════════════');
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);
