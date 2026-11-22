@@ -1205,6 +1205,33 @@ check('BRP COD 15/10/2027 Anno 4: prezzo = 100.00 €/MWh (fee scaduta)',
     Math.abs(r42Cod.matrix.priceSolarRid[4] - 100.0) < 0.01,
     `Y4=${r42Cod.matrix.priceSolarRid[4].toFixed(4)}`);
 
+// ── Test 43: Cash Sweep nel Cashflow rispetta fundingDebtDate e frequenza rimborso annuale ──
+console.log('\n[Test 43] Cashflow: Cash Sweep rispetta data erogazione (15/04/2027) e frequenza annuale');
+const r43 = run(buildState({
+    inputs: {
+        collectionLagRid: 0, interestRate: 0.045, loanTerm: 15,
+        seniorGracePeriodMonths: 6, fundingDebtDate: '2027-04-15',
+        debtRepaymentFrequency: 'annuale',
+        sweepType: 'pct_cfads', sweepValue: 80, sweepYears: 10
+    },
+    plants: plants32()
+}));
+const mc43 = r43.monthlyCashflow;
+// Mesi 0..15 (Gen 2026 .. Apr 2027, incluso mese di erogazione): nessun servizio debito!
+check('Nessun servizio debito prima e nel mese di erogazione (gen 2026 - apr 2027)',
+    mc43.debtService.slice(0, 16).every(v => Math.abs(v) < 1e-9),
+    `max=${Math.max(...mc43.debtService.slice(0, 16)).toFixed(2)}`);
+// Anno 2 (2028): frequenza annuale -> pagamento concentrato ad aprile 2028 (idx 27), altri mesi 2028 = 0
+const y2Months = Array.from({ length: 12 }, (_, m) => mc43.debtService[24 + m]);
+const y2NonZero = y2Months.filter(v => v > 1e-6).length;
+check('Anno 2 (frequenza annuale): 1 solo pagamento nel 2028 (aprile 2028)',
+    y2NonZero === 1 && mc43.debtService[27] > 0,
+    `nonZero=${y2NonZero} apr2028=${mc43.debtService[27].toFixed(0)}`);
+// Coerenza interessi post-sweep: interessi Y3 nel cashflow < interessi Y2 (grazie all'abbattimento sweep)
+check('Cashflow interessi Y3 < Y2 (riduzione debito per Cash Sweep)',
+    mc43.interest[39] < mc43.interest[27],
+    `intY2=${mc43.interest[27].toFixed(0)} intY3=${mc43.interest[39].toFixed(0)}`);
+
 console.log('\n═══════════════════════════════════');
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);
 process.exit(failed > 0 ? 1 : 0);

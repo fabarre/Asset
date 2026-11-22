@@ -5212,6 +5212,7 @@ function runSensitivityLoop(baseState, config) {
                 // e non gravano sulla cassa operativa della gestione.
                 const interestDated = new Float64Array(totalMonths);
                 const principalDated = new Float64Array(totalMonths);
+                const voluntaryDated = new Float64Array(totalMonths);
                 {
                     const P0 = (funding && funding.debtAmount) || 0;
                     const rate = inputs.interestRate !== undefined ? inputs.interestRate : 0.045;
@@ -5242,6 +5243,46 @@ function runSensitivityLoop(baseState, config) {
                     else if (inputs.debtRepaymentFrequency === 'semestrale') mDebtDated = 2;
                     else if (inputs.debtRepaymentFrequency === 'annuale') mDebtDated = 1;
 
+                    // Pre-alloca il Cash Sweep (ds.principalVoluntary) sui soli mesi utili (>= svcStartIdx)
+                    // rispettando la frequenza di rimborso impostata in FINANZA (mai /12 da gennaio pre-erogazione)
+                    if (P0 > 0 && termYears > 0 && svcStartIdx >= 0 && svcStartIdx < totalMonths) {
+                        const stepM = Math.max(1, Math.round(12 / mDebtDated));
+                        const payMonthsInHorizon = [];
+                        if (mDebtDated < 12) {
+                            const nPer = termYears * mDebtDated;
+                            for (let k = 1; k <= nPer; k++) {
+                                const payIdx = svcStartIdx + k * stepM - 1;
+                                if (payIdx >= totalMonths) break;
+                                payMonthsInHorizon.push(payIdx);
+                            }
+                        }
+                        for (let yi = 0; yi < YEARS; yi++) {
+                            const volY = (ds.principalVoluntary && ds.principalVoluntary[yi + 1]) || 0;
+                            if (volY <= 0) continue;
+                            const yStart = 12 + yi * 12;
+                            const yEnd = yStart + 12;
+                            if (mDebtDated === 12) {
+                                const activeMonths = [];
+                                for (let mIdx = Math.max(yStart, svcStartIdx); mIdx < yEnd; mIdx++) {
+                                    activeMonths.push(mIdx);
+                                }
+                                if (activeMonths.length > 0) {
+                                    const perM = volY / activeMonths.length;
+                                    activeMonths.forEach(mIdx => { voluntaryDated[mIdx] += perM; });
+                                }
+                            } else {
+                                const yearPayMonths = payMonthsInHorizon.filter(idx => idx >= yStart && idx < yEnd);
+                                if (yearPayMonths.length > 0) {
+                                    const perP = volY / yearPayMonths.length;
+                                    yearPayMonths.forEach(mIdx => { voluntaryDated[mIdx] += perP; });
+                                } else if (yEnd - 1 >= svcStartIdx) {
+                                    // Es. Anno 1 con erogazione infra-annuale e prima rata annuale nell'Anno 2: sweep a fine anno (dicembre)
+                                    voluntaryDated[yEnd - 1] += volY;
+                                }
+                            }
+                        }
+                    }
+
                     if (P0 > 0 && termYears > 0 && svcStartIdx >= 0 && svcStartIdx < totalMonths) {
                         if (mDebtDated === 12) {
                             const im = rate / 12;
@@ -5271,6 +5312,10 @@ function runSensitivityLoop(baseState, config) {
                                     prinM = Math.min(prinM, outstanding);
                                     outstanding -= prinM;
                                 }
+                                if (voluntaryDated[i] > 0) {
+                                    voluntaryDated[i] = Math.min(voluntaryDated[i], outstanding);
+                                    outstanding -= voluntaryDated[i];
+                                }
                                 interestDated[i] = intM;
                                 principalDated[i] = prinM;
                             }
@@ -5282,9 +5327,19 @@ function runSensitivityLoop(baseState, config) {
                             const im = rate / mDebtDated;
                             const annuity = im > 0 ? P0 * im / (1 - Math.pow(1 + im, -nAmortPeriods)) : P0 / nAmortPeriods;
                             let outstanding = P0;
+                            let prevPayIdx = svcStartIdx - 1;
                             for (let k = 1; k <= nPeriodsTotal && outstanding > 1e-9; k++) {
                                 const payIdx = svcStartIdx + k * stepM - 1;
                                 if (payIdx >= totalMonths) break;
+
+                                // Applica eventuali sweep caduti tra la scadenza precedente e questa (es. dic Anno 1)
+                                for (let mIdx = prevPayIdx + 1; mIdx < payIdx; mIdx++) {
+                                    if (voluntaryDated[mIdx] > 0) {
+                                        voluntaryDated[mIdx] = Math.min(voluntaryDated[mIdx], outstanding);
+                                        outstanding -= voluntaryDated[mIdx];
+                                    }
+                                }
+                                if (outstanding <= 1e-9) break;
 
                                 const intP = outstanding * im;
                                 let prinP = 0;
@@ -5297,8 +5352,13 @@ function runSensitivityLoop(baseState, config) {
                                     prinP = Math.min(prinP, outstanding);
                                     outstanding -= prinP;
                                 }
+                                if (voluntaryDated[payIdx] > 0) {
+                                    voluntaryDated[payIdx] = Math.min(voluntaryDated[payIdx], outstanding);
+                                    outstanding -= voluntaryDated[payIdx];
+                                }
                                 interestDated[payIdx] = intP;
                                 principalDated[payIdx] = prinP;
+                                prevPayIdx = payIdx;
                             }
                         }
                     }
@@ -5390,9 +5450,9 @@ function runSensitivityLoop(baseState, config) {
                     // (con regole temporali). Nessuna spalmatura fittizia: il cash flow
                     // riflette esclusivamente le uscite reali dichiarate dall'utente.
                     const opex = isYear0 ? 0 : opexEvMonthlyY[yi][m];
-                    // CF11: debito senior datato (erogazione + preammortamento + pro-rata giorni)
+                    // CF11: debito senior datato (erogazione + preammortamento + pro-rata giorni + cash sweep)
                     const interest = interestDated[i];
-                    const principal = principalDated[i] + (isYear0 ? 0 : (ds.principalVoluntary[yi + 1] || 0) / 12);
+                    const principal = principalDated[i] + voluntaryDated[i];
                     const debtSvc = interest + principal;
                     // CF10/CF11: IVA di cassa del mese
                     let vatOut = 0, vatIn = 0, vatRemit = 0;
