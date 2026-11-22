@@ -740,7 +740,12 @@
                                     <button id="mc-view-holding" onclick="setMonthlyView('holding')" class="px-2.5 py-1 text-[10px] font-bold transition-colors" title="Flussi di cassa a livello Holding (SPV − servizio soci/PD − oneri HoldCo)">Holding</button>
                                 </div>
                                 <span id="mc-period-label" class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Anni 1-5 (60 mesi)</span>
-                                <button onclick="downloadMonthlyCashflowCSV()" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[10px] transition-colors" title="Esporta schedule mensile in CSV"><i class="fa-solid fa-file-csv"></i></button>
+                                <button id="btn-export-mc-csv" onclick="downloadMonthlyCashflowCSV()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-lg text-[10px] transition-colors flex items-center space-x-1 cursor-pointer" title="Esporta tabella cashflow completa in CSV">
+                                    <i class="fa-solid fa-file-csv text-sky-400"></i><span>CSV</span>
+                                </button>
+                                <button id="btn-export-mc-excel" onclick="downloadMonthlyCashflowExcel()" class="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-bold rounded-lg text-[10px] transition-colors flex items-center space-x-1 cursor-pointer" title="Esporta tabella cashflow completa in Excel (.xlsx)">
+                                    <i class="fa-solid fa-file-excel text-emerald-400"></i><span>Excel</span>
+                                </button>
                             </div>
                         </div>
                         <div id="mc-shortfall-banner" class="hidden mb-3 px-3 py-2 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-300 text-[11px] font-bold"></div>
@@ -4196,7 +4201,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=166"></script>
+    <script src="./src/main.js?v=167"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

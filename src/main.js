@@ -8349,48 +8349,236 @@
             }
         }
 
-        // CF6: export CSV dello schedule mensile (vista attiva)
+        // Costruisce schema colonne e righe complete (SPV + IVA + Holding) per export CSV/Excel
+        function buildMonthlyCashflowExportData(mc) {
+            const dated = mc.mode === 'dated';
+            const hasHolding = dated && !!mc.holdcoNetCashflow;
+            const roundVal = (v) => Math.round(v || 0);
+
+            const columns = [
+                { key: 'label', header: 'Mese', isText: true, summable: false },
+                ...(dated ? [{ key: 'revenueAccrued', header: 'Ricavi Maturati (€)', summable: true }] : []),
+                { key: 'revenueTotal', header: dated ? 'Ricavi Incassati (€)' : 'Ricavi Tot. (€)', summable: true },
+                { key: 'opex', header: 'OPEX (€)', summable: true },
+                { key: 'taxes', header: 'Imposte (€)', summable: true },
+                ...(dated ? [{ key: 'vatCompensated', header: 'Imposte Compensate IVA F24 (€)', summable: true }] : []),
+                { key: 'debtService', header: 'Serv. Debito (€)', summable: true },
+                ...(dated ? [
+                    { key: 'capexOutflow', header: 'CAPEX (€)', summable: true },
+                    { key: 'fundingInflow', header: 'Funding (€)', summable: true },
+                    { key: 'vatCollected', header: 'IVA Incassata (€)', summable: true },
+                    { key: 'vatPaidToSuppliers', header: 'IVA Pagata (€)', summable: true },
+                    { key: 'vatRemitted', header: 'IVA Versata (€)', summable: true },
+                    { key: 'vatRefundReceived', header: 'IVA Rimborsata (€)', summable: true },
+                    { key: 'vatCreditEnd', header: 'Credito IVA (€)', summable: false },
+                    { key: 'vatCashFlow', header: 'IVA CF (€)', summable: true }
+                ] : []),
+                { key: 'netCashflow', header: 'Net Cashflow SPV (€)', summable: true },
+                { key: 'cashClosing', header: 'Cassa Finale SPV (€)', summable: false },
+                ...(dated ? [{ key: 'fundedCashClosing', header: 'Cassa con Funding SPV (€)', summable: false }] : []),
+                ...(hasHolding ? [
+                    { key: 'holdcoSociService', header: 'Serv. Soci (€)', summable: true },
+                    { key: 'holdcoPdService', header: 'Serv. PD (€)', summable: true },
+                    { key: 'holdcoOtherCosts', header: 'Oneri HoldCo (€)', summable: true },
+                    { key: 'holdcoNetCashflow', header: 'Netto Holding (€)', summable: true },
+                    { key: 'holdcoCashClosing', header: 'Cassa Holding (€)', summable: false }
+                ] : [])
+            ];
+
+            const rows = [];
+            for (let i = 0; i < mc.months.length; i++) {
+                const row = {
+                    label: mc.labels[i],
+                    revenueTotal: roundVal(mc.revenueTotal[i]),
+                    opex: -roundVal(mc.opex[i]),
+                    taxes: -roundVal(mc.taxes[i]),
+                    debtService: -roundVal(mc.debtService[i]),
+                    netCashflow: roundVal(mc.netCashflow[i]),
+                    cashClosing: roundVal(mc.cashClosing[i])
+                };
+                if (dated) {
+                    row.revenueAccrued = roundVal(mc.revenueAccrued[i]);
+                    row.vatCompensated = roundVal(mc.vatCompensated ? mc.vatCompensated[i] : 0);
+                    row.capexOutflow = -roundVal(mc.capexOutflow[i]);
+                    row.fundingInflow = roundVal(mc.fundingInflow[i]);
+                    row.vatCollected = roundVal(mc.vatCollected[i]);
+                    row.vatPaidToSuppliers = -roundVal(mc.vatPaidToSuppliers[i]);
+                    row.vatRemitted = -roundVal(mc.vatRemitted[i]);
+                    row.vatRefundReceived = roundVal(mc.vatRefundReceived ? mc.vatRefundReceived[i] : 0);
+                    row.vatCreditEnd = roundVal(mc.vatCreditEnd[i]);
+                    row.vatCashFlow = roundVal(mc.vatCashFlow[i]);
+                    row.fundedCashClosing = roundVal(mc.fundedCashClosing[i]);
+                }
+                if (hasHolding) {
+                    row.holdcoSociService = -roundVal(mc.holdcoSociService[i]);
+                    row.holdcoPdService = -roundVal(mc.holdcoPdService[i]);
+                    row.holdcoOtherCosts = -roundVal(mc.holdcoOtherCosts[i]);
+                    row.holdcoNetCashflow = roundVal(mc.holdcoNetCashflow[i]);
+                    row.holdcoCashClosing = roundVal(mc.holdcoCashClosing[i]);
+                }
+                rows.push(row);
+            }
+            return { dated, hasHolding, columns, rows };
+        }
+
+        // CF6: export CSV completo dello schedule mensile (tutte le colonne SPV + IVA + Holding)
         window.downloadMonthlyCashflowCSV = function() {
             const mc = State.lastMonthlyCashflow;
             if (!mc || !mc.months || !mc.months.length) { showToast('Nessun cash flow mensile da esportare.', 'warning'); return; }
-            const s = activeMonthlySeries(mc);
-            const dated = mc.mode === 'dated';
-            const num = (v) => String(Math.round(v || 0)).replace('.', '');
-            let csv = 'Cash Flow Mensile (' + (s.holding ? 'Holding' : 'SPV') + ') - ' + new Date().toLocaleString('it-IT') + '\n';
-            if (s.holding) {
-                csv += 'Mese;Flusso SPV;Serv. Soci;Serv. PD;Oneri HoldCo;Netto Holding;Cassa Holding\n';
-                for (let i = 0; i < mc.months.length; i++) {
-                    csv += [mc.labels[i], num(mc.netCashflow[i]), num(mc.holdcoSociService[i]), num(mc.holdcoPdService[i]),
-                        num(mc.holdcoOtherCosts[i]), num(s.net[i]), num(s.closing[i])].join(';') + '\n';
-                }
-            } else if (dated) {
-                csv += 'Mese;Ricavi Maturati;Ricavi Incassati;OPEX;Imposte;Serv. Debito;CAPEX;Funding;IVA Incassata;IVA Pagata;IVA Versata;IVA Rimborsata;Credito IVA;IVA CF;Net Cashflow;Cassa Finale;Cassa con Funding\n';
-                for (let i = 0; i < mc.months.length; i++) {
-                    csv += [mc.labels[i], num(mc.revenueAccrued[i]), num(mc.revenueTotal[i]), num(mc.opex[i]), num(mc.taxes[i]),
-                        num(mc.debtService[i]), num(mc.capexOutflow[i]), num(mc.fundingInflow[i]),
-                        num(mc.vatCollected[i]), num(mc.vatPaidToSuppliers[i]), num(mc.vatRemitted[i]),
-                        num((mc.vatRefundReceived && mc.vatRefundReceived[i]) || 0),
-                        num(mc.vatCreditEnd[i]), num(mc.vatCashFlow[i]),
-                        num(s.net[i]), num(s.closing[i]), num(mc.fundedCashClosing[i])].join(';') + '\n';
-                }
-            } else {
-                csv += 'Mese;Ricavi Tot.;OPEX;Imposte;Serv. Debito;Net Cashflow;Cassa Finale\n';
-                for (let i = 0; i < mc.months.length; i++) {
-                    csv += [mc.labels[i], num(mc.revenueTotal[i]), num(mc.opex[i]), num(mc.taxes[i]),
-                        num(mc.debtService[i]), num(s.net[i]), num(s.closing[i])].join(';') + '\n';
-                }
+            const { columns, rows } = buildMonthlyCashflowExportData(mc);
+            let csv = 'Cash Flow Mensile Completo - ' + new Date().toLocaleString('it-IT') + '\n';
+            csv += columns.map(c => c.header).join(';') + '\n';
+            for (const row of rows) {
+                csv += columns.map(c => c.isText ? `"${String(row[c.key] || '').replace(/"/g, '""')}"` : String(row[c.key] ?? 0)).join(';') + '\n';
             }
-            const blob = new Blob(['' + csv], { type: 'text/csv;charset=utf-8' });
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'CashFlow_Mensile_' + (s.holding ? 'Holding' : 'SPV') + '.csv';
+            a.download = 'CashFlow_Mensile_Completo.csv';
             document.body.appendChild(a);
             a.click();
             a.remove();
             setTimeout(() => URL.revokeObjectURL(url), 2000);
-            Audit.log('monthlycashflow.export', s.holding ? 'holding' : 'spv');
-            showToast('Schedule mensile esportato.', 'success');
+            Audit.log('monthlycashflow.export_csv', `${rows.length} mesi`);
+            showToast('Cashflow mensile completo esportato in CSV.', 'success');
+        };
+
+        // Export Excel (.xlsx) completo dello schedule mensile (tutte le colonne SPV + IVA + Holding + KPI)
+        window.downloadMonthlyCashflowExcel = async function() {
+            const mc = State.lastMonthlyCashflow;
+            if (!mc || !mc.months || !mc.months.length) { showToast('Nessun cash flow mensile da esportare.', 'warning'); return; }
+            if (typeof ExcelJS === 'undefined') {
+                showToast('Libreria ExcelJS non disponibile.', 'error');
+                return;
+            }
+            try {
+                const { dated, columns, rows } = buildMonthlyCashflowExportData(mc);
+                const workbook = new ExcelJS.Workbook();
+                workbook.creator = 'AntiGravity Solar & BESS Simulator';
+                workbook.created = new Date();
+
+                const sheet = workbook.addWorksheet('Cash Flow Completo', {
+                    views: [{ state: 'frozen', xSplit: 1, ySplit: 1, showGridLines: true }]
+                });
+
+                const numFmt = '#,##0;-#,##0;"-"';
+                sheet.columns = columns.map(c => ({
+                    header: c.header,
+                    key: c.key,
+                    width: Math.max(c.isText ? 14 : 16, c.header.length + 3)
+                }));
+
+                const hdrRow = sheet.getRow(1);
+                hdrRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+                hdrRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+                hdrRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                hdrRow.height = 28;
+
+                rows.forEach((r, idx) => {
+                    const excelRow = sheet.addRow(r);
+                    const isNegCash = (dated ? r.fundedCashClosing : r.cashClosing) < 0;
+                    excelRow.eachCell((cell, colNumber) => {
+                        const colDef = columns[colNumber - 1];
+                        if (!colDef.isText) {
+                            cell.numFmt = numFmt;
+                            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                        } else {
+                            cell.font = { bold: true, size: 10 };
+                            cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                        }
+                        if (isNegCash) {
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+                        } else if (idx % 2 === 1) {
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+                        }
+                    });
+                });
+
+                // Riga Totale con formule SUM dinamiche sulle colonne di flusso
+                const firstDataRow = 2;
+                const lastDataRow = rows.length + 1;
+                const totalRowObj = { label: 'TOTALE' };
+                const totalRow = sheet.addRow(totalRowObj);
+                totalRow.font = { bold: true, size: 10 };
+                totalRow.eachCell((cell, colNumber) => {
+                    const colDef = columns[colNumber - 1];
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+                    cell.border = { top: { style: 'medium', color: { argb: 'FF334155' } } };
+                    if (colNumber === 1) {
+                        cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                    } else if (colDef && colDef.summable) {
+                        const colLetter = sheet.getColumn(colNumber).letter;
+                        const sumVal = rows.reduce((acc, r) => acc + (r[colDef.key] || 0), 0);
+                        cell.value = { formula: `SUM(${colLetter}${firstDataRow}:${colLetter}${lastDataRow})`, result: sumVal };
+                        cell.numFmt = numFmt;
+                        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                    } else {
+                        cell.value = null;
+                    }
+                });
+
+                // Foglio 2: Riepilogo KPI
+                const kpiSheet = workbook.addWorksheet('Riepilogo KPI');
+                kpiSheet.columns = [
+                    { header: 'Indicatore', key: 'label', width: 38 },
+                    { header: 'Valore', key: 'value', width: 22 }
+                ];
+                kpiSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+                kpiSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+
+                let minClosing = Infinity, minIdx = -1, negNet = 0, negCash = 0;
+                mc.cashClosing.forEach((c, i) => {
+                    if (c < minClosing) { minClosing = c; minIdx = i; }
+                    if (c < 0) negCash++;
+                });
+                mc.netCashflow.forEach(v => { if (v < 0) negNet++; });
+                if (!isFinite(minClosing)) minClosing = 0;
+
+                const kpiRows = [
+                    { label: 'Periodo', value: dated ? `Anno 0 + Anni 1-5 (${mc.months.length} mesi) · Àncora ${mc.anchorYear}` : `Anni 1-5 (${mc.months.length} mesi)` },
+                    { label: 'Cassa Minima SPV (senza funding) (€)', value: Math.round(minClosing), fmt: numFmt },
+                    { label: 'Cassa Minima SPV (con funding) (€)', value: Math.round(mc.fundedMinCashClosing !== undefined ? mc.fundedMinCashClosing : minClosing), fmt: numFmt },
+                    { label: 'XIRR Equity (datato) (%)', value: mc.datedXirr !== undefined ? Number((mc.datedXirr / 100).toFixed(4)) : 0, fmt: '0.00%' },
+                    { label: 'Mese Cassa Minima', value: minIdx >= 0 ? (mc.labels[minIdx] || `Mese ${minIdx + 1}`) : '—' },
+                    { label: 'Mesi con Net Cashflow < 0', value: negNet, fmt: '#,##0' },
+                    { label: 'Mesi con Cassa Finale < 0', value: negCash, fmt: '#,##0' }
+                ];
+                if (dated && mc.vatEnabled) {
+                    const totRef = mc.vatRefundReceived ? mc.vatRefundReceived.reduce((a, b) => a + (b || 0), 0) : 0;
+                    kpiRows.push({ label: 'Picco Credito IVA (€)', value: Math.round(mc.vatMaxCredit || 0), fmt: numFmt });
+                    kpiRows.push({ label: 'Totale Rimborsi IVA Ricevuti (€)', value: Math.round(totRef), fmt: numFmt });
+                    kpiRows.push({ label: 'Effetto Netto IVA Cumulato (€)', value: Math.round(mc.vatNetCumulative || 0), fmt: numFmt });
+                }
+                kpiRows.forEach(kr => {
+                    const row = kpiSheet.addRow({ label: kr.label, value: kr.value });
+                    if (kr.fmt) {
+                        const valCell = row.getCell(2);
+                        valCell.numFmt = kr.fmt;
+                        valCell.alignment = { horizontal: 'right' };
+                    }
+                });
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                if (typeof saveAs === 'function') {
+                    saveAs(blob, 'CashFlow_Mensile_Completo.xlsx');
+                } else {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'CashFlow_Mensile_Completo.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    setTimeout(() => URL.revokeObjectURL(url), 2000);
+                }
+                Audit.log('monthlycashflow.export_excel', `${rows.length} mesi`);
+                showToast('Cashflow mensile completo esportato in Excel.', 'success');
+            } catch (err) {
+                console.error('Errore export Excel cashflow mensile:', err);
+                showToast('Errore durante la generazione del file Excel Cashflow.', 'error');
+            }
         };
 
         function renderChart(matrix, debtSchedule) {
