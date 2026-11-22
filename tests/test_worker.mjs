@@ -105,7 +105,7 @@ check('EBITDA senza NaN', !anyNaN(r1.matrix.ebitda));
 check('Imposte correnti senza NaN', !anyNaN(r1.matrix.currentTaxesSpv));
 check('IRAP anno 1 > 0 (motore fiscale attivo)', r1.matrix.irapTaxSpv[1] > 0, `val=${r1.matrix.irapTaxSpv[1]}`);
 check('IRES > 0 dopo assorbimento NOL (anno >= 12)', r1.matrix.iresTaxSpv.slice(12).some(v => v > 0),
-    `ires=${r1.matrix.iresTaxSpv.map(v=>v.toFixed(0)).join(',')}`);
+    `ires=${r1.matrix.iresTaxSpv.map(v => v.toFixed(0)).join(',')}`);
 check('NOL riportata coerente (Art. 84)', r1.matrix.taxLossCF.every(v => v >= 0));
 check('Utile netto senza NaN', !anyNaN(r1.matrix.netProfitSpv));
 check('CFADS senza NaN', !anyNaN(r1.matrix.cfads));
@@ -186,7 +186,7 @@ const r8 = run(buildState({ inputs: { sculptingEnabled: true, targetDscr: 1.30 }
 // Anni 1..loanTerm-1: DSCR = target; anno loanTerm: balloon -> DSCR < target ammesso
 const dscrYearsSculpt = r8.debtSchedule.dscr.slice(1, 11).filter(v => v > 0);
 check('DSCR ≈ target 1.30x negli anni di ammortamento', dscrYearsSculpt.every(v => Math.abs(v - 1.30) < 0.05),
-    `dscr=${dscrYearsSculpt.map(v=>v.toFixed(2)).join(',')}`);
+    `dscr=${dscrYearsSculpt.map(v => v.toFixed(2)).join(',')}`);
 check('Debito rimborsato entro loanTerm (balloon finale)', r8.debtSchedule.endingBalance[11] <= 1e-6,
     `residuoY11=${r8.debtSchedule.endingBalance[11]}`);
 
@@ -249,7 +249,7 @@ if (tornMsg && tornMsg.status === 'tornado_success') {
     const t = tornMsg.results;
     check('6 variabili valutate', t.rows.length === 6, `rows=${t.rows.length}`);
     check('IRR base finito', isFinite(t.baseIrr), `baseIrr=${t.baseIrr}`);
-    check('Ordinamento per impatto decrescente', t.rows.every((r, i) => i === 0 || Math.abs(t.rows[i-1].irrUp - t.rows[i-1].irrDown) >= Math.abs(r.irrUp - r.irrDown) - 1e-9));
+    check('Ordinamento per impatto decrescente', t.rows.every((r, i) => i === 0 || Math.abs(t.rows[i - 1].irrUp - t.rows[i - 1].irrDown) >= Math.abs(r.irrUp - r.irrDown) - 1e-9));
     check('PUN ha impatto non nullo', Math.abs(t.rows.find(r => r.key === 'pun').irrUp - t.rows.find(r => r.key === 'pun').irrDown) > 0.001);
     check('Tasso debito (ex euribor) ha impatto non nullo', Math.abs(t.rows.find(r => r.key === 'interestRate').irrUp - t.rows.find(r => r.key === 'interestRate').irrDown) > 0.001,
         `up=${t.rows.find(r => r.key === 'interestRate').irrUp} down=${t.rows.find(r => r.key === 'interestRate').irrDown}`);
@@ -285,10 +285,12 @@ check('plantsMetrics: 2 impianti con produzione coerente', r14.plantsMetrics.len
 console.log('\n[Test 15] BRP: fee dinamiche 2→1→0 €/MWh applicate per anno');
 const gen15 = sandbox.generateDefaultSolarProfile(8, 1300);
 const genKwh15 = sum14(gen15);
-const r15 = run(buildState({ plant: {
-    marketType: 'brp', brpFee1: 2, brpFee1Months: 18, brpFee2: 1, brpFee2Months: 6, brpFee3: 0,
-    degradeRidPct: 0, ...plantNoBess
-} }));
+const r15 = run(buildState({
+    plant: {
+        marketType: 'brp', brpFee1: 2, brpFee1Months: 18, brpFee2: 1, brpFee2Months: 6, brpFee3: 0,
+        degradeRidPct: 0, ...plantNoBess
+    }
+}));
 check('Anno 1: ricavi RID con fee1=2 (±1%)', Math.abs(r15.matrix.revenueRid[1] - genKwh15 * 0.102) / (genKwh15 * 0.102) < 0.01,
     `rev=${r15.matrix.revenueRid[1].toFixed(0)} atteso=${(genKwh15 * 0.102).toFixed(0)}`);
 const rev15y2 = r15.matrix.revenueRid[2], rev15y3 = r15.matrix.revenueRid[3];
@@ -416,11 +418,13 @@ const mainLossSrc = extractFn(mainSrc, 'resolveGridLosses');
 const workerLossSrc = extractFn(fs.readFileSync(workerPath, 'utf8'), 'resolveGridLosses');
 check('resolveGridLosses presente in main.js e worker', !!mainLossSrc && !!workerLossSrc);
 if (mainLossSrc && workerLossSrc) {
-    const shim = { inputs: {
-        ridLossInjectBt: 1.1, ridLossInjectMt: 2.2, ridLossInjectAt: 3.3,
-        ridLossWithdrawBt: 4.4, ridLossWithdrawMt: 5.5, ridLossWithdrawAt: 6.6,
-        cerLossCprBt: 7.7, cerLossCprMt: 8.8, cerLossCprAt: 9.9
-    } };
+    const shim = {
+        inputs: {
+            ridLossInjectBt: 1.1, ridLossInjectMt: 2.2, ridLossInjectAt: 3.3,
+            ridLossWithdrawBt: 4.4, ridLossWithdrawMt: 5.5, ridLossWithdrawAt: 6.6,
+            cerLossCprBt: 7.7, cerLossCprMt: 8.8, cerLossCprAt: 9.9
+        }
+    };
     const ctxMainLoss = vm.createContext({ State: shim, String });
     const ctxWorkerLoss = vm.createContext({ State: shim, String });
     const mainLossFn = vm.runInContext('(' + mainLossSrc + ')', ctxMainLoss);
@@ -769,7 +773,7 @@ check('Eventi senza regola = sempre: attivi ogni anno nel loro mese', (() => {
     const r32s = run(buildState({ inputs: { collectionLagRid: 0 }, plants: plants32() }), null,
         { pA: [{ month: 3, amount: 30000, label: 'Sicurezza' }] });
     return Math.abs(r32s.monthlyCashflow.opex[14] - 30000) < 1e-6 &&
-           Math.abs(r32s.monthlyCashflow.opex[26] - 30000) < 1e-6;
+        Math.abs(r32s.monthlyCashflow.opex[26] - 30000) < 1e-6;
 })());
 
 // ── Test 33: IVA sui ricavi per regime — reverse charge 0%, RID 22%, legacy fallback (CF11) ──
@@ -875,7 +879,7 @@ check('PD feb-2027: rata costante sul capitale residuo', (() => {
     const intGen = 600000 * 0.08 * 43 / 360; // dic-20 → gen-31 = 12+31 giorni
     const outGen = 600000 - (annuity36 - intGen);
     return Math.abs(mc36.pdService[13] - annuity36) < 1e-3 &&
-           Math.abs(mc36.holdcoPdService[13] - annuity36) < 1e-3 && outGen > 0;
+        Math.abs(mc36.holdcoPdService[13] - annuity36) < 1e-3 && outGen > 0;
 })());
 check('PD: interessi primo periodo > annuity → pagati solo interessi (capitale slitta)', (() => {
     const r36s = run(buildState({
@@ -904,14 +908,18 @@ check('PD bullet_exit: nessun esborso in orizzonte (PIK fino a exit anno 20)', (
 
 // ── Test 37: gli esborsi datati coprono l'intero budget CAPEX, terreni inclusi (CF11) ──
 console.log('\n[Test 37] Esborso Terreno datato: nessun extra duplicato al COD');
-const capexPay37 = { pA: [
-    { date: '2026-10-15', amount: 100000, label: 'Terreno' },
-    { date: '2027-05-15', amount: 700000, label: 'EPC FV' }
-] };
+const capexPay37 = {
+    pA: [
+        { date: '2026-10-15', amount: 100000, label: 'Terreno' },
+        { date: '2027-05-15', amount: 700000, label: 'EPC FV' }
+    ]
+};
 const r37 = run(buildState({
     inputs: { collectionLagRid: 0, constructionMonths: 0 },
-    plants: [{ ...plantNoBess24, id: 'pA', name: 'Impianto A', capacity: 1000, capex: 700, opex: 20000,
-        generation: gen24a, codDate: '2027-05-15', landType: 'acquisto', landCost: 100000 }]
+    plants: [{
+        ...plantNoBess24, id: 'pA', name: 'Impianto A', capacity: 1000, capex: 700, opex: 20000,
+        generation: gen24a, codDate: '2027-05-15', landType: 'acquisto', landCost: 100000
+    }]
 }), capexPay37, null);
 const mc37 = r37.monthlyCashflow;
 check('Terreno datato ott-2026 in cassa', Math.abs(mc37.capexOutflow[9] - 100000) < 1e-6, `got=${mc37.capexOutflow[9]}`);
@@ -947,8 +955,8 @@ const r39a = run(buildState({
 const m39a = r39a.matrix;
 const ds39a = r39a.debtSchedule;
 check('Anno 0: Interessi a 0 (IDC capitalizzati)', m39a.interest[0] === 0);
-check('Anno 1: Interessi pro-rata post-COD (ca. metà anno, 184/365)', Math.abs(m39a.interest[1] - (r39a.debtAmount * 0.045 * (184/365))) < 1e-2,
-    `got=${m39a.interest[1]} exp=${(r39a.debtAmount * 0.045 * (184/365)).toFixed(2)}`);
+check('Anno 1: Interessi pro-rata post-COD (ca. metà anno, 184/365)', Math.abs(m39a.interest[1] - (r39a.debtAmount * 0.045 * (184 / 365))) < 1e-2,
+    `got=${m39a.interest[1]} exp=${(r39a.debtAmount * 0.045 * (184 / 365)).toFixed(2)}`);
 check('Anno 1 vs Anno 2: Interessi Anno 1 != Interessi Anno 2 (Anno 1 < Anno 2)', m39a.interest[1] < m39a.interest[2] * 0.6);
 check('Anno 1: Quota capitale = 0 o quasi 0 (coperta dal preammortamento 6m)', ds39a.principalScheduled[1] < 2000);
 check('Anno 2: Interessi 12 mesi interi sul debito residuo', Math.abs(m39a.interest[2] - (ds39a.beginningBalance[2] * 0.045)) < 1e-2);
@@ -1262,6 +1270,37 @@ check('Dic 2026: imponibile = 150.000, IVA = 22.000 (22% su EPC, 0% su Terreno),
 check('Apr 2027: solo voce di aprile (200.000 + 44.000 IVA), non cumulativa con dic 2026',
     apr27.length === 1 && Math.abs(apr27[0].amount - 200000) < 1 && Math.abs(apr27[0].vatAmount - 44000) < 1 && Math.abs(apr27[0].grossAmount - 244000) < 1,
     `apr27=${JSON.stringify(apr27)}`);
+
+// ── Test 45: Dettaglio OPEX mensile non cumulativo (imponibile + IVA + totale) ──
+console.log('\n[Test 45] Cashflow: opexBreakdown mensile dettagliato (non cumulativo) con imponibile, IVA e totale');
+const p45 = plants32();
+const opex45 = {
+    [p45[0].id]: [
+        { month: 6, amount: 20000, label: 'O&M FV', rule: 'sempre' },
+        { month: 6, amount: 5000, label: 'Assicurazione', rule: 'sempre' },
+        { month: 12, amount: 12000, label: 'Asset Management', rule: 'sempre' }
+    ]
+};
+const r45 = run(buildState({
+    inputs: {
+        vatEnabled: true, vatOpexOmFv: 22, vatOpexInsurance: 0, vatOpexAssetMgmt: 22,
+        fundingEquityDate: '2026-12-01', fundingDebtDate: '2027-04-01'
+    },
+    plants: p45
+}), null, opex45);
+const mc45 = r45.monthlyCashflow;
+const giu27 = mc45.opexBreakdown[17] || []; // idx 17 = Giu 2027 (Anno 1)
+const dic27 = mc45.opexBreakdown[23] || []; // idx 23 = Dic 2027 (Anno 1)
+check('Giu 2027: 2 voci distinte non cumulative (O&M FV + Assicurazione)', giu27.length === 2, `len=${giu27.length}`);
+const giuNet = giu27.reduce((s, it) => s + it.amount, 0);
+const giuVat = giu27.reduce((s, it) => s + it.vatAmount, 0);
+const giuGross = giu27.reduce((s, it) => s + it.grossAmount, 0);
+check('Giu 2027: imponibile = 25.000, IVA = 4.400 (22% O&M, 0% Assic.), lordo = 29.400',
+    Math.abs(giuNet - 25000) < 1 && Math.abs(giuVat - 4400) < 1 && Math.abs(giuGross - 29400) < 1,
+    `net=${giuNet} vat=${giuVat} gross=${giuGross}`);
+check('Dic 2027: solo voce di dicembre (12.000 + 2.640 IVA), non cumulativa con giu 2027',
+    dic27.length === 1 && Math.abs(dic27[0].amount - 12000) < 1 && Math.abs(dic27[0].vatAmount - 2640) < 1 && Math.abs(dic27[0].grossAmount - 14640) < 1,
+    `dic27=${JSON.stringify(dic27)}`);
 
 console.log('\n═══════════════════════════════════');
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);

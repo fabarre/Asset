@@ -3671,6 +3671,26 @@ async function exportPnlToExcel(options = {}) {
                 }
                 if (noteText) row.getCell(7).note = noteText;
             }
+            if (opexVal !== 0) {
+                let noteText = (typeof window !== 'undefined' && typeof window.formatOpexBreakdownNote === 'function')
+                    ? window.formatOpexBreakdownNote(mc, i)
+                    : '';
+                if (!noteText && mc.opexBreakdown && mc.opexBreakdown[i] && mc.opexBreakdown[i].length > 0) {
+                    const fmtN = (v) => '€ ' + new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 }).format(Math.round(v || 0));
+                    const items = mc.opexBreakdown[i];
+                    let totN = 0, totV = 0, totG = 0;
+                    const lines = [`DETTAGLIO OPEX — ${label}`];
+                    items.forEach(it => {
+                        const a = Number(it.amount) || 0, v = Number(it.vatAmount) || 0, g = Number(it.grossAmount) || (a + v);
+                        totN += a; totV += v; totG += g;
+                        lines.push(`• ${it.plantName || 'Impianto'} | ${it.label || 'OPEX'}: Imponibile ${fmtN(a)} | IVA ${fmtN(v)} | Totale ${fmtN(g)}`);
+                    });
+                    lines.push('----------------------------------------');
+                    lines.push(`TOTALE MESE (${items.length} ${items.length === 1 ? 'voce' : 'voci'}): Imponibile ${fmtN(totN)} | IVA ${fmtN(totV)} | Totale ${fmtN(totG)}`);
+                    noteText = lines.join('\n');
+                }
+                if (noteText) row.getCell(4).note = noteText;
+            }
 
             prevMonthRowNum = currentRow;
 

@@ -7879,15 +7879,19 @@
             return months;
         };
 
-        function getMonthlyCapexDetailItems(mc, monthIdx) {
-            const rawItems = (mc && mc.capexBreakdown && mc.capexBreakdown[monthIdx]) || [];
+        function getMonthlyCostDetailItems(mc, monthIdx, kind) {
+            const isOpex = kind === 'opex';
+            const breakdown = isOpex ? (mc && mc.opexBreakdown) : (mc && mc.capexBreakdown);
+            const outflowArr = isOpex ? (mc && mc.opex) : (mc && mc.capexOutflow);
+            const fallbackLabel = isOpex ? 'OPEX' : 'CAPEX';
+            const rawItems = (breakdown && breakdown[monthIdx]) || [];
             const items = [];
             let totalNet = 0, totalVat = 0, totalGross = 0;
 
             if (rawItems.length > 0) {
                 rawItems.forEach(it => {
                     const pName = (it.plantName || 'Portafoglio').trim();
-                    const lbl = (it.label || 'CAPEX').trim();
+                    const lbl = (it.label || fallbackLabel).trim();
                     const amt = parseFloat(it.amount) || 0;
                     const vat = parseFloat(it.vatAmount) || 0;
                     const gross = (it.grossAmount !== undefined) ? (parseFloat(it.grossAmount) || (amt + vat)) : (amt + vat);
@@ -7897,9 +7901,9 @@
                     totalVat += vat;
                     totalGross += gross;
                 });
-            } else if (mc && mc.capexOutflow && mc.capexOutflow[monthIdx] > 0) {
-                const net = mc.capexOutflow[monthIdx];
-                items.push({ plantName: 'Portafoglio', label: 'CAPEX', amount: net, vatAmount: 0, grossAmount: net });
+            } else if (outflowArr && outflowArr[monthIdx] > 0) {
+                const net = outflowArr[monthIdx];
+                items.push({ plantName: 'Portafoglio', label: fallbackLabel, amount: net, vatAmount: 0, grossAmount: net });
                 totalNet = net;
                 totalGross = net;
             }
@@ -7912,37 +7916,58 @@
             return { items, totalNet, totalVat, totalGross };
         }
 
-        window.formatCapexBreakdownNote = function(mc, monthIdx) {
-            if (!mc || !mc.capexOutflow || !(mc.capexOutflow[monthIdx] > 0)) return '';
+        function formatMonthlyCostNote(mc, monthIdx, kind) {
+            const isOpex = kind === 'opex';
+            const outflowArr = isOpex ? (mc && mc.opex) : (mc && mc.capexOutflow);
+            if (!mc || !outflowArr || !(outflowArr[monthIdx] > 0)) return '';
             const monthLabel = (mc.labels && mc.labels[monthIdx]) || `Mese ${monthIdx + 1}`;
-            const { items, totalNet, totalVat, totalGross } = getMonthlyCapexDetailItems(mc, monthIdx);
+            const { items, totalNet, totalVat, totalGross } = getMonthlyCostDetailItems(mc, monthIdx, kind);
             const fmtNoteEur = (v) => '€ ' + new Intl.NumberFormat('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(v || 0));
-            const lines = [`DETTAGLIO CAPEX — ${monthLabel}`];
+            const title = isOpex ? 'DETTAGLIO OPEX' : 'DETTAGLIO CAPEX';
+            const lines = [`${title} — ${monthLabel}`];
             items.forEach(it => {
                 lines.push(`• ${it.plantName} | ${it.label}: Imponibile ${fmtNoteEur(it.amount)} | IVA ${fmtNoteEur(it.vatAmount)} | Totale ${fmtNoteEur(it.grossAmount)}`);
             });
             lines.push('----------------------------------------');
             lines.push(`TOTALE MESE (${items.length} ${items.length === 1 ? 'voce' : 'voci'}): Imponibile ${fmtNoteEur(totalNet)} | IVA ${fmtNoteEur(totalVat)} | Totale ${fmtNoteEur(totalGross)}`);
             return lines.join('\n');
+        }
+
+        window.formatCapexBreakdownNote = function(mc, monthIdx) {
+            return formatMonthlyCostNote(mc, monthIdx, 'capex');
+        };
+        window.formatOpexBreakdownNote = function(mc, monthIdx) {
+            return formatMonthlyCostNote(mc, monthIdx, 'opex');
         };
 
-        function showMonthlyCapexPopover(cell, monthIdx) {
+        function showMonthlyCostPopover(cell, monthIdx, kind) {
             const popover = document.getElementById('mc-capex-popover');
             if (!popover || !cell) return;
             const mc = State.lastMonthlyCashflow;
-            if (!mc || !mc.capexOutflow || !(mc.capexOutflow[monthIdx] > 0)) {
+            const isOpex = kind === 'opex';
+            const outflowArr = isOpex ? (mc && mc.opex) : (mc && mc.capexOutflow);
+            if (!mc || !outflowArr || !(outflowArr[monthIdx] > 0)) {
                 hideMonthlyCapexPopover();
                 return;
             }
 
-            const { items, totalNet, totalVat, totalGross } = getMonthlyCapexDetailItems(mc, monthIdx);
+            const { items, totalNet, totalVat, totalGross } = getMonthlyCostDetailItems(mc, monthIdx, kind);
             const monthLabel = (mc.labels && mc.labels[monthIdx]) || `Mese ${monthIdx + 1}`;
+            const accentText = isOpex ? 'text-sky-300' : 'text-orange-300';
+            const badgeCls = isOpex
+                ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
+                : 'text-orange-400 bg-orange-500/10 border-orange-500/20';
+            const iconCls = isOpex ? 'fa-solid fa-wrench text-sky-400' : 'fa-solid fa-layer-group text-orange-400';
+            const badgeText = isOpex ? 'Dettaglio OPEX' : 'Dettaglio CAPEX';
+
+            popover.classList.toggle('border-orange-500/40', !isOpex);
+            popover.classList.toggle('border-sky-500/40', isOpex);
 
             const rowsHtml = items.map(it => `
                 <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors">
                     <td class="py-1.5 pr-2.5 font-semibold text-slate-100 whitespace-nowrap">${escapeHtml(it.plantName)}</td>
                     <td class="py-1.5 pr-2.5 text-slate-300 text-[10px] whitespace-nowrap">${escapeHtml(it.label)}</td>
-                    <td class="py-1.5 pr-2.5 text-right font-mono text-orange-300 whitespace-nowrap">${_fmtE(it.amount)}</td>
+                    <td class="py-1.5 pr-2.5 text-right font-mono ${accentText} whitespace-nowrap">${_fmtE(it.amount)}</td>
                     <td class="py-1.5 pr-2.5 text-right font-mono text-violet-300 whitespace-nowrap">${_fmtE(it.vatAmount)}</td>
                     <td class="py-1.5 text-right font-mono text-slate-100 font-semibold whitespace-nowrap">${_fmtE(it.grossAmount)}</td>
                 </tr>
@@ -7951,10 +7976,10 @@
             popover.innerHTML = `
                 <div class="flex items-center justify-between border-b border-slate-700/80 pb-1.5 mb-2 gap-3">
                     <div class="flex items-center space-x-1.5">
-                        <i class="fa-solid fa-layer-group text-orange-400 text-xs"></i>
+                        <i class="${iconCls} text-xs"></i>
                         <span class="font-bold text-white text-xs">${escapeHtml(monthLabel)}</span>
                     </div>
-                    <span class="text-[9px] uppercase tracking-wider font-bold text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded border border-orange-500/20 whitespace-nowrap">Dettaglio CAPEX</span>
+                    <span class="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border whitespace-nowrap ${badgeCls}">${badgeText}</span>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-[10px] border-collapse">
@@ -7974,7 +7999,7 @@
                             <tr class="border-t border-slate-700 font-bold text-slate-200">
                                 <td class="pt-1.5 pr-2.5 text-[10px]">Totale Mese</td>
                                 <td class="pt-1.5 pr-2.5 text-[9px] text-slate-400 font-normal">${items.length} ${items.length === 1 ? 'voce' : 'voci'}</td>
-                                <td class="pt-1.5 pr-2.5 text-right font-mono text-orange-300 text-[11px] font-black">${_fmtE(totalNet)}</td>
+                                <td class="pt-1.5 pr-2.5 text-right font-mono ${accentText} text-[11px] font-black">${_fmtE(totalNet)}</td>
                                 <td class="pt-1.5 pr-2.5 text-right font-mono text-violet-300 text-[11px] font-black">${_fmtE(totalVat)}</td>
                                 <td class="pt-1.5 text-right font-mono text-white text-[11px] font-black">${_fmtE(totalGross)}</td>
                             </tr>
@@ -8255,7 +8280,7 @@
                             <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono text-slate-500">${fmtDec(mc.revenueAccrued[i], 0)}</td>` : ''}
                             <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
-                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.opex[i], 0)}</td>
+                            <td ${dated ? `data-mc-opex-idx="${i}"` : ''} class="px-2 py-1.5 text-right font-mono ${dated && mc.opex[i] > 0 ? 'text-sky-300 font-semibold cursor-pointer hover:bg-sky-500/20 hover:text-sky-200 underline decoration-dotted decoration-sky-500/40 underline-offset-2 transition-colors' : 'text-slate-400'}">${fmtDec(-mc.opex[i], 0)}</td>
                             ${(mc.vatCompensated && mc.vatCompensated[i] > 0) ?
                                 `<td class="px-2 py-1.5 text-right font-mono ${mc.taxes[i] === 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400'}" title="Imposte P&L: € ${fmtDec(mc.taxes[i] + mc.vatCompensated[i], 0)} compensate con Credito IVA (F24) per € ${fmtDec(mc.vatCompensated[i], 0)} — Uscita effettiva di cassa: € ${fmtDec(mc.taxes[i], 0)}">${fmtDec(-mc.taxes[i], 0)} <span class="text-[8px] text-emerald-300 font-bold ml-0.5">(${mc.taxes[i] === 0 ? 'comp.' : 'part. comp.'})</span></td>` :
                                 `<td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.taxes[i], 0)}</td>`}
@@ -8270,7 +8295,7 @@
                             <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
                             <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
                             ${dated ? `<td data-mc-capex-idx="${i}" class="px-2 py-1.5 text-right font-mono ${mc.capexOutflow[i] > 0 ? 'text-orange-400 font-semibold cursor-pointer hover:bg-orange-500/20 hover:text-orange-300 underline decoration-dotted decoration-orange-500/40 underline-offset-2 transition-colors' : 'text-slate-600'}">${fmtDec(-mc.capexOutflow[i], 0)}</td>` : ''}
-                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.opex[i], 0)}</td>
+                            <td ${dated ? `data-mc-opex-idx="${i}"` : ''} class="px-2 py-1.5 text-right font-mono ${dated && mc.opex[i] > 0 ? 'text-sky-300 font-semibold cursor-pointer hover:bg-sky-500/20 hover:text-sky-200 underline decoration-dotted decoration-sky-500/40 underline-offset-2 transition-colors' : 'text-slate-400'}">${fmtDec(-mc.opex[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono ${mc.vatCollected[i] > 0 ? 'text-emerald-400' : 'text-slate-600'}">${fmtDec(mc.vatCollected[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono ${mc.vatPaidToSuppliers[i] > 0 ? 'text-orange-400' : 'text-slate-600'}">${fmtDec(-mc.vatPaidToSuppliers[i], 0)}</td>
                             <td class="px-2 py-1.5 text-right font-mono ${mc.vatRemitted[i] > 0 ? 'text-rose-400' : 'text-slate-600'}">${fmtDec(-mc.vatRemitted[i], 0)}</td>
@@ -8284,7 +8309,7 @@
                             <td class="px-2 py-1.5 text-slate-300 font-bold whitespace-nowrap">${mc.labels[i]}</td>
                             ${dated ? `<td class="px-2 py-1.5 text-right font-mono text-slate-500">${fmtDec(mc.revenueAccrued[i], 0)}</td>` : ''}
                             <td class="px-2 py-1.5 text-right font-mono text-slate-300">${fmtDec(mc.revenueTotal[i], 0)}</td>
-                            <td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.opex[i], 0)}</td>
+                            <td ${dated ? `data-mc-opex-idx="${i}"` : ''} class="px-2 py-1.5 text-right font-mono ${dated && mc.opex[i] > 0 ? 'text-sky-300 font-semibold cursor-pointer hover:bg-sky-500/20 hover:text-sky-200 underline decoration-dotted decoration-sky-500/40 underline-offset-2 transition-colors' : 'text-slate-400'}">${fmtDec(-mc.opex[i], 0)}</td>
                             ${(mc.vatCompensated && mc.vatCompensated[i] > 0) ?
                                 `<td class="px-2 py-1.5 text-right font-mono ${mc.taxes[i] === 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400'}" title="Imposte P&L: € ${fmtDec(mc.taxes[i] + mc.vatCompensated[i], 0)} compensate con Credito IVA (F24) per € ${fmtDec(mc.vatCompensated[i], 0)} — Uscita effettiva di cassa: € ${fmtDec(mc.taxes[i], 0)}">${fmtDec(-mc.taxes[i], 0)} <span class="text-[8px] text-emerald-300 font-bold ml-0.5">(${mc.taxes[i] === 0 ? 'comp.' : 'part. comp.'})</span></td>` :
                                 `<td class="px-2 py-1.5 text-right font-mono text-slate-400">${fmtDec(-mc.taxes[i], 0)}</td>`}
@@ -8517,6 +8542,9 @@
                         }
                         if (colDef && colDef.key === 'capexOutflow' && mc.capexOutflow[idx] > 0) {
                             const noteText = window.formatCapexBreakdownNote(mc, idx);
+                            if (noteText) cell.note = noteText;
+                        } else if (colDef && colDef.key === 'opex' && mc.opex[idx] > 0) {
+                            const noteText = window.formatOpexBreakdownNote(mc, idx);
                             if (noteText) cell.note = noteText;
                         }
                     });
@@ -11043,19 +11071,23 @@
                 }
             };
 
-            // Event delegation per il popover informativo sulla colonna CAPEX della tabella Cash Flow Mensile
+            // Event delegation per il popover informativo sulle colonne CAPEX e OPEX della tabella Cash Flow Mensile
             const cfBody = document.getElementById('monthly-cf-body');
             if (cfBody) {
                 cfBody.addEventListener('mouseover', (e) => {
-                    const cell = e.target.closest('[data-mc-capex-idx]');
-                    if (!cell) {
-                        hideMonthlyCapexPopover();
+                    const capexCell = e.target.closest('[data-mc-capex-idx]');
+                    if (capexCell) {
+                        const idx = parseInt(capexCell.getAttribute('data-mc-capex-idx'), 10);
+                        if (!isNaN(idx)) showMonthlyCostPopover(capexCell, idx, 'capex');
                         return;
                     }
-                    const idx = parseInt(cell.getAttribute('data-mc-capex-idx'), 10);
-                    if (!isNaN(idx)) {
-                        showMonthlyCapexPopover(cell, idx);
+                    const opexCell = e.target.closest('[data-mc-opex-idx]');
+                    if (opexCell) {
+                        const idx = parseInt(opexCell.getAttribute('data-mc-opex-idx'), 10);
+                        if (!isNaN(idx)) showMonthlyCostPopover(opexCell, idx, 'opex');
+                        return;
                     }
+                    hideMonthlyCapexPopover();
                 });
 
                 cfBody.addEventListener('mouseout', (e) => {

@@ -4875,6 +4875,7 @@ function runSensitivityLoop(baseState, config) {
                     sociService: [], pdService: [],
                     holdcoNetCashflow: [], holdcoCashOpening: [], holdcoCashClosing: [],
                     capexBreakdown: Array.from({ length: totalMonths }, () => []),
+                    opexBreakdown: Array.from({ length: totalMonths }, () => []),
                     lagResidual: 0, capexBeforeHorizon: 0, taxesAfterHorizon: 0,
                     fundedMinCashClosing: 0, fundedMinMonth: 0, datedXirr: 0
                 };
@@ -5198,6 +5199,16 @@ function runSensitivityLoop(baseState, config) {
                             opexEvMonthlyY[yi][m - 1] += amt;
                             opexVatEvMonthlyY[yi][m - 1] += amt * rate;
                             opexEvTotalY[yi] += amt;
+                            const mIdx = 12 + yi * 12 + (m - 1);
+                            if (mIdx >= 12 && mIdx < totalMonths) {
+                                out.opexBreakdown[mIdx].push({
+                                    plantName: pl.name || 'Impianto',
+                                    label: (ev.label || 'OPEX').trim(),
+                                    amount: amt,
+                                    vatAmount: amt * rate,
+                                    grossAmount: amt * (1 + rate)
+                                });
+                            }
                         }
                     });
                 });
