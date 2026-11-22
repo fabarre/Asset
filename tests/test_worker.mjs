@@ -1311,8 +1311,8 @@ const r46 = run(buildState({
     inputs: {
         holdcoOpexAnnual: 24000,
         holdcoIncorporationDate: '2026-10-15',
-        holdcoOpexPayDate: '2026-11-20',
-        holdcoBalanceCloseDate: '2028-06-30',
+        holdcoOpexPayDate: '20/11',
+        holdcoBalanceCloseDate: '30/06',
         taxPaymentMonth: 6
     },
     plants: p46
@@ -1337,6 +1337,20 @@ const hcTaxY1 = (r46.matrix.holdcoIresTaxPaid[1] || 0) + (r46.matrix.holdcoIrapT
 check('Anno 2 (giu-2028, idx 29): Earn-Out maturato Anno 1 regolato 1 volta alla chiusura bilancio',
     earnoutY1 > 0 && Math.abs(mc46.holdcoOtherCosts[29] - (earnoutY1 + hcTaxY1)) < 1,
     `giu28=${mc46.holdcoOtherCosts[29].toFixed(0)} exp=${(earnoutY1 + hcTaxY1).toFixed(0)}`);
+// Se GG/MM OPEX cade prima della data di costituzione nell'Anno 0 (es. 15/04 vs costituzione 15/10/2026), Anno 0 = 0 € e parte nel 2027!
+const r46b = run(buildState({
+    inputs: {
+        holdcoOpexAnnual: 24000,
+        holdcoIncorporationDate: '2026-10-15',
+        holdcoOpexPayDate: '15/04',
+        holdcoBalanceCloseDate: '30/06'
+    },
+    plants: p46
+}));
+check('GG/MM OPEX (15/04) prima della costituzione (15/10/2026): Anno 0 = 0 €, prima uscita ad apr-2027 (idx 15)',
+    r46b.monthlyCashflow.holdcoOtherCosts.slice(0, 12).every(v => Math.abs(v) < 1e-9) &&
+    Math.abs(r46b.monthlyCashflow.holdcoOtherCosts[15] - 24000) < 1,
+    `y0sum=${r46b.monthlyCashflow.holdcoOtherCosts.slice(0, 12).reduce((a,b)=>a+b,0)} apr27=${r46b.monthlyCashflow.holdcoOtherCosts[15]}`);
 
 console.log('\n═══════════════════════════════════');
 console.log(`Risultato: ${passed} passati, ${failed} falliti`);

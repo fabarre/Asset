@@ -5233,42 +5233,59 @@ function runSensitivityLoop(baseState, config) {
                 // - Imposte IRES/IRAP Holding: singola uscita annuale a taxPayMonth riferita all'anno precedente
                 const holdcoOtherDated = new Float64Array(totalMonths);
                 {
+                    const parseDayMonth = (val) => {
+                        if (!val) return null;
+                        const s = String(val).trim();
+                        const dm = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+                        if (dm) {
+                            const d = parseInt(dm[1], 10), m = parseInt(dm[2], 10);
+                            if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return { d, m };
+                        }
+                        const iso = parseCodDate(s);
+                        if (iso) return { d: iso.d, m: iso.m };
+                        return null;
+                    };
                     const incParsed = parseCodDate(inputs.holdcoIncorporationDate);
-                    const incIdx = incParsed ? Math.max(0, (incParsed.y - firstYear) * 12 + (incParsed.m - 1)) : 0;
-                    const opexPayParsed = parseCodDate(inputs.holdcoOpexPayDate);
-                    const opexPayMonth = opexPayParsed ? opexPayParsed.m : (incParsed ? incParsed.m : 12);
-                    const closeParsed = parseCodDate(inputs.holdcoBalanceCloseDate);
-                    const closeMonth = closeParsed ? closeParsed.m : taxPayMonth;
+                    const isOnOrAfterInc = (calY, mo, dy) => {
+                        if (!incParsed) return true;
+                        if (calY > incParsed.y) return true;
+                        if (calY < incParsed.y) return false;
+                        if (mo > incParsed.m) return true;
+                        if (mo < incParsed.m) return false;
+                        return dy >= incParsed.d;
+                    };
+                    const opexDM = parseDayMonth(inputs.holdcoOpexPayDate) || (incParsed ? { d: incParsed.d, m: incParsed.m } : { d: 31, m: 12 });
+                    const closeDM = parseDayMonth(inputs.holdcoBalanceCloseDate) || { d: 30, m: taxPayMonth };
 
-                    // 1. OPEX Holding Anno 0 (solo se costituita entro Anno 0)
+                    // 1. OPEX Holding Anno 0 (ricorrenza GG/MM nell'Anno 0 solo se >= data costituzione Holding)
                     const hcOpexY0 = (mtx.holdcoOpex && mtx.holdcoOpex[0]) || 0;
-                    if (hcOpexY0 > 0 && incIdx < 12) {
-                        const y0Idx = Math.min(11, Math.max(incIdx, opexPayMonth - 1));
-                        holdcoOtherDated[y0Idx] += hcOpexY0;
+                    if (hcOpexY0 > 0 && isOnOrAfterInc(firstYear, opexDM.m, opexDM.d)) {
+                        holdcoOtherDated[opexDM.m - 1] += hcOpexY0;
                     }
-                    // 2. OPEX Holding Anni 1..YEARS (singola spesa annuale al mese opexPayMonth)
+                    // 2. OPEX Holding Anni 1..YEARS (singola spesa annuale al giorno/mese opexDM, se >= data costituzione)
                     for (let y = 1; y <= YEARS; y++) {
+                        const calYearY = anchorYearIn + y - 1;
                         const hcOpexY = (mtx.holdcoOpex && mtx.holdcoOpex[y]) || 0;
-                        if (hcOpexY > 0) {
-                            const payIdx = 12 + (y - 1) * 12 + (opexPayMonth - 1);
-                            if (payIdx >= incIdx && payIdx < totalMonths) {
+                        if (hcOpexY > 0 && isOnOrAfterInc(calYearY, opexDM.m, opexDM.d)) {
+                            const payIdx = 12 + (y - 1) * 12 + (opexDM.m - 1);
+                            if (payIdx >= 0 && payIdx < totalMonths) {
                                 holdcoOtherDated[payIdx] += hcOpexY;
                             }
                         }
-                        // 3. Earn-Out maturato nell'anno y -> regolato 1 volta l'anno alla chiusura bilancio dell'anno y+1
+                        // 3. Earn-Out maturato nell'anno y -> regolato 1 volta l'anno al GG/MM chiusura bilancio dell'anno y+1
                         const earnoutY = (mtx.holdcoEarnoutPaid && mtx.holdcoEarnoutPaid[y]) || 0;
-                        if (earnoutY > 0) {
-                            const eIdx = 12 + y * 12 + (closeMonth - 1);
-                            if (eIdx >= incIdx && eIdx < totalMonths) {
+                        if (earnoutY > 0 && isOnOrAfterInc(calYearY + 1, closeDM.m, closeDM.d)) {
+                            const eIdx = 12 + y * 12 + (closeDM.m - 1);
+                            if (eIdx >= 0 && eIdx < totalMonths) {
                                 holdcoOtherDated[eIdx] += earnoutY;
                             }
                         }
                         // 4. Imposte Holding maturate nell'anno y -> pagate 1 volta l'anno a taxPayMonth dell'anno y+1
                         const hcTaxY = ((mtx.holdcoIresTaxPaid && mtx.holdcoIresTaxPaid[y]) || 0) +
                             ((mtx.holdcoIrapTaxPaid && mtx.holdcoIrapTaxPaid[y]) || 0);
-                        if (hcTaxY > 0) {
+                        if (hcTaxY > 0 && isOnOrAfterInc(calYearY + 1, taxPayMonth, 16)) {
                             const tIdx = 12 + y * 12 + (taxPayMonth - 1);
-                            if (tIdx >= incIdx && tIdx < totalMonths) {
+                            if (tIdx >= 0 && tIdx < totalMonths) {
                                 holdcoOtherDated[tIdx] += hcTaxY;
                             }
                         }

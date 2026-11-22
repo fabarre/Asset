@@ -1481,13 +1481,13 @@
                                     <label class="block text-[10px] text-slate-400 mb-1">Data Costituzione Holding (Y0)</label>
                                     <input type="date" id="input-holdco-incorporation-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                                 </div>
-                                <div title="Data di pagamento della singola spesa annuale OPEX Holding (ricorre ogni anno nel mese indicato)">
-                                    <label class="block text-[10px] text-slate-400 mb-1">Data Pagamento OPEX Holding</label>
-                                    <input type="date" id="input-holdco-opex-pay-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                <div title="Giorno/Mese (GG/MM) della singola spesa annuale OPEX Holding, ricorrente ogni anno a partire dalla data di costituzione della Holding">
+                                    <label class="block text-[10px] text-slate-400 mb-1">Pagamento OPEX Holding (GG/MM)</label>
+                                    <input type="text" id="input-holdco-opex-pay-date" placeholder="es. 15/12" maxlength="5" pattern="\d{2}/\d{2}" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                                 </div>
-                                <div title="Data di presentazione e chiusura del bilancio: regola l'Earn-Out (una volta l'anno, riferito al maturato dell'anno precedente)">
-                                    <label class="block text-[10px] text-slate-400 mb-1">Data Chiusura Bilancio / Earn-Out</label>
-                                    <input type="date" id="input-holdco-balance-close-date" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
+                                <div title="Giorno/Mese (GG/MM) di chiusura bilancio e pagamento Earn-Out (una volta l'anno sul maturato dell'anno precedente, a partire dalla costituzione Holding)">
+                                    <label class="block text-[10px] text-slate-400 mb-1">Chiusura Bilancio / Earn-Out (GG/MM)</label>
+                                    <input type="text" id="input-holdco-balance-close-date" placeholder="es. 30/06" maxlength="5" pattern="\d{2}/\d{2}" class="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1.5 text-white font-bold text-xs font-mono focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none">
                                 </div>
                             </div>
                         </div>
@@ -4222,7 +4222,7 @@
     <script src="./src/db.js"></script>
     <script src="./src/i18n.js"></script>
     <script src="./src/audit.js"></script>
-    <script src="./src/main.js?v=170"></script>
+    <script src="./src/main.js?v=171"></script>
     <script>
         // PWA: registrazione service worker (offline shell, dati Supabase sempre live)
         if ('serviceWorker' in navigator && location.protocol !== 'file:') {

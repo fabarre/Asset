@@ -3971,12 +3971,21 @@
             setVal('slide-af-convertible-rate', p.afConvertibleRate !== undefined ? p.afConvertibleRate : 6.0);
             setVal('slide-af-convertible-pct', p.afConvertiblePct !== undefined ? p.afConvertiblePct : 10.0);
             setChk('input-af-tax-deductible', p.afTaxDeductible);
+            const toDayMonth = (val) => {
+                if (!val) return '';
+                const s = String(val).trim();
+                const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (iso) return `${iso[3]}/${iso[2]}`;
+                const dm = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+                if (dm) return `${dm[1].padStart(2, '0')}/${dm[2].padStart(2, '0')}`;
+                return s;
+            };
             setVal('input-spv-capital', p.spvCapital !== undefined ? p.spvCapital : 10000);
             setVal('input-holdco-capital', p.holdcoCapital !== undefined ? p.holdcoCapital : 10000);
             setVal('input-holdco-opex', p.holdcoOpexAnnual !== undefined ? p.holdcoOpexAnnual : 15000);
             setVal('input-holdco-incorporation-date', p.holdcoIncorporationDate || '');
-            setVal('input-holdco-opex-pay-date', p.holdcoOpexPayDate || '');
-            setVal('input-holdco-balance-close-date', p.holdcoBalanceCloseDate || '');
+            setVal('input-holdco-opex-pay-date', toDayMonth(p.holdcoOpexPayDate));
+            setVal('input-holdco-balance-close-date', toDayMonth(p.holdcoBalanceCloseDate));
             let eOpt = p.exitOption !== undefined ? p.exitOption : '20';
             if (eOpt === 'none') eOpt = '0';
             setVal('input-exit-option', eOpt);
